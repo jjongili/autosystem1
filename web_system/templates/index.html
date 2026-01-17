@@ -1,0 +1,3397 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구매대행 통합관리</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .summary-item.clickable {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .summary-item.clickable:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        .mt-tab.active[data-platform="스마트스토어"] {
+            background: #03C75A !important;
+            color: white !important;
+        }
+
+        .mt-tab.active[data-platform="11번가"] {
+            background: #E31837 !important;
+            color: white !important;
+        }
+
+        .mt-tab.active[data-platform="쿠팡"] {
+            background: #00B4D8 !important;
+            color: white !important;
+        }
+
+        .mt-tab.active[data-platform="지마켓"] {
+            background: #1A73E8 !important;
+            color: white !important;
+        }
+
+        .mt-tab.active[data-platform="옥션"] {
+            background: #9C27B0 !important;
+            color: white !important;
+        }
+
+        .phone-btn .status {
+            font-weight: bold;
+        }
+
+        /* 3등분 SMS 패널 스타일 */
+        .sms-three-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            height: calc(100vh - 280px);
+            min-height: 400px;
+        }
+
+        .sms-panel {
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 10px 15px;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-search-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .panel-search-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .panel-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+
+        .panel-messages .msg-item {
+            background: white;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            border-left: 3px solid #ddd;
+            transition: all 0.2s;
+        }
+
+        .panel-messages .msg-item:hover {
+            background: #e3f2fd;
+            border-left-color: #2196f3;
+        }
+
+        .panel-messages .msg-item.unread {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+        }
+
+        .panel-messages .msg-sender {
+            font-weight: bold;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .panel-messages .msg-preview {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .panel-messages .msg-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .panel-send {
+            padding: 10px;
+            background: #fff;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .panel-send-to {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .panel-send-msg {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            resize: none;
+        }
+
+        .panel-send-btn {
+            width: 100%;
+            padding: 10px;
+            background: #4A90D9;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .panel-send-btn:hover {
+            background: #3a7bc8;
+        }
+
+        .panel-send-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+        }
+
+        .panel-send-row .panel-send-msg {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .panel-attach-btn {
+            width: 40px;
+            height: 40px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel-attach-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .panel-file-preview {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 10px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .panel-file-preview .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .panel-file-preview .file-remove {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 5px;
+        }
+
+        .panel-file-preview .file-remove:hover {
+            color: #c00;
+        }
+
+        /* 드래그앤드롭 스타일 */
+        .panel-send.drag-over {
+            background: #e3f2fd;
+            border: 2px dashed #2196F3;
+            border-radius: 8px;
+        }
+
+        .panel-send.drag-over::before {
+            content: '📎 파일을 여기에 놓으세요';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(33, 150, 243, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .panel-send {
+            position: relative;
+        }
+
+        .panel-btn-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .panel-template-btn {
+            flex: 1;
+            padding: 10px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .panel-template-btn:hover {
+            background: #e8ebff;
+            border-color: #667eea;
+        }
+
+        .panel-btn-row .panel-send-btn {
+            flex: 1;
+        }
+
+        @media (max-width: 1200px) {
+            .sms-three-panels {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .sms-panel {
+                min-height: 300px;
+            }
+        }
+
+        /* 매출현황 스타일 */
+        .sales-summary {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .summary-card {
+            flex: 1;
+            min-width: 150px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .summary-card.highlight {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .summary-card.highlight .summary-label {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .summary-value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* 내부 탭 스타일 */
+        .inner-tab-btn {
+            padding: 10px 20px;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .inner-tab-btn:hover {
+            background: #e9ecef;
+        }
+
+        .inner-tab-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .inner-tab-content {
+            display: none;
+        }
+
+        .inner-tab-content.active {
+            display: block;
+        }
+
+        .sales-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .chart-container h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .chart-container canvas {
+            max-height: 200px;
+        }
+
+        .sales-table-section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .sales-table-section h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .sales-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .sales-table th {
+            background: #f5f5f5;
+            padding: 8px;
+            text-align: center;
+            border-bottom: 2px solid #ddd;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .sales-table td {
+            padding: 8px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+
+        .sales-table td:first-child,
+        .sales-table td:nth-child(2) {
+            text-align: center;
+        }
+
+        .sales-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .sales-table .positive {
+            color: #2e7d32;
+        }
+
+        .sales-table .negative {
+            color: #c62828;
+        }
+
+        /* 관제센터 카드 크기 통일 - 강제 적용 */
+        #monitorGrid .monitor-card,
+        .monitor-grid .monitor-card,
+        .monitor-card {
+            width: 140px !important;
+            min-width: 140px !important;
+            max-width: 140px !important;
+            box-sizing: border-box !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        /* 관제센터 카드 확장 시 */
+        .monitor-card.expanded {
+            width: 200px !important;
+            min-width: 200px !important;
+            max-width: 200px !important;
+            z-index: 10;
+        }
+
+        .monitor-card .expand-info {
+            display: none;
+            padding: 8px 0 0 0;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            margin-top: 8px;
+            font-size: 11px;
+        }
+
+        .monitor-card.expanded .expand-info {
+            display: block;
+        }
+
+        .monitor-card .expand-row {
+            padding: 3px 0;
+            color: #333;
+        }
+
+        .monitor-card .expand-row.penalty {
+            color: #e74c3c;
+            font-size: 10px;
+        }
+
+        .monitor-card .expand-btns {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+            justify-content: center;
+        }
+
+        .monitor-card .expand-btns button {
+            padding: 4px 8px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            background: #f0f0f0;
+            cursor: pointer;
+        }
+
+        .monitor-card .expand-btns button:hover {
+            background: #ddd;
+        }
+
+        #monitorGrid .monitor-card .shop-name,
+        .monitor-grid .monitor-card .shop-name,
+        .monitor-card .shop-name {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            max-width: 120px !important;
+            display: block !important;
+            font-size: 12px !important;
+        }
+
+        .monitor-card.expanded .shop-name {
+            max-width: 180px !important;
+        }
+
+        @media (max-width: 768px) {
+            .sales-charts {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-card {
+                min-width: 100px;
+            }
+        }
+    </style>
+    <!-- 관제센터 카드 크기 강제 적용 (style.css 덮어쓰기) -->
+    <style>
+        .monitor-card {
+            width: 140px !important;
+            min-width: 140px !important;
+            max-width: 140px !important;
+        }
+
+        .monitor-card .shop-name {
+            max-width: 120px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+        }
+
+        /* SMS 템플릿 패널 스타일 */
+        .conversation-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .conversation-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .conversation-main .conversation-messages {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .sms-template-panel {
+            width: 320px;
+            background: white;
+            border-left: 1px solid #e0e0e0;
+            display: none;
+            flex-direction: column;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .sms-template-panel.show {
+            display: flex;
+        }
+
+        .template-panel-header {
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .template-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .template-tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .template-tab {
+            flex: 1;
+            min-width: 55px;
+            padding: 8px 4px;
+            border: none;
+            background: white;
+            font-size: 11px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .template-tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            font-weight: bold;
+        }
+
+        .template-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        .template-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+        }
+
+        .template-item:hover {
+            background: #f8f9ff;
+        }
+
+        .template-item.selected {
+            background: #e8ebff;
+            border-left: 3px solid #667eea;
+        }
+
+        .template-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .template-preview-text {
+            font-size: 11px;
+            color: #888;
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .template-vars {
+            padding: 10px 12px;
+            background: #f8f9ff;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .vars-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .var-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .var-row label {
+            width: 60px;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .var-row input {
+            flex: 1;
+            padding: 5px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .var-row input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .template-preview-section {
+            padding: 10px 12px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .preview-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+        }
+
+        .template-preview-content {
+            background: #fffde7;
+            border: 1px solid #fff59d;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 11px;
+            line-height: 1.5;
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .tpl-highlight {
+            background: #ffeb3b;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        .char-count {
+            font-size: 10px;
+            color: #888;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .char-count.warning {
+            color: #ff9800;
+        }
+
+        .char-count.danger {
+            color: #f44336;
+        }
+
+        .template-actions {
+            padding: 10px 12px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+
+        .tpl-btn-copy {
+            padding: 8px 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .tpl-btn-copy:hover {
+            background: #e0e0e0;
+        }
+
+        .tpl-btn-apply {
+            flex: 1;
+            padding: 8px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .tpl-btn-apply:hover {
+            background: #5a6fd6;
+        }
+
+        .modal-btn.template-toggle {
+            background: #f0f0f0;
+            color: #666;
+            margin-right: auto;
+        }
+
+        .modal-btn.template-toggle.active {
+            background: #667eea;
+            color: white;
+        }
+
+        /* 마케팅 분석 스타일 */
+        .marketing-account-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .marketing-account-table thead {
+            background: #f8f9fa;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .marketing-account-table th,
+        .marketing-account-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .marketing-account-table th {
+            font-weight: 600;
+            color: #333;
+            user-select: none;
+        }
+
+        .marketing-account-table th .sort-arrow {
+            color: #999;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+
+        .marketing-account-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .marketing-account-table th:first-child,
+        .marketing-account-table td:first-child {
+            width: 40px;
+            text-align: center;
+        }
+
+        .filter-section {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* 기본 필터 그룹 (마케팅 등) */
+        .filter-section .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-section .filter-group>label:first-child {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .filter-section .filter-group label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .filter-section .filter-group select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        /* 관제센터 필터 그룹 (세로 레이아웃) */
+        .monitor-sidebar .filter-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .filter-group-title {
+            padding: 8px 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            user-select: none;
+        }
+
+        .filter-group-title:hover {
+            background: #e8e8e8;
+        }
+
+        .toggle-icon {
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .toggle-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .filter-items {
+            padding: 8px 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-items.collapsed {
+            display: none;
+        }
+
+        .filter-items.scrollable {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .filter-item:hover {
+            background: #f9f9f9;
+        }
+
+        .filter-item input[type="checkbox"] {
+            margin: 0;
+        }
+
+        .filter-count {
+            margin-left: auto;
+            font-size: 11px;
+            color: #999;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        .select-all-cb {
+            margin-left: auto;
+        }
+
+        /* 작업달력 스타일 */
+        .calendar-header {
+            background: #333;
+            color: white;
+            padding: 12px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .calendar-day {
+            background: white;
+            min-height: 120px;
+            padding: 8px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .calendar-day:hover {
+            background: #f9f9f9;
+        }
+
+        .calendar-day.other-month {
+            background: #fafafa;
+            color: #999;
+        }
+
+        .calendar-day.today {
+            background: #fff3e0;
+        }
+
+        .day-number {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #333;
+        }
+
+        .other-month .day-number {
+            color: #999;
+        }
+
+        .today .day-number {
+            color: #ff6f00;
+        }
+
+        .work-item {
+            background: #e3f2fd;
+            border-left: 3px solid #2196F3;
+            padding: 4px 6px;
+            margin-bottom: 3px;
+            border-radius: 3px;
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .work-item.상품삭제 {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+
+        .work-item.상품등록 {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+        }
+
+        .work-item.상품수정 {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+
+        .work-item.마케팅수집 {
+            background: #f3e5f5;
+            border-left-color: #9c27b0;
+        }
+
+        .work-item.예약작업 {
+            background: #e0f2f1;
+            border-left-color: #009688;
+        }
+
+        /* 작업 내용 칸 안에 표시 */
+        .work-items {
+            margin-top: 4px;
+            width: 100%;
+        }
+
+        .work-item {
+            font-size: 9px;
+            color: #333;
+            padding: 2px 4px;
+            background: rgba(33, 150, 243, 0.1);
+            border-radius: 2px;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        .work-more {
+            font-size: 8px;
+            color: #FF9800;
+            font-weight: 600;
+            text-align: center;
+            padding: 2px;
+            margin-top: 2px;
+        }
+
+        /* 모달 스타일은 style.css에서 관리됨 */
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body data-role="{{ role }}">
+    <header class="header">
+        <h1>🏢 구매대행 통합관리</h1>
+        <div class="header-right">
+            <span id="headerAuthCode" class="header-auth-code"
+                style="background:#4caf50;color:white;padding:4px 10px;border-radius:5px;font-weight:bold;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:5px;"
+                onclick="copyHeaderAuthCode()" title="클릭하여 복사">🔑 <span id="headerAuthCodeValue">------</span> 📋</span>
+            <a href="/download/PkonomyClient.exe" class="client-download-btn">💾 클라이언트</a>
+            <span class="user-info">👤 {{ username }} <span class="role-badge role-{{ role }}">{{ role }}</span></span>
+            <button class="logout-btn" onclick="logout()">로그아웃</button>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <div class="tab active" data-tab="sms">📱 SMS</div>
+        <div class="tab" data-tab="monitor">🖥️ 관제센터</div>
+        <div class="tab" data-tab="market-table">📊 마켓현황</div>
+        <div class="tab" data-tab="sales">💰 매출현황</div>
+        <div class="tab" data-tab="accounts">📋 계정관리</div>
+        <div class="tab hide-for-viewer" data-tab="marketing">📈 마케팅분석</div>
+        <div class="tab hide-for-viewer" data-tab="allinone">🛠️ All-in-One</div>
+        <div class="tab hide-for-viewer" data-tab="scheduler">⏰ 스케줄러</div>
+        <div class="tab hide-for-viewer" data-tab="bulsaja">🔥 불사자</div>
+        <div class="tab hide-for-viewer" data-tab="tools">🔧 기타 기능</div>
+        <div class="tab" data-tab="work-calendar">📅 작업달력</div>
+        <div class="tab hide-for-operator" data-tab="settings">⚙️ 설정</div>
+    </nav>
+
+    <main class="content">
+        <div class="tab-content active" id="tab-sms">
+            <!-- 상단: SMS 브라우저 + 인증코드 (컴팩트) -->
+            <div class="card" style="margin-bottom: 10px; padding: 10px 15px;">
+                <div class="sms-top-row" style="display:flex; gap:20px; align-items:flex-start;">
+                    <div class="sms-browser-section hide-for-viewer" style="flex:0 0 auto;">
+                        <div style="font-weight:bold; font-size:13px; margin-bottom:8px;">📱 SMS 브라우저 <span
+                                class="user-badge" style="font-size:10px;">운영자 이상</span></div>
+                        <div class="phone-buttons" style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <button class="phone-btn" data-phone="8295" onclick="launchPhone('8295')"
+                                style="padding:5px 10px; font-size:12px;">010-8295-6606 <span
+                                    class="status"></span></button>
+                            <button class="phone-btn" data-phone="8217" onclick="launchPhone('8217')"
+                                style="padding:5px 10px; font-size:12px;">010-8217-5119 <span
+                                    class="status"></span></button>
+                            <button class="phone-btn" data-phone="4682" onclick="launchPhone('4682')"
+                                style="padding:5px 10px; font-size:12px;">010-4682-6606 <span
+                                    class="status"></span></button>
+                            <button class="phone-btn primary" onclick="launchAllPhones()"
+                                style="padding:5px 10px; font-size:12px;">🚀 전체</button>
+                        </div>
+                    </div>
+                    <div class="sms-code-section" style="flex:1;">
+                        <div style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
+                            <span style="font-weight:bold; font-size:13px;">🔑 최신 인증코드</span>
+                            <button class="phone-btn" onclick="refreshMessages(true)"
+                                style="padding:3px 8px; font-size:11px;">🔄 새로고침</button>
+                            <label style="font-size:12px;"><input type="checkbox" id="autoRefresh"
+                                    onchange="toggleAutoRefresh()"> 자동(15초)</label>
+                            <span style="flex:1;"></span>
+                            <button class="hide-for-viewer" onclick="reloadGoogleMessages()"
+                                style="background:#e0e0e0; border:1px solid #ccc; border-radius:3px; color:#555; font-size:11px; cursor:pointer; padding:2px 6px;"
+                                title="최신 문자 수집이 안될 때 사용">↻ 창새로고침</button>
+                        </div>
+                        <div class="auth-codes" style="display:flex; gap:15px; flex-wrap:wrap;">
+                            <div class="auth-code-item" id="code-container-8295"
+                                style="display:flex; align-items:center; gap:5px; padding:5px 10px; background:#f5f5f5; border-radius:5px;">
+                                <span style="font-size:12px; color:#666;">8295:</span>
+                                <span class="code" id="code-8295"
+                                    style="font-weight:bold; font-size:14px; color:#4A90D9;">------</span>
+                                <span class="code-time" id="code-time-8295" style="font-size:10px; color:#999;"></span>
+                                <button class="copy-btn" onclick="copyCode('8295')"
+                                    style="padding:2px 6px; font-size:11px;">📋</button>
+                            </div>
+                            <div class="auth-code-item" id="code-container-8217"
+                                style="display:flex; align-items:center; gap:5px; padding:5px 10px; background:#f5f5f5; border-radius:5px;">
+                                <span style="font-size:12px; color:#666;">8217:</span>
+                                <span class="code" id="code-8217"
+                                    style="font-weight:bold; font-size:14px; color:#E31837;">------</span>
+                                <span class="code-time" id="code-time-8217" style="font-size:10px; color:#999;"></span>
+                                <button class="copy-btn" onclick="copyCode('8217')"
+                                    style="padding:2px 6px; font-size:11px;">📋</button>
+                            </div>
+                            <div class="auth-code-item" id="code-container-4682"
+                                style="display:flex; align-items:center; gap:5px; padding:5px 10px; background:#f5f5f5; border-radius:5px;">
+                                <span style="font-size:12px; color:#666;">4682:</span>
+                                <span class="code" id="code-4682"
+                                    style="font-weight:bold; font-size:14px; color:#03C75A;">------</span>
+                                <span class="code-time" id="code-time-4682" style="font-size:10px; color:#999;"></span>
+                                <button class="copy-btn" onclick="copyCode('4682')"
+                                    style="padding:2px 6px; font-size:11px;">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3등분 SMS 패널 -->
+            <div class="sms-three-panels">
+                <!-- 8295 패널 -->
+                <div class="sms-panel" data-phone="8295">
+                    <div class="panel-header" style="background: #4A90D9;">
+                        <span>📱 010-8295-6606</span>
+                        <button class="panel-search-btn" onclick="openSearchModalForPhone('8295')">🔍</button>
+                    </div>
+                    <div class="panel-messages" id="messages-8295">
+                        <div class="empty">메시지 로딩 중...</div>
+                    </div>
+                    <div class="panel-send hide-for-viewer">
+                        <input type="text" class="panel-send-to" id="sendTo-8295" placeholder="수신번호">
+                        <div class="panel-send-row">
+                            <textarea class="panel-send-msg" id="sendMsg-8295" placeholder="메시지 입력..." rows="2"
+                                oninput="autoResizeTextarea(this)"></textarea>
+                            <input type="file" id="sendFile-8295" style="display:none"
+                                accept="image/*,video/*,.pdf,.doc,.docx" onchange="onFileSelected('8295')">
+                            <button class="panel-attach-btn" onclick="document.getElementById('sendFile-8295').click()"
+                                title="파일 첨부">📎</button>
+                        </div>
+                        <div class="panel-file-preview" id="filePreview-8295" style="display:none;">
+                            <span class="file-name"></span>
+                            <button class="file-remove" onclick="clearFileAttachment('8295')">×</button>
+                        </div>
+                        <div class="panel-btn-row">
+                            <button class="panel-template-btn" onclick="openPanelTemplate('8295')" title="템플릿">📋
+                                템플릿</button>
+                            <button class="panel-send-btn" onclick="sendSMSFromPanel('8295')">전송</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8217 패널 -->
+                <div class="sms-panel" data-phone="8217">
+                    <div class="panel-header" style="background: #E31837;">
+                        <span>📱 010-8217-5119</span>
+                        <button class="panel-search-btn" onclick="openSearchModalForPhone('8217')">🔍</button>
+                    </div>
+                    <div class="panel-messages" id="messages-8217">
+                        <div class="empty">메시지 로딩 중...</div>
+                    </div>
+                    <div class="panel-send hide-for-viewer">
+                        <input type="text" class="panel-send-to" id="sendTo-8217" placeholder="수신번호">
+                        <div class="panel-send-row">
+                            <textarea class="panel-send-msg" id="sendMsg-8217" placeholder="메시지 입력..." rows="2"
+                                oninput="autoResizeTextarea(this)"></textarea>
+                            <input type="file" id="sendFile-8217" style="display:none"
+                                accept="image/*,video/*,.pdf,.doc,.docx" onchange="onFileSelected('8217')">
+                            <button class="panel-attach-btn" onclick="document.getElementById('sendFile-8217').click()"
+                                title="파일 첨부">📎</button>
+                        </div>
+                        <div class="panel-file-preview" id="filePreview-8217" style="display:none;">
+                            <span class="file-name"></span>
+                            <button class="file-remove" onclick="clearFileAttachment('8217')">×</button>
+                        </div>
+                        <div class="panel-btn-row">
+                            <button class="panel-template-btn" onclick="openPanelTemplate('8217')" title="템플릿">📋
+                                템플릿</button>
+                            <button class="panel-send-btn" onclick="sendSMSFromPanel('8217')">전송</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4682 패널 -->
+                <div class="sms-panel" data-phone="4682">
+                    <div class="panel-header" style="background: #03C75A;">
+                        <span>📱 010-4682-6606</span>
+                        <button class="panel-search-btn" onclick="openSearchModalForPhone('4682')">🔍</button>
+                    </div>
+                    <div class="panel-messages" id="messages-4682">
+                        <div class="empty">메시지 로딩 중...</div>
+                    </div>
+                    <div class="panel-send hide-for-viewer">
+                        <input type="text" class="panel-send-to" id="sendTo-4682" placeholder="수신번호">
+                        <div class="panel-send-row">
+                            <textarea class="panel-send-msg" id="sendMsg-4682" placeholder="메시지 입력..." rows="2"
+                                oninput="autoResizeTextarea(this)"></textarea>
+                            <input type="file" id="sendFile-4682" style="display:none"
+                                accept="image/*,video/*,.pdf,.doc,.docx" onchange="onFileSelected('4682')">
+                            <button class="panel-attach-btn" onclick="document.getElementById('sendFile-4682').click()"
+                                title="파일 첨부">📎</button>
+                        </div>
+                        <div class="panel-file-preview" id="filePreview-4682" style="display:none;">
+                            <span class="file-name"></span>
+                            <button class="file-remove" onclick="clearFileAttachment('4682')">×</button>
+                        </div>
+                        <div class="panel-btn-row">
+                            <button class="panel-template-btn" onclick="openPanelTemplate('4682')" title="템플릿">📋
+                                템플릿</button>
+                            <button class="panel-send-btn" onclick="sendSMSFromPanel('4682')">전송</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 대화 상세 모달 -->
+        <div class="modal" id="conversationModal">
+            <div class="modal-content modal-large">
+                <div class="modal-title">
+                    <span id="conversationTitle">💬 대화 내역</span>
+                    <div class="modal-title-buttons">
+                        <button class="load-more-btn" id="loadMoreBtn" onclick="loadMoreMessages()" title="이전 메시지 더보기">
+                            ⬆️ 이전 20개
+                        </button>
+                        <button class="load-more-btn" onclick="refreshConversation()" title="대화 새로고침"
+                            style="background:#4caf50;">
+                            🔄 새로고침
+                        </button>
+                        <button class="modal-close" onclick="closeConversationModal()">✕</button>
+                    </div>
+                </div>
+                <div class="conversation-body">
+                    <div class="conversation-main">
+                        <div id="conversationLoading" class="loading-spinner">불러오는 중...</div>
+                        <div id="conversationMessages" class="conversation-messages"></div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="flex-direction:column; gap:10px;">
+                    <div style="display:flex; gap:8px; width:100%;">
+                        <textarea id="conversationInput" placeholder="메시지 입력..." rows="2"
+                            oninput="autoResizeTextarea(this)"
+                            style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; resize:none; font-family:inherit; min-height:44px; max-height:120px;"></textarea>
+                        <button class="modal-btn primary" onclick="sendFromConversationModal()"
+                            style="padding:10px 20px;">전송</button>
+                    </div>
+                    <div style="display:flex; gap:8px; width:100%;">
+                        <button class="modal-btn template-toggle" id="templateToggleBtn"
+                            onclick="toggleTemplatePanel()">📋 템플릿</button>
+                        <button class="modal-btn secondary" onclick="closeConversationModal()">닫기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 전화번호 검색 모달 -->
+        <div class="modal" id="searchModal">
+            <div class="modal-content modal-medium">
+                <div class="modal-title">
+                    <span>🔍 검색</span>
+                    <button class="modal-close" onclick="closeSearchModal()">✕</button>
+                </div>
+
+                <!-- 검색 탭 -->
+                <div class="search-tabs">
+                    <button class="search-tab active" onclick="switchSearchTab('phone')">📱 전화번호 검색</button>
+                    <button class="search-tab" onclick="switchSearchTab('text')">📝 내용 검색</button>
+                </div>
+
+                <!-- 전화번호 검색 -->
+                <div class="search-panel" id="searchPanelPhone">
+                    <div class="search-form">
+                        <div class="search-row">
+                            <label>프로필:</label>
+                            <select id="searchProfile">
+                                <option value="">전체</option>
+                                <option value="8295">8295</option>
+                                <option value="8217">8217</option>
+                                <option value="4682">4682</option>
+                            </select>
+                        </div>
+                        <div class="search-row">
+                            <label>전화번호:</label>
+                            <input type="text" id="searchPhone" placeholder="010-1234-5678">
+                        </div>
+                        <div class="search-info">
+                            💡 구글 메시지에서 해당 번호와의 대화 이력을 검색합니다.
+                        </div>
+                        <button class="modal-btn primary full-width" onclick="searchByPhone()">🔍 검색</button>
+                    </div>
+                </div>
+
+                <!-- 텍스트 내용 검색 -->
+                <div class="search-panel" id="searchPanelText" style="display:none;">
+                    <div class="search-form">
+                        <div class="search-row">
+                            <label>검색어:</label>
+                            <input type="text" id="searchText" placeholder="검색할 내용 입력">
+                        </div>
+                        <div class="search-info" id="cacheStats">
+                            💾 캐시된 대화에서 검색합니다. (로딩 중...)
+                        </div>
+                        <button class="modal-btn primary full-width" onclick="searchByText()">🔍 검색</button>
+                    </div>
+                </div>
+
+                <div id="searchLoading" class="loading-spinner" style="display:none;">검색 중...</div>
+                <div id="searchResult" class="search-result" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- 이미지 뷰어 모달 -->
+        <div class="modal" id="imageViewerModal" onclick="closeImageViewer()">
+            <div class="image-viewer-content" onclick="event.stopPropagation()">
+                <button class="image-viewer-close" onclick="closeImageViewer()">✕</button>
+                <img id="imageViewerImg" src="" alt="이미지">
+                <div id="imageViewerLoading" class="loading-spinner">원본 다운로드 중...</div>
+            </div>
+        </div>
+
+        <!-- 마켓현황 탭 -->
+        <div class="tab-content" id="tab-market-table">
+            <div class="card">
+                <div class="card-title">
+                    📊 마켓별 현황표
+                    <button class="refresh-btn" onclick="loadMarketTable()">🔄 새로고침</button>
+                    <button class="refresh-btn" onclick="refresh11stCounts()" style="margin-left:10px;">📦 11번가
+                        등록갯수</button>
+                    <button class="refresh-btn" onclick="sendSelectedToAio()"
+                        style="margin-left:10px; background:#4e73df; border-color:#4e73df;">📦 선택계정 AIO전달</button>
+                    <button class="refresh-btn" onclick="exportMarketTable()"
+                        style="margin-left:10px; background:#1cc88a; border-color:#1cc88a;">📥 엑셀 출력</button>
+                </div>
+
+                <!-- 플랫폼 탭 -->
+                <div class="market-table-tabs" id="marketTableTabs">
+                    <button class="mt-tab active" data-platform="all" data-index="0"
+                        onclick="toggleMarketTab('all', event)">전체</button>
+                    <button class="mt-tab" data-platform="11번가" data-index="1" onclick="toggleMarketTab('11번가', event)"
+                        style="border-color:#E31837;color:#E31837;">11번가</button>
+                    <button class="mt-tab" data-platform="스마트스토어" data-index="2"
+                        onclick="toggleMarketTab('스마트스토어', event)"
+                        style="border-color:#03C75A;color:#03C75A;">스마트스토어</button>
+                    <button class="mt-tab" data-platform="옥션" data-index="3" onclick="toggleMarketTab('옥션', event)"
+                        style="border-color:#9C27B0;color:#9C27B0;">옥션</button>
+                    <button class="mt-tab" data-platform="지마켓" data-index="4" onclick="toggleMarketTab('지마켓', event)"
+                        style="border-color:#1A73E8;color:#1A73E8;">지마켓</button>
+                    <button class="mt-tab" data-platform="쿠팡" data-index="5" onclick="toggleMarketTab('쿠팡', event)"
+                        style="border-color:#00B4D8;color:#00B4D8;">쿠팡</button>
+                </div>
+
+                <!-- 요약 정보 (클릭하면 필터) -->
+                <div class="market-summary" id="marketSummary">
+                    <div class="summary-item"><span>총 마켓</span><strong id="sumTotal">0</strong></div>
+                    <div class="summary-item clickable" onclick="filterByStatus('')" title="클릭하여 필터">
+                        <span>정상</span><strong id="sumNormal" class="text-green">0</strong>
+                    </div>
+                    <div class="summary-item clickable" onclick="filterByStatus('주의')" title="클릭하여 필터">
+                        <span>주의</span><strong id="sumCaution" class="text-yellow">0</strong>
+                    </div>
+                    <div class="summary-item clickable" onclick="filterByStatus('경고')" title="클릭하여 필터">
+                        <span>경고</span><strong id="sumWarning" class="text-orange">0</strong>
+                    </div>
+                    <div class="summary-item clickable" onclick="filterByStatus('정지')" title="클릭하여 필터">
+                        <span>정지</span><strong id="sumSuspend" class="text-red">0</strong>
+                    </div>
+                    <div class="summary-item"><span>총 상품수</span><strong id="sumProducts">0</strong></div>
+                </div>
+
+                <!-- 표 -->
+                <div class="market-table-container">
+                    <table class="market-table" id="marketTable">
+                        <thead>
+                            <tr>
+                                <th style="width:30px; text-align:center;"><input type="checkbox" id="selectAllMarket"
+                                        onclick="toggleAllMarketRows(this)"></th>
+                                <th style="width:40px; text-align:center;">No</th>
+                                <th style="width:80px; text-align:center;">플랫폼</th>
+                                <th style="width:160px; text-align:center;">
+                                    <input type="text" id="filterMarketName" placeholder="🔍 마켓명"
+                                        class="th-filter-input" oninput="filterMarketTable()">
+                                </th>
+                                <th style="width:80px; text-align:center;">
+                                    <div class="filter-combo">
+                                        <input type="text" id="filterStatus" placeholder="🔍 상태" class="th-filter-input"
+                                            oninput="filterMarketTable()" onfocus="showFilterDropdown('status')"
+                                            title="쉼표로 복수 검색">
+                                        <div class="filter-dropdown" id="dropdown-status">
+                                            <div class="filter-dropdown-item" onclick="selectFilterItem('status','정상')">
+                                                정상</div>
+                                            <div class="filter-dropdown-item" onclick="selectFilterItem('status','주의')">
+                                                주의</div>
+                                            <div class="filter-dropdown-item" onclick="selectFilterItem('status','경고')">
+                                                경고</div>
+                                            <div class="filter-dropdown-item" onclick="selectFilterItem('status','정지')">
+                                                정지</div>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th style="width:70px; text-align:center; cursor:pointer;"
+                                    onclick="sortMarketTable('product_count')" title="클릭하여 정렬">판매중 ↕</th>
+                                <th style="width:70px; text-align:center;">
+                                    <div class="filter-combo">
+                                        <input type="text" id="filterDaysElapsed" placeholder="🔍 경과일"
+                                            class="th-filter-input" oninput="filterMarketTable()"
+                                            onfocus="showFilterDropdown('days')" title="예: 30+, 60+, 60-">
+                                        <div class="filter-dropdown" id="dropdown-days">
+                                            <div class="filter-dropdown-item"
+                                                onclick="selectFilterItem('daysElapsed','30-')">30일 이하</div>
+                                            <div class="filter-dropdown-item"
+                                                onclick="selectFilterItem('daysElapsed','60-')">60일 이하</div>
+                                            <div class="filter-dropdown-item"
+                                                onclick="selectFilterItem('daysElapsed','30+')">30일 초과</div>
+                                            <div class="filter-dropdown-item"
+                                                onclick="selectFilterItem('daysElapsed','60+')">60일 초과</div>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th style="width:80px; text-align:center; cursor:pointer;"
+                                    onclick="sortMarketTable('month_sales')" title="클릭하여 정렬">월매출 ↕</th>
+                                <th style="width:80px; text-align:center; cursor:pointer;"
+                                    onclick="sortMarketTable('month_profit')" title="클릭하여 정렬">월순익 ↕</th>
+                                <th style="width:60px; text-align:center; cursor:pointer;"
+                                    onclick="sortMarketTable('month_orders')" title="클릭하여 정렬">월주문 ↕</th>
+                                <th style="width:60px; text-align:center; cursor:pointer;"
+                                    onclick="sortMarketTable('orders_2w')" title="클릭하여 정렬">14일주문 ↕</th>
+                                <th style="width:90px; text-align:center;">
+                                    <div class="filter-combo">
+                                        <input type="text" id="filterOwner" placeholder="🔍 소유자" class="th-filter-input"
+                                            oninput="filterMarketTable()" onfocus="showFilterDropdown('owner')"
+                                            title="쉼표로 복수 검색">
+                                        <div class="filter-dropdown" id="dropdown-owner">
+                                            <!-- JS에서 동적 생성 -->
+                                        </div>
+                                    </div>
+                                </th>
+                                <th style="width:90px; text-align:center;">
+                                    <div class="filter-combo">
+                                        <input type="text" id="filterUsage" placeholder="🔍 용도" class="th-filter-input"
+                                            oninput="filterMarketTable()" onfocus="showFilterDropdown('usage')"
+                                            title="쉼표로 복수 검색">
+                                        <div class="filter-dropdown" id="dropdown-usage">
+                                            <!-- JS에서 동적 생성 -->
+                                        </div>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="marketTableBody">
+                            <tr>
+                                <td colspan="13" class="loading">로딩 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 매출현황 탭 -->
+        <div class="tab-content" id="tab-sales">
+            <div class="card">
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>💰 매출현황</h3>
+                    <div>
+                        <button class="btn btn-primary" onclick="loadSalesData(true)">🔄 새로고침</button>
+                    </div>
+                </div>
+
+                <!-- 요약 카드 -->
+                <div class="sales-summary" id="salesSummary">
+                    <div class="summary-card">
+                        <div class="summary-label">총 주문금액</div>
+                        <div class="summary-value" id="totalSales">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">정산금액</div>
+                        <div class="summary-value" id="totalSettlement">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">구매+배송비</div>
+                        <div class="summary-value" id="totalCost">-</div>
+                    </div>
+                    <div class="summary-card highlight">
+                        <div class="summary-label">순익</div>
+                        <div class="summary-value" id="totalProfit">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">수익률</div>
+                        <div class="summary-value" id="totalProfitRate">-</div>
+                    </div>
+                </div>
+
+                <!-- 내부 탭: 플랫폼별 통계 / TOP 40 상품 -->
+                <div class="sales-inner-tabs" style="margin-bottom:20px;">
+                    <div class="inner-tab-btns" style="display:flex; gap:10px; margin-bottom:15px;">
+                        <button class="inner-tab-btn active" onclick="switchSalesInnerTab('platform')">📊 플랫폼별
+                            통계</button>
+                        <button class="inner-tab-btn" onclick="switchSalesInnerTab('top20')">🏆 TOP 40 상품</button>
+                    </div>
+
+                    <!-- 플랫폼별 통계 -->
+                    <div class="inner-tab-content active" id="salesTab-platform">
+                        <div class="sales-table-section">
+                            <table class="sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>플랫폼</th>
+                                        <th>총주문금액</th>
+                                        <th>정산금액</th>
+                                        <th>수수료</th>
+                                        <th>구매+배송</th>
+                                        <th>순익</th>
+                                        <th>수익률</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="platformStatsBody">
+                                    <tr>
+                                        <td colspan="8" class="loading">로딩 중...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- TOP 40 상품 -->
+                    <div class="inner-tab-content" id="salesTab-top20" style="display:none;">
+                        <div class="sales-table-section">
+                            <div class="table-container" style="max-height: 900px; overflow-y: auto;">
+                                <table class="sales-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:40px;">순위</th>
+                                            <th style="width:50px;">플랫폼</th>
+                                            <th style="width:100px;">스토어</th>
+                                            <th style="width:120px;">판매자상품코드</th>
+                                            <th>상품명</th>
+                                            <th style="width:70px; cursor:pointer;" onclick="sortTop40('order_count')">
+                                                판매건수 <span id="sortIcon-order_count"></span></th>
+                                            <th style="width:90px; cursor:pointer;" onclick="sortTop40('total_sales')">
+                                                판매금액 <span id="sortIcon-total_sales"></span></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="top20ProductsBody">
+                                        <tr>
+                                            <td colspan="7" class="loading">로딩 중...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 그래프 + 소유자별 매출 영역 (2열) -->
+                <div class="sales-main-row" style="display:flex; gap:20px; margin-bottom:20px;">
+                    <!-- 왼쪽: 그래프 -->
+                    <div class="chart-container" style="flex:2;">
+                        <h4>📈 일자별 매출/수익 추이</h4>
+                        <canvas id="dailySalesChart"></canvas>
+                    </div>
+                    <!-- 오른쪽: 소유자별 + 대량/반대량 매출 -->
+                    <div style="flex:1; display:flex; flex-direction:column; gap:15px;">
+                        <div class="owner-sales-section">
+                            <h4>👤 소유자별 매출</h4>
+                            <div class="table-container" style="max-height:200px; overflow-y:auto;">
+                                <table class="sales-table compact">
+                                    <thead>
+                                        <tr>
+                                            <th>소유자</th>
+                                            <th>주문</th>
+                                            <th>매출</th>
+                                            <th>순익</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ownerSalesTableBody">
+                                        <tr>
+                                            <td colspan="4">로딩 중...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="usage-sales-section">
+                            <h4>📦 용도별 매출</h4>
+                            <div class="table-container" style="max-height:150px; overflow-y:auto;">
+                                <table class="sales-table compact">
+                                    <thead>
+                                        <tr>
+                                            <th>용도</th>
+                                            <th>계정수</th>
+                                            <th>주문</th>
+                                            <th>매출</th>
+                                            <th>순익</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usageSalesTableBody">
+                                        <tr>
+                                            <td colspan="5">로딩 중...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 사업자번호별 매출 (부가세 신고용) -->
+                <div class="sales-table-section" style="margin-top:20px;">
+                    <h4>🧾 사업자번호별 매출 <small style="color:#666;font-weight:normal;">(부가세 신고용)</small></h4>
+                    <div class="table-container" style="max-height:300px; overflow-y:auto;">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">No</th>
+                                    <th style="cursor:pointer;" onclick="sortBizTable('biz_number')">사업자번호 ↕</th>
+                                    <th>포함 스토어</th>
+                                    <th style="cursor:pointer;" onclick="sortBizTable('orders')">주문 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortBizTable('sales')">매출 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortBizTable('settlement')">정산액 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortBizTable('profit')">순익 ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bizSalesTableBody">
+                                <tr>
+                                    <td colspan="7">로딩 중...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 마켓별 현황 테이블 -->
+                <div class="sales-table-section">
+                    <h4>🏪 마켓별 현황 <span id="marketCount" style="font-size:12px;color:#666;"></span></h4>
+                    <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">No</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('name')">마켓명 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('orders')">월주문 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('orders_2w')">2주주문 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('sales')">주문금액 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('settlement')">정산액 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('purchase')">구매비 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('shipping')">배송비 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('profit')">순익 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('profit_rate')">수익률 ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salesTableBody">
+                                <tr>
+                                    <td colspan="10" class="loading">로딩 중...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 일자별 현황 테이블 -->
+                <div class="sales-table-section" style="margin-top: 20px;">
+                    <h4>📅 일자별 현황</h4>
+                    <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('date')">날짜 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('orders')">주문 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('sales')">주문금액 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('settlement')">정산액 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('purchase')">구매비 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('shipping')">배송비 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('profit')">순익 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortDailyTable('profit_rate')">수익률 ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailySalesTableBody">
+                                <tr>
+                                    <td colspan="8" class="loading">로딩 중...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tab-accounts">
+            <div class="card">
+                <!-- 마켓별 필터 버튼 -->
+                <div id="platformCounts" class="platform-counts"></div>
+
+                <div class="toolbar">
+                    <input type="text" id="searchInput" placeholder="🔍 검색" oninput="renderAccounts()">
+                    <button class="add-btn" onclick="openAddModal()">➕ 추가</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>플랫폼</th>
+                                <th>별칭</th>
+                                <th>아이디</th>
+                                <th>비밀번호</th>
+                                <th>사업자번호</th>
+                                <th>API/통합</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsTable"></tbody>
+                    </table>
+                </div>
+                <div class="shortcut-hint">💡 ID/PW 입력 후 <kbd>Ctrl+Shift+V</kbd>로 비밀번호 복사</div>
+            </div>
+        </div>
+
+        <!-- All-in-One 탭 -->
+        <div class="tab-content" id="tab-allinone">
+            <div class="card">
+                <!-- 플랫폼 + 작업 선택 (한 줄로) -->
+                <div class="aio-header-row">
+                    <div class="aio-platform-section">
+                        <span class="aio-label">플랫폼</span>
+                        <div class="aio-platform-btns">
+                            <button class="aio-platform-btn active" data-platform="스마트스토어"
+                                onclick="selectAioPlatform('스마트스토어')">🟢 스마트스토어</button>
+                            <button class="aio-platform-btn" data-platform="11번가" onclick="selectAioPlatform('11번가')">🟠
+                                11번가</button>
+                        </div>
+                    </div>
+                    <div class="aio-divider"></div>
+                    <div class="aio-task-section">
+                        <span class="aio-label">작업</span>
+                        <div class="aio-task-btns" id="aioTaskBtns">
+                            <!-- 스마트스토어 작업 -->
+                            <button class="aio-task-btn active" data-task="등록갯수" data-platform="스마트스토어"
+                                onclick="selectAioTask('등록갯수')">📊 등록갯수</button>
+                            <button class="aio-task-btn" data-task="배송코드" data-platform="스마트스토어"
+                                onclick="selectAioTask('배송코드')">📍 배송코드</button>
+                            <button class="aio-task-btn" data-task="배송변경" data-platform="스마트스토어"
+                                onclick="selectAioTask('배송변경')">🚚 배송변경</button>
+                            <button class="aio-task-btn" data-task="상품삭제" data-platform="스마트스토어"
+                                onclick="selectAioTask('상품삭제')">🗑️ 상품삭제</button>
+                            <button class="aio-task-btn" data-task="혜택설정" data-platform="스마트스토어"
+                                onclick="selectAioTask('혜택설정')">⭐ 혜택설정</button>
+                            <button class="aio-task-btn" data-task="중복삭제" data-platform="스마트스토어"
+                                onclick="selectAioTask('중복삭제')">🔄 중복삭제</button>
+                            <button class="aio-task-btn" data-task="KC인증" data-platform="스마트스토어"
+                                onclick="selectAioTask('KC인증')">🛡️ KC인증</button>
+                            <button class="aio-task-btn" data-task="매출조회" data-platform="스마트스토어"
+                                onclick="selectAioTask('매출조회')">💰 매출조회</button>
+                            <!-- 11번가 작업 -->
+                            <button class="aio-task-btn" data-task="등록갯수" data-platform="11번가"
+                                onclick="selectAioTask('등록갯수')" style="display:none;">📊 판매중</button>
+                            <button class="aio-task-btn" data-task="판매중지" data-platform="11번가"
+                                onclick="selectAioTask('판매중지')" style="display:none;">⏸️ 판매중지</button>
+                            <button class="aio-task-btn" data-task="판매재개" data-platform="11번가"
+                                onclick="selectAioTask('판매재개')" style="display:none;">▶️ 판매재개</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 작업 옵션 (작업별로 다르게 표시) -->
+                <div class="aio-section" id="aioOptionsSection" style="display:none;">
+                    <div class="section-title">⚙️ 작업 옵션</div>
+                    <div class="aio-options" id="aioOptions">
+                        <!-- 배송변경/혜택설정 옵션 -->
+                        <div class="aio-option-group" id="optionUpdateMode" style="display:none;">
+                            <label>대상 선택 방식:</label>
+                            <div class="aio-radio-group">
+                                <label class="aio-radio">
+                                    <input type="radio" name="updateMode" value="count" checked
+                                        onchange="toggleUpdateOption()">
+                                    <span>수량 기준</span>
+                                </label>
+                                <label class="aio-radio">
+                                    <input type="radio" name="updateMode" value="date" onchange="toggleUpdateOption()">
+                                    <span>날짜 기준 (updated_at)</span>
+                                </label>
+                            </div>
+                            <div class="aio-option-inputs">
+                                <div id="optionCount">
+                                    <label>처리 수량:</label>
+                                    <input type="number" id="aioTargetCount" value="100" min="1" max="10000"
+                                        style="width:100px;">
+                                    <span>개</span>
+                                </div>
+                                <div id="optionDate" style="display:none;">
+                                    <label>기준 날짜 이후:</label>
+                                    <input type="date" id="aioTargetDate" style="width:150px;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 상품삭제 옵션 -->
+                        <div class="aio-option-group" id="optionDelete" style="display:none;">
+                            <div style="margin-bottom: 8px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" id="aioDeleteExcessOnly" style="margin-right: 6px;">
+                                    <span>초과분만 삭제 (삭제 기준 사용)</span>
+                                </label>
+                            </div>
+                            <div id="aioDeleteCountWrap">
+                                <label>삭제 수량 (오래된 순, 판매상품 제외):</label>
+                                <div class="aio-option-inputs">
+                                    <input type="number" id="aioDeleteCount" value="50" min="1" max="5000"
+                                        style="width:100px;">
+                                    <span>개</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KC인증 옵션 -->
+                        <div class="aio-option-group" id="optionKC" style="display:none;">
+                            <label>대상 선택 방식:</label>
+                            <div class="aio-radio-group">
+                                <label class="aio-radio">
+                                    <input type="radio" name="kcUpdateMode" value="count" checked
+                                        onchange="toggleKCOption()">
+                                    <span>수량 기준</span>
+                                </label>
+                                <label class="aio-radio">
+                                    <input type="radio" name="kcUpdateMode" value="date" onchange="toggleKCOption()">
+                                    <span>날짜 기준 (등록일)</span>
+                                </label>
+                            </div>
+                            <div class="aio-option-inputs">
+                                <div id="kcOptionCount">
+                                    <label>처리 수량:</label>
+                                    <input type="number" id="aioKCLimit" value="2000" min="100" max="10000"
+                                        style="width:100px;">
+                                    <span>개</span>
+                                </div>
+                                <div id="kcOptionDate" style="display:none;">
+                                    <label>기준 날짜 이후:</label>
+                                    <input type="date" id="aioKCDate" style="width:150px;">
+                                </div>
+                            </div>
+                            <div style="font-size:12px;color:#666;margin-top:5px;">
+                                ※ KC인증 대상 제외 (어린이제품, 친환경) 설정
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 스토어 선택 -->
+                <div class="aio-section">
+                    <div class="section-title">
+                        🏬 스토어 선택
+                        <span class="aio-store-count" id="aioStoreCount">(0개 선택)</span>
+                    </div>
+
+                    <!-- 필터 섹션 -->
+                    <div class="aio-filter-section">
+                        <label>판매중 기준:</label>
+                        <input type="number" id="aioFilterThreshold" placeholder="예: 9500" min="0">
+                        <label>이상만 표시</label>
+                        <button class="aio-filter-btn" onclick="applyAioFilter()">필터 적용</button>
+                        <button class="aio-filter-btn secondary" onclick="clearAioFilter()">초기화</button>
+
+                        <span class="filter-divider">|</span>
+
+                        <label>소유자:</label>
+                        <select id="aioOwnerFilter" onchange="applyAioFilter()">
+                            <option value="">전체</option>
+                        </select>
+
+                        <label>용도:</label>
+                        <select id="aioUsageFilter" onchange="applyAioFilter()">
+                            <option value="">전체</option>
+                        </select>
+                    </div>
+
+                    <!-- 상품삭제 전용 옵션 -->
+                    <div id="aioDeleteOptions" style="display: none; margin-bottom: 12px;">
+                        <div class="aio-filter-section">
+                            <label>삭제 기준:</label>
+                            <input type="number" id="aioDeleteLimit" value="9500" min="0">
+                            <label>개 초과분 삭제</label>
+                            <button class="aio-filter-btn" onclick="selectOverLimit()">기준 초과만 선택</button>
+                        </div>
+                        <div class="aio-delete-summary" id="aioDeleteSummary">선택된 스토어 총 삭제 예정: 0개</div>
+                    </div>
+
+                    <div class="aio-store-actions">
+                        <button class="aio-btn small" onclick="selectAllAioStores()">전체선택</button>
+                        <button class="aio-btn small" onclick="deselectAllAioStores()">전체해제</button>
+                        <button class="aio-btn small primary" onclick="applyAioSelection()">✓ 적용 (시트 업데이트)</button>
+                    </div>
+                    <div class="aio-store-grid" id="aioStoreGrid">
+                        <div class="empty">작업을 선택하면 스토어 목록이 표시됩니다</div>
+                    </div>
+                </div>
+
+                <!-- 실행 버튼 -->
+                <div class="aio-actions">
+                    <button class="aio-btn primary large" onclick="runAioTask()">▶️ 실행</button>
+                    <button class="aio-btn danger large" onclick="stopAioTask()" id="aioStopBtn" disabled>⏹️ 중지</button>
+                </div>
+            </div>
+
+            <!-- 실행 결과 -->
+            <div class="card">
+                <div class="card-title">📊 진행 현황</div>
+                <div class="aio-progress-bar">
+                    <div class="progress-fill" id="aioProgressFill" style="width: 0%"></div>
+                    <span class="progress-text" id="aioProgressText">0%</span>
+                </div>
+                <div class="aio-status" id="aioStatus"
+                    style="font-size: 13px; color: #666; padding: 8px 0; min-height: 40px;">
+                    대기 중...
+                </div>
+                <div class="aio-results" id="aioResults">
+                    <div class="empty">작업을 실행하면 결과가 표시됩니다</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 스케줄러 탭 -->
+        <div class="tab-content" id="tab-scheduler">
+            <div class="card">
+                <div class="card-title">⏰ 스케줄러</div>
+
+                <!-- 스케줄 추가 폼 -->
+                <div class="scheduler-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>스케줄 이름</label>
+                            <input type="text" id="schedName" placeholder="예: 매일 오전 9시 등록갯수 조회">
+                        </div>
+                        <div class="form-group">
+                            <label>플랫폼</label>
+                            <select id="schedPlatform" onchange="updateSchedTasks()">
+                                <option value="스마트스토어">스마트스토어</option>
+                                <option value="11번가">11번가</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>작업</label>
+                            <select id="schedTask">
+                                <option value="등록갯수">등록갯수</option>
+                                <option value="배송코드">배송코드</option>
+                                <option value="배송변경">배송변경</option>
+                                <option value="상품삭제">상품삭제</option>
+                                <option value="혜택설정">혜택설정</option>
+                                <option value="중복삭제">중복삭제</option>
+                                <option value="KC인증">KC인증</option>
+                                <option value="기타기능">기타기능</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>스케줄 타입</label>
+                            <select id="schedType" onchange="toggleSchedInputs()">
+                                <option value="cron">Cron (시간 지정)</option>
+                                <option value="interval">Interval (간격)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="schedCronGroup">
+                            <label>실행 시간 (cron: 분 시 일 월 요일)</label>
+                            <div class="cron-inputs">
+                                <input type="text" id="schedCronMin" value="0" placeholder="분" style="width:50px;">
+                                <input type="text" id="schedCronHour" value="9" placeholder="시" style="width:50px;">
+                                <input type="text" id="schedCronDay" value="*" placeholder="일" style="width:50px;">
+                                <input type="text" id="schedCronMonth" value="*" placeholder="월" style="width:50px;">
+                                <input type="text" id="schedCronDow" value="*" placeholder="요일" style="width:50px;">
+                                <small style="color:#999;">예: 0 9 * * * = 매일 09:00, 0 9 * * 1-5 = 평일 09:00</small>
+                            </div>
+                        </div>
+                        <div class="form-group" id="schedIntervalGroup" style="display:none;">
+                            <label>실행 간격 (분)</label>
+                            <input type="number" id="schedIntervalMin" value="60" min="1">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button class="btn primary" onclick="createSchedule()">➕ 스케줄 추가</button>
+                    </div>
+                </div>
+
+                <!-- 스케줄 목록 -->
+                <div class="scheduler-list">
+                    <div class="section-title">📋 등록된 스케줄</div>
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>상태</th>
+                                <th>이름</th>
+                                <th>플랫폼</th>
+                                <th>작업</th>
+                                <th>실행 주기</th>
+                                <th>다음 실행</th>
+                                <th>마지막 실행</th>
+                                <th>실행횟수</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleTableBody">
+                            <tr>
+                                <td colspan="9" class="empty">등록된 스케줄이 없습니다</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 불사자 탭 -->
+        <div class="tab-content" id="tab-bulsaja">
+            <div class="card">
+                <div class="card-title">🔥 불사자 설정 및 실행</div>
+
+                <!-- 2열 레이아웃 -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <!-- 왼쪽: 프로그램 설정 -->
+                    <div style="flex: 1; min-width: 300px;">
+                        <div class="bulsaja-section">
+                            <div class="section-title">📋 프로그램 설정</div>
+                            <div class="sheet-settings">
+                                <div class="setting-row">
+                                    <label>사용할 프로그램</label>
+                                    <select id="bulsajaProgram" onchange="onBulsajaProgramChange()">
+                                        <option value="2. 상품업로드">2. 상품업로드</option>
+                                        <option value="4. 상품삭제">4. 상품삭제</option>
+                                        <option value="4-3. 불사자상품복사">4-3. 불사자상품복사</option>
+                                    </select>
+                                </div>
+                                <!-- 상품업로드용 -->
+                                <div class="setting-row" id="uploadMarketRow">
+                                    <label>업로드마켓설정</label>
+                                    <select id="bulsajaUploadMarket">
+                                        <option value="스마트스토어 업로드">스마트스토어 업로드</option>
+                                        <option value="전체마켓 업로드">전체마켓 업로드</option>
+                                        <option value="11번가 업로드">11번가 업로드</option>
+                                        <option value="ESM 업로드">ESM 업로드</option>
+                                        <option value="쿠팡 업로드">쿠팡 업로드</option>
+                                    </select>
+                                </div>
+                                <div class="setting-row" id="uploadCountRow">
+                                    <label>업로드수</label>
+                                    <input type="number" id="bulsajaUploadCount" value="100" min="1" max="10000">
+                                </div>
+
+                                <!-- 상품삭제용 (삭제수량만) -->
+                                <div class="setting-row" id="deleteCountRow" style="display:none;">
+                                    <label>삭제수량</label>
+                                    <input type="number" id="bulsajaDeleteCount" value="100" min="1" max="10000">
+                                </div>
+
+                                <!-- 상품복사용 (소스마켓 + 복사수량) -->
+                                <div class="setting-row" id="copySourceMarketRow" style="display:none;">
+                                    <label>소스마켓그룹</label>
+                                    <select id="bulsajaCopySourceMarket">
+                                        <option value="1번 마켓그룹">1번 마켓그룹</option>
+                                        <option value="2번 마켓그룹">2번 마켓그룹</option>
+                                        <option value="3번 마켓그룹">3번 마켓그룹</option>
+                                        <option value="4번 마켓그룹">4번 마켓그룹</option>
+                                        <option value="5번 마켓그룹">5번 마켓그룹</option>
+                                        <option value="6번 마켓그룹">6번 마켓그룹</option>
+                                        <option value="7번 마켓그룹">7번 마켓그룹</option>
+                                        <option value="8번 마켓그룹">8번 마켓그룹</option>
+                                        <option value="9번 마켓그룹">9번 마켓그룹</option>
+                                        <option value="10번 마켓그룹">10번 마켓그룹</option>
+                                        <option value="11번 마켓그룹">11번 마켓그룹</option>
+                                        <option value="12번 마켓그룹">12번 마켓그룹</option>
+                                        <option value="13번 마켓그룹">13번 마켓그룹</option>
+                                        <option value="14번 마켓그룹">14번 마켓그룹</option>
+                                        <option value="15번 마켓그룹">15번 마켓그룹</option>
+                                        <option value="16번 마켓그룹">16번 마켓그룹</option>
+                                        <option value="17번 마켓그룹">17번 마켓그룹</option>
+                                        <option value="18번 마켓그룹">18번 마켓그룹</option>
+                                        <option value="19번 마켓그룹">19번 마켓그룹</option>
+                                        <option value="20번 마켓그룹">20번 마켓그룹</option>
+                                        <option value="21번 마켓그룹">21번 마켓그룹</option>
+                                        <option value="22번 마켓그룹">22번 마켓그룹</option>
+                                        <option value="23번 마켓그룹">23번 마켓그룹</option>
+                                        <option value="24번 마켓그룹">24번 마켓그룹</option>
+                                        <option value="25번 마켓그룹">25번 마켓그룹</option>
+                                        <option value="26번 마켓그룹">26번 마켓그룹</option>
+                                        <option value="27번 마켓그룹">27번 마켓그룹</option>
+                                        <option value="28번 마켓그룹">28번 마켓그룹</option>
+                                        <option value="29번 마켓그룹">29번 마켓그룹</option>
+                                        <option value="30번 마켓그룹">30번 마켓그룹</option>
+                                        <option value="31번 마켓그룹">31번 마켓그룹</option>
+                                        <option value="32번 마켓그룹">32번 마켓그룹</option>
+                                        <option value="33번 마켓그룹">33번 마켓그룹</option>
+                                        <option value="34번 마켓그룹">34번 마켓그룹</option>
+                                        <option value="35번 마켓그룹">35번 마켓그룹</option>
+                                        <option value="36번 마켓그룹">36번 마켓그룹</option>
+                                        <option value="37번 마켓그룹">37번 마켓그룹</option>
+                                        <option value="38번 마켓그룹">38번 마켓그룹</option>
+                                        <option value="39번 마켓그룹">39번 마켓그룹</option>
+                                        <option value="40번 마켓그룹">40번 마켓그룹</option>
+                                        <option value="41번 마켓그룹">41번 마켓그룹</option>
+                                    </select>
+                                </div>
+                                <div class="setting-row" id="copyCountRow" style="display:none;">
+                                    <label>복사수량</label>
+                                    <input type="number" id="bulsajaCopyCount" value="100" min="1" max="10000">
+                                </div>
+                                <div class="setting-btns">
+                                    <button class="sheet-load-btn" onclick="loadBulsajaSettings()">🔄 불러오기</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽: 시트 설정 표시 -->
+                    <div style="flex: 1; min-width: 300px;">
+                        <div class="bulsaja-section" id="bulsajaSheetInfo" style="display:none;">
+                            <div class="section-title">📊 현재 시트 설정</div>
+                            <div style="font-size: 13px; line-height: 1.8;">
+                                <!-- 마진설정 -->
+                                <div
+                                    style="background: #fff3cd; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px;">
+                                    <strong style="color: #856404;">마진설정</strong>
+                                    <div id="marginInfo" style="color: #333; margin-top: 4px;">-</div>
+                                </div>
+                                <!-- 상품업로드 설정 -->
+                                <div
+                                    style="background: #cce5ff; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px;">
+                                    <strong style="color: #004085;">상품업로드 설정</strong>
+                                    <div id="uploadInfo" style="color: #333; margin-top: 4px;">-</div>
+                                </div>
+                                <!-- 상품삭제/복사 설정 -->
+                                <div style="background: #d4edda; padding: 8px 12px; border-radius: 6px;">
+                                    <strong style="color: #155724;">상품삭제/복사 설정</strong>
+                                    <div id="deleteCopyInfo" style="color: #333; margin-top: 4px;">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 그룹 선택 -->
+                <div class="bulsaja-section">
+                    <div class="section-title">📋 실행할 그룹 선택</div>
+                    <div class="group-input-row">
+                        <input type="text" id="bulsajaGroups" placeholder="예: 1,3,5-7 또는 1-10" class="group-input">
+                        <button class="preset-btn" onclick="setGroupPreset('1-5')">1-5</button>
+                        <button class="preset-btn" onclick="setGroupPreset('1-10')">1-10</button>
+                        <button class="preset-btn" onclick="setGroupPreset('1-20')">1-20</button>
+                        <button class="preset-btn" onclick="setGroupPreset('1-40')">1-40</button>
+                    </div>
+                    <div class="group-quick-select" id="groupQuickSelect">
+                        <!-- 1~40 버튼 생성 -->
+                    </div>
+                </div>
+
+                <!-- 실행 옵션 -->
+                <div class="bulsaja-section">
+                    <div class="section-title">⚙️ 실행 옵션</div>
+                    <div class="options-row">
+                        <div class="option-group">
+                            <label>동시 실행 수</label>
+                            <select id="maxConcurrent">
+                                <option value="1">1개</option>
+                                <option value="2">2개</option>
+                                <option value="3" selected>3개</option>
+                                <option value="4">4개</option>
+                                <option value="5">5개</option>
+                            </select>
+                        </div>
+                        <div class="option-group">
+                            <label>실행 간격</label>
+                            <select id="groupGap">
+                                <option value="30">30초</option>
+                                <option value="60" selected>60초</option>
+                                <option value="90">90초</option>
+                                <option value="120">120초</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 실행 버튼 -->
+                <div class="bulsaja-actions">
+                    <button class="bulsaja-run-btn" onclick="runBulsaja()">🚀 실행</button>
+                    <button class="bulsaja-stop-btn" onclick="stopBulsaja()" disabled id="stopBulsajaBtn">⏹️ 중지</button>
+                </div>
+            </div>
+
+            <!-- 진행 현황 -->
+            <div class="card">
+                <div class="card-title">📊 진행 현황</div>
+                <div class="progress-summary">
+                    <div class="progress-stat">
+                        <span class="stat-label">대기</span>
+                        <span class="stat-value" id="statPending">0</span>
+                    </div>
+                    <div class="progress-stat">
+                        <span class="stat-label">실행 중</span>
+                        <span class="stat-value running" id="statRunning">0</span>
+                    </div>
+                    <div class="progress-stat">
+                        <span class="stat-label">완료</span>
+                        <span class="stat-value completed" id="statCompleted">0</span>
+                    </div>
+                    <div class="progress-stat">
+                        <span class="stat-label">실패</span>
+                        <span class="stat-value failed" id="statFailed">0</span>
+                    </div>
+                </div>
+                <div class="progress-list" id="bulsajaProgress">
+                    <div class="empty">실행할 그룹을 선택하세요</div>
+                </div>
+
+                <!-- 실시간 로그 -->
+                <div class="log-section" id="bulsajaLogSection" style="display:none;">
+                    <div class="section-title">📋 실시간 로그</div>
+                    <div class="log-container" id="bulsajaLogs"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 기타 기능 탭 -->
+        <div class="tab-content" id="tab-tools">
+            <div class="tools-grid">
+                <!-- 알리 송장번호 수집 -->
+                <div class="card tool-card">
+                    <div class="card-title">📦 알리 송장번호 수집</div>
+                    <p class="tool-desc">알리익스프레스 주문에서 송장번호를 자동 수집하여 구글 시트에 입력합니다.</p>
+
+                    <div class="tool-form">
+                        <div class="tool-field">
+                            <label>구글 시트 URL 또는 ID</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="aliSheetUrl"
+                                    placeholder="https://docs.google.com/spreadsheets/d/...">
+                                <button class="save-btn" onclick="saveAliSheetUrl()" title="저장">💾</button>
+                            </div>
+                        </div>
+                        <div class="tool-field-row">
+                            <div class="tool-field">
+                                <label>월 선택</label>
+                                <select id="aliMonth">
+                                    <option value="1월">1월</option>
+                                    <option value="2월">2월</option>
+                                    <option value="3월">3월</option>
+                                    <option value="4월">4월</option>
+                                    <option value="5월">5월</option>
+                                    <option value="6월">6월</option>
+                                    <option value="7월">7월</option>
+                                    <option value="8월">8월</option>
+                                    <option value="9월">9월</option>
+                                    <option value="10월">10월</option>
+                                    <option value="11월">11월</option>
+                                    <option value="12월">12월</option>
+                                </select>
+                            </div>
+                            <div class="tool-field">
+                                <label>Chrome 디버그 포트</label>
+                                <input type="text" id="aliDebugPort" value="9222" style="width:80px;">
+                            </div>
+                        </div>
+
+                        <div class="tool-actions">
+                            <button class="tool-btn" onclick="connectAliBrowser()">1️⃣ 브라우저 실행</button>
+                            <button class="tool-btn primary" onclick="startAliCollection()" id="aliStartBtn"
+                                disabled>2️⃣ 수집 시작</button>
+                            <button class="tool-btn danger" onclick="stopAliCollection()" id="aliStopBtn" disabled>⏹️
+                                중지</button>
+                            <button class="tool-btn" onclick="downloadAliExcel()"
+                                style="background:#4caf50; color:white; border-color:#4caf50;">📥 엑셀 다운로드</button>
+                        </div>
+
+                        <div class="tool-status" id="aliStatus">
+                            <span class="status-dot"></span>
+                            <span class="status-text">준비</span>
+                        </div>
+
+                        <div class="tool-log" id="aliLog">
+                            <div class="log-header">📋 로그</div>
+                            <div class="log-content" id="aliLogContent"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 배송조회 -->
+                <div class="card tool-card">
+                    <div class="card-title">🚚 배송상태 조회</div>
+                    <p class="tool-desc">구글 시트의 송장번호를 조회하여 배송중인 항목을 노란색으로 표시합니다.</p>
+
+                    <div class="tool-form">
+                        <div class="tool-field">
+                            <label>구글 시트 URL 또는 ID</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="deliverySheetUrl"
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    value="1MHhu1GdvV1OGS8Wy3NxWOKuqFvgZpqgwn08kG70EDsY">
+                                <button class="save-btn" onclick="saveDeliverySheetUrl()" title="저장">💾</button>
+                            </div>
+                        </div>
+                        <div class="tool-field-row">
+                            <div class="tool-field">
+                                <label>월 선택</label>
+                                <select id="deliveryMonth">
+                                    <option value="1월">1월</option>
+                                    <option value="2월">2월</option>
+                                    <option value="3월">3월</option>
+                                    <option value="4월">4월</option>
+                                    <option value="5월">5월</option>
+                                    <option value="6월">6월</option>
+                                    <option value="7월">7월</option>
+                                    <option value="8월">8월</option>
+                                    <option value="9월">9월</option>
+                                    <option value="10월">10월</option>
+                                    <option value="11월">11월</option>
+                                    <option value="12월">12월</option>
+                                </select>
+                            </div>
+                            <div class="tool-field">
+                                <label>택배사 컬럼</label>
+                                <input type="number" id="deliveryCarrierCol" value="43" style="width:60px;">
+                            </div>
+                            <div class="tool-field">
+                                <label>송장번호 컬럼</label>
+                                <input type="number" id="deliveryTrackingCol" value="44" style="width:60px;">
+                            </div>
+                        </div>
+
+                        <div class="tool-actions">
+                            <button class="tool-btn primary" onclick="startDeliveryCheck()" id="deliveryStartBtn">🔍 조회
+                                시작</button>
+                            <button class="tool-btn danger" onclick="stopDeliveryCheck()" id="deliveryStopBtn"
+                                disabled>⏹️ 중지</button>
+                        </div>
+
+                        <div class="tool-status" id="deliveryStatus">
+                            <span class="status-dot"></span>
+                            <span class="status-text">준비</span>
+                        </div>
+
+                        <div class="tool-log" id="deliveryLog">
+                            <div class="log-header">📋 로그</div>
+                            <div class="log-content" id="deliveryLogContent"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 일일장부 주문/배송 동기화 -->
+                <div class="card tool-card">
+                    <div class="card-title">📊 일일장부 주문/배송 동기화</div>
+                    <p class="tool-desc">타오바오/알리 주문번호를 기반으로 수량, 가격, 배송정보 및 국제배송비를 일일장부에 동기화합니다.</p>
+
+                    <div class="tool-form">
+                        <div class="tool-field">
+                            <label>구글 시트 URL 또는 ID (일일장부)</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="syncSheetUrl"
+                                    placeholder="https://docs.google.com/spreadsheets/d/...">
+                                <button class="save-btn" onclick="saveSyncSheetUrl()" title="저장">💾</button>
+                            </div>
+                        </div>
+                        <div class="tool-field-row">
+                            <div class="tool-field">
+                                <label>월 선택</label>
+                                <select id="syncMonth">
+                                    <option value="1월">1월</option>
+                                    <option value="2월">2월</option>
+                                    <option value="3월">3월</option>
+                                    <option value="4월">4월</option>
+                                    <option value="5월">5월</option>
+                                    <option value="6월">6월</option>
+                                    <option value="7월">7월</option>
+                                    <option value="8월">8월</option>
+                                    <option value="9월">9월</option>
+                                    <option value="10월">10월</option>
+                                    <option value="11월">11월</option>
+                                    <option value="12월">12월</option>
+                                </select>
+                            </div>
+                            <div class="tool-field">
+                                <label>동기화 항목</label>
+                                <div style="display: flex; gap: 10px; font-size: 12px; margin-top: 5px;">
+                                    <label><input type="checkbox" id="syncOrderInfo" checked> 주문정보</label>
+                                    <label><input type="checkbox" id="syncLogistics" checked> 배송정보</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tool-field">
+                            <label>소스 데이터 파일 (Excel/CSV)</label>
+                            <div class="input-with-btn">
+                                <input type="file" id="syncSourceFile" accept=".xlsx, .xls, .csv">
+                                <button class="save-btn" onclick="document.getElementById('syncSourceFile').value=''"
+                                    title="지우기">❌</button>
+                            </div>
+                            <p style="font-size: 11px; color: #666; margin-top: 5px;">* 알리/타오바오 주문/배송 정보가 담긴 파일을 선택하세요.
+                            </p>
+                        </div>
+
+                        <div class="tool-actions">
+                            <button class="tool-btn primary" onclick="startDailySync()" id="syncStartBtn">🔄 동기화
+                                시작</button>
+                            <button class="tool-btn danger" onclick="stopDailySync()" id="syncStopBtn" disabled>⏹️
+                                중지</button>
+                        </div>
+
+                        <div class="tool-status" id="syncStatus">
+                            <span class="status-dot"></span>
+                            <span class="status-text">준비</span>
+                        </div>
+
+                        <div class="tool-log" id="syncLog" style="margin-top: 10px;">
+                            <div class="log-header"
+                                style="padding: 5px 10px; background: #eee; border-radius: 4px 4px 0 0; font-size: 11px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                                📋 로그
+                                <button onclick="clearSyncLog()"
+                                    style="padding: 2px 5px; font-size: 10px; border: 1px solid #ccc; background: #fff; border-radius: 3px; cursor: pointer;">지우기</button>
+                            </div>
+                            <div class="log-content" id="syncLogContent"
+                                style="height: 120px; overflow-y: auto; background: #fafafa; border: 1px solid #eee; border-top: none; padding: 8px; font-family: monospace; font-size: 11px; white-space: pre-wrap; line-height: 1.4;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 관제센터 탭 -->
+        <div class="tab-content" id="tab-monitor">
+            <div class="monitor-layout">
+                <!-- 왼쪽: 필터 사이드바 -->
+                <div class="monitor-sidebar">
+                    <div class="sidebar-header">
+                        <span>🔍 필터</span>
+                        <button class="reset-filter-btn" onclick="resetMonitorFilters()">초기화</button>
+                    </div>
+
+                    <!-- 상태 필터 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('status')">
+                            <span class="toggle-icon" id="toggle-status">▼</span>
+                            🚦 상태
+                            <input type="checkbox" class="select-all-cb" checked
+                                onclick="event.stopPropagation(); toggleAllFilter('status')" title="전체 선택">
+                        </div>
+                        <div class="filter-items" id="filter-status">
+                            <div class="filter-search-box">
+                                <input type="text" class="filter-search-input" id="statusSearchInput"
+                                    placeholder="검색 (쉼표로 복수)" oninput="filterListItems('status')">
+                            </div>
+                            <div class="filter-list" id="filter-status-list">
+                                <label class="filter-item" data-value="normal"><input type="checkbox" value="normal"
+                                        checked onchange="applyDailyFilters()"><span
+                                        class="status-dot normal"></span><span>정상</span><span class="filter-count"
+                                        id="count-normal">0</span></label>
+                                <label class="filter-item" data-value="caution"><input type="checkbox" value="caution"
+                                        checked onchange="applyDailyFilters()"><span
+                                        class="status-dot caution"></span><span>주의</span><span class="filter-count"
+                                        id="count-caution">0</span></label>
+                                <label class="filter-item" data-value="warning"><input type="checkbox" value="warning"
+                                        checked onchange="applyDailyFilters()"><span
+                                        class="status-dot warning"></span><span>경고</span><span class="filter-count"
+                                        id="count-warning">0</span></label>
+                                <label class="filter-item" data-value="suspended"><input type="checkbox"
+                                        value="suspended" checked onchange="applyDailyFilters()"><span
+                                        class="status-dot suspended"></span><span>일시정지</span><span class="filter-count"
+                                        id="count-suspended">0</span></label>
+                                <label class="filter-item" data-value="stopped"><input type="checkbox" value="stopped"
+                                        checked onchange="applyDailyFilters()"><span
+                                        class="status-dot stopped"></span><span>정지</span><span class="filter-count"
+                                        id="count-stopped">0</span></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 용도 필터 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('usage')">
+                            <span class="toggle-icon" id="toggle-usage">▼</span>
+                            🏷️ 용도
+                            <input type="checkbox" class="select-all-cb" checked
+                                onclick="event.stopPropagation(); toggleAllFilter('usage')" title="전체 선택">
+                        </div>
+                        <div class="filter-items" id="filter-usage">
+                            <div class="filter-search-box">
+                                <input type="text" class="filter-search-input" id="usageSearchInput"
+                                    placeholder="검색 (쉼표로 복수)" oninput="filterListItems('usage')">
+                            </div>
+                            <div class="filter-list" id="filter-usage-list">
+                                <!-- JS로 동적 생성 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 소유자 목록 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('accounts')">
+                            <span class="toggle-icon" id="toggle-accounts">▼</span>
+                            👤 소유자
+                            <input type="checkbox" class="select-all-cb" checked
+                                onclick="event.stopPropagation(); toggleAllFilter('accounts')" title="전체 선택">
+                        </div>
+                        <div class="filter-items scrollable" id="filter-accounts">
+                            <div class="filter-search-box">
+                                <input type="text" class="filter-search-input" id="accountsSearchInput"
+                                    placeholder="검색 (쉼표로 복수)" oninput="filterListItems('accounts')">
+                            </div>
+                            <div class="filter-list" id="filter-accounts-list">
+                                <!-- JS로 동적 생성 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 매출 계급 필터 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('sales-tier')">
+                            <span class="toggle-icon" id="toggle-sales-tier">▼</span>
+                            💰 매출 계급
+                            <input type="checkbox" class="select-all-cb" id="salesTierToggle"
+                                onclick="event.stopPropagation(); toggleAllFilter('sales-tier')" title="전체 선택">
+                        </div>
+                        <div class="filter-items" id="filter-sales-tier">
+                            <div class="tier-settings"
+                                style="padding:5px 0; border-bottom:1px solid #eee; margin-bottom:5px;">
+                                <input type="text" id="salesTierValues" value="50,100,150,200"
+                                    style="width:100%;padding:4px;font-size:11px;border:1px solid #ddd;border-radius:3px;"
+                                    placeholder="만원 기준 (쉼표 구분)" onchange="updateSalesTierFilter()">
+                            </div>
+                            <div id="salesTierCheckboxes">
+                                <!-- JS로 동적 생성 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 주문 계급 필터 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('order-tier')">
+                            <span class="toggle-icon" id="toggle-order-tier">▼</span>
+                            📦 주문 계급
+                            <input type="checkbox" class="select-all-cb" id="orderTierToggle"
+                                onclick="event.stopPropagation(); toggleAllFilter('order-tier')" title="전체 선택">
+                        </div>
+                        <div class="filter-items" id="filter-order-tier">
+                            <div class="tier-settings"
+                                style="padding:5px 0; border-bottom:1px solid #eee; margin-bottom:5px;">
+                                <input type="text" id="orderTierValues" value="1,3,5,10"
+                                    style="width:100%;padding:4px;font-size:11px;border:1px solid #ddd;border-radius:3px;"
+                                    placeholder="건수 기준 (쉼표 구분)" onchange="updateOrderTierFilter()">
+                            </div>
+                            <div id="orderTierCheckboxes">
+                                <!-- JS로 동적 생성 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 경과일 계급 필터 -->
+                    <div class="filter-group">
+                        <div class="filter-group-title" onclick="toggleFilterGroup('cleanup-tier')">
+                            <span class="toggle-icon" id="toggle-cleanup-tier">▼</span>
+                            🔧 경과일
+                            <input type="checkbox" class="select-all-cb" id="cleanupTierToggle"
+                                onclick="event.stopPropagation(); toggleAllFilter('cleanup-tier')" title="전체 선택">
+                        </div>
+                        <div class="filter-items" id="filter-cleanup-tier">
+                            <div class="tier-settings"
+                                style="padding:5px 0; border-bottom:1px solid #eee; margin-bottom:5px;">
+                                <input type="text" id="cleanupTierValues" value="14,28,42,56"
+                                    style="width:100%;padding:4px;font-size:11px;border:1px solid #ddd;border-radius:3px;"
+                                    placeholder="주 단위 일수 (예: 14,28,56)" onchange="updateCleanupTierFilter()">
+                            </div>
+                            <div id="cleanupTierCheckboxes">
+                                <!-- JS로 동적 생성 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 오른쪽: 메인 그리드 -->
+                <div class="monitor-main">
+                    <div class="monitor-header">
+                        <div class="monitor-title">
+                            🖥️ 통합 관제센터
+                            <span class="account-total" id="dailyTotal">0개 마켓</span>
+                        </div>
+                        <div class="monitor-actions">
+                            <input type="text" id="dailySearch" placeholder="🔍 계정 검색..." class="monitor-search"
+                                oninput="applyDailyFilters()">
+                            <button class="expand-all-btn" id="expandAllBtn" onclick="toggleExpandAll()">📂 펼치기</button>
+                            <button class="refresh-btn" onclick="loadDailyStatus(true)">🔄 새로고침</button>
+                        </div>
+                    </div>
+
+                    <!-- 마켓별 필터 버튼 (클릭으로 필터링) -->
+                    <div class="market-filter-bar" id="marketFilterBar">
+                        <!-- JS로 동적 생성 -->
+                    </div>
+
+                    <!-- 마켓 카드 그리드 -->
+                    <div class="daily-grid" id="dailyGrid">
+                        <div class="empty-state">데이터를 불러오는 중...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 마켓 카드 툴팁 (호버/확장 시) -->
+            <div class="market-tooltip" id="marketTooltip" style="display:none;">
+                <div class="tooltip-row"><span>💰 매출</span><span id="ttSales">-</span></div>
+                <div class="tooltip-row"><span>📦 판매량</span><span id="ttOrders">-</span></div>
+                <div class="tooltip-row"><span>⚠️ 주의</span><span id="ttCaution">0회</span></div>
+                <div class="tooltip-row"><span>🔴 경고</span><span id="ttWarning">0회</span></div>
+                <div class="tooltip-row"><span>⛔ 정지</span><span id="ttStopped">0회</span></div>
+                <div class="tooltip-row"><span>📝 비고</span><span id="ttMemo">-</span></div>
+            </div>
+
+            <!-- 컨텍스트 메뉴 (우클릭/더블클릭) -->
+            <div class="context-menu" id="dailyContextMenu" style="display:none;">
+                <div class="context-menu-header" id="ctxHeader">마켓명</div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" onclick="dailyContextAction('login')">🚀 로그인</div>
+                <div class="context-menu-item" onclick="dailyContextAction('shipping')">📦 배송변경</div>
+                <div class="context-menu-item" onclick="dailyContextAction('benefit')">🎁 혜택설정</div>
+                <div class="context-menu-item" onclick="dailyContextAction('delete')">🗑️ 상품삭제</div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" onclick="dailyContextAction('status')">🚦 상태 변경</div>
+                <div class="context-menu-item" onclick="dailyContextAction('memo')">📝 메모 수정</div>
+            </div>
+
+            <!-- 상태 변경 모달 -->
+            <div class="modal" id="statusModal" style="display:none;">
+                <div class="modal-content modal-small">
+                    <div class="modal-title">
+                        <span>🚦 상태 변경</span>
+                        <button class="modal-close" onclick="closeStatusModal()">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="statusModalTarget" style="margin-bottom:15px; font-weight:600;">계정 (마켓)</p>
+                        <div class="form-group">
+                            <label>상태 선택</label>
+                            <select id="statusSelect" class="form-control">
+                                <option value="normal">🟢 정상</option>
+                                <option value="caution">🟡 주의</option>
+                                <option value="warning">🟠 경고</option>
+                                <option value="suspended">🟣 일시정지</option>
+                                <option value="stopped">🔴 정지</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-top:15px;">
+                            <label>비고 (선택)</label>
+                            <input type="text" id="statusNote" placeholder="예: 11/24 경고, 정책 위반">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-btn secondary" onclick="closeStatusModal()">취소</button>
+                        <button class="modal-btn primary" onclick="saveDailyStatus()">💾 저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 작업달력 탭 -->
+        <div class="tab-content" id="tab-work-calendar">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">📅 작업 달력</h2>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <button onclick="showAddWorkModal()"
+                            style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">➕
+                            작업 추가</button>
+                        <button onclick="prevCalendarMonth()" style="padding: 8px 16px;">◀ 이전</button>
+                        <div id="calendarCurrentMonth"
+                            style="font-size: 18px; font-weight: 600; min-width: 150px; text-align: center;">2025년 1월
+                        </div>
+                        <button onclick="nextCalendarMonth()" style="padding: 8px 16px;">다음 ▶</button>
+                    </div>
+                </div>
+
+                <!-- 필터 버튼 -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <button class="filter-btn active" data-filter="all" onclick="filterCalendarWork('all')">전체</button>
+                    <button class="filter-btn" data-filter="상품삭제" onclick="filterCalendarWork('상품삭제')">🗑️ 상품삭제</button>
+                    <button class="filter-btn" data-filter="상품등록" onclick="filterCalendarWork('상품등록')">📤 상품등록</button>
+                    <button class="filter-btn" data-filter="상품수정" onclick="filterCalendarWork('상품수정')">✏️ 상품수정</button>
+                    <button class="filter-btn" data-filter="마케팅수집" onclick="filterCalendarWork('마케팅수집')">📊
+                        마케팅수집</button>
+                    <button class="filter-btn" data-filter="예약작업" onclick="filterCalendarWork('예약작업')">⏰ 예약작업</button>
+                </div>
+
+                <!-- 통계 카드 -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 12px; color: #999; margin-bottom: 5px;">이번 달 총 작업</div>
+                        <div id="statTotalWorks" style="font-size: 24px; font-weight: 600; color: #333;">0</div>
+                    </div>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 12px; color: #999; margin-bottom: 5px;">삭제된 상품</div>
+                        <div id="statDeletedProducts" style="font-size: 24px; font-weight: 600; color: #f44336;">0</div>
+                    </div>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 12px; color: #999; margin-bottom: 5px;">등록된 상품</div>
+                        <div id="statUploadedProducts" style="font-size: 24px; font-weight: 600; color: #4CAF50;">0
+                        </div>
+                    </div>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 12px; color: #999; margin-bottom: 5px;">처리된 계정</div>
+                        <div id="statProcessedAccounts" style="font-size: 24px; font-weight: 600; color: #2196F3;">0
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 달력 그리드 -->
+                <div id="workCalendarGrid"
+                    style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: #e0e0e0; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <!-- JavaScript로 동적 생성 -->
+                </div>
+
+                <!-- 범례 -->
+                <div
+                    style="display: flex; gap: 15px; margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 6px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                        <div
+                            style="width: 16px; height: 16px; background: #ffebee; border-left: 3px solid #f44336; border-radius: 3px;">
+                        </div>
+                        <span>상품삭제</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                        <div
+                            style="width: 16px; height: 16px; background: #e8f5e9; border-left: 3px solid #4CAF50; border-radius: 3px;">
+                        </div>
+                        <span>상품등록</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                        <div
+                            style="width: 16px; height: 16px; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 3px;">
+                        </div>
+                        <span>상품수정</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                        <div
+                            style="width: 16px; height: 16px; background: #f3e5f5; border-left: 3px solid #9c27b0; border-radius: 3px;">
+                        </div>
+                        <span>마케팅수집</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                        <div
+                            style="width: 16px; height: 16px; background: #e0f2f1; border-left: 3px solid #009688; border-radius: 3px;">
+                        </div>
+                        <span>예약작업</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 작업 추가 모달 -->
+        <div class="modal" id="addWorkModal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>➕ 작업 추가</h2>
+                    <button class="close-btn" onclick="closeAddWorkModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="addWorkForm" onsubmit="submitAddWork(event)">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">날짜
+                                *</label>
+                            <input type="date" id="workDate" required
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">시간
+                                *</label>
+                            <input type="time" id="workTime" required
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">작업 유형
+                                *</label>
+                            <select id="workType" required
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                                <option value="">선택하세요</option>
+                                <option value="상품삭제">🗑️ 상품삭제</option>
+                                <option value="상품등록">📤 상품등록</option>
+                                <option value="상품수정">✏️ 상품수정</option>
+                                <option value="마케팅수집">📊 마케팅수집</option>
+                                <option value="예약작업">⏰ 예약작업</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">계정명/그룹명
+                                *</label>
+                            <input type="text" id="workAccount" required placeholder="예: 미래브, 불사자1번그룹, 전체"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">처리
+                                수량</label>
+                            <input type="number" id="workCount" min="0" placeholder="예: 120 (상품 개수 또는 계정 수)"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">상세
+                                내용</label>
+                            <textarea id="workDetail" rows="3" placeholder="예: 60일 유입없음, AI타이틀변경, 일일수집"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; resize: vertical;"></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">실행
+                                방법</label>
+                            <input type="text" id="workMethod" placeholder="예: 올인원자동, 수동, 스케줄러, Claude API"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" onclick="closeAddWorkModal()"
+                                style="padding: 10px 20px; background: #999; color: white; border: none; border-radius: 6px; cursor: pointer;">취소</button>
+                            <button type="submit"
+                                style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">저장</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 설정 탭 (관리자 전용) -->
+        <div class="tab-content" id="tab-settings">
+            <div class="card">
+                <div class="card-title">⚙️ 운영자 탭 권한 설정</div>
+                <p style="color:#666; margin-bottom:15px;">운영자 등급 사용자에게 보여줄 탭을 선택하세요. (관리자는 모든 탭이 표시됩니다)</p>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_sms" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>📱 SMS</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_monitor" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>🖥️ 관제센터</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_market" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>📊 마켓현황</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_sales" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>💰 매출현황</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_accounts" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>📋 계정관리</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_marketing" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>📈 마케팅분석</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_aio" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>🛠️ All-in-One</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_scheduler" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>⏰ 스케줄러</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_bulsaja" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>🔥 불사자</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_tools" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>🔧 기타 기능</span>
+                    </label>
+                    <label
+                        style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px; cursor: pointer;">
+                        <input type="checkbox" id="tabPerm_calendar" checked
+                            style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>📅 작업달력</span>
+                    </label>
+                </div>
+
+                <button class="save-btn" onclick="saveTabPermissions()" style="margin-top:20px;">💾 설정 저장</button>
+
+                <div
+                    style="margin-top: 20px; padding: 12px; background: #fff3cd; border-radius: 6px; font-size: 13px; line-height: 1.6;">
+                    <strong>💡 참고사항:</strong><br>
+                    • 관리자는 항상 모든 탭을 볼 수 있습니다<br>
+                    • 운영자는 여기서 선택된 탭만 표시됩니다<br>
+                    • 열람만 가능한 사용자는 공유계정, SMS, 관제센터만 볼 수 있습니다
+                </div>
+            </div>
+
+            <!-- 다운로드 섹션 -->
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-title">📥 프로그램 다운로드</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                    <!-- 클라이언트 프로그램 -->
+                    <div
+                        style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+                            <span style="font-size: 32px;">🖥️</span>
+                            <div>
+                                <div style="font-size: 16px; font-weight: 600;">클라이언트 프로그램</div>
+                                <div style="font-size: 12px; opacity: 0.8;">PkonomyClient.exe</div>
+                            </div>
+                        </div>
+                        <div id="clientInfo" style="font-size: 12px; opacity: 0.9; margin-bottom: 15px;">
+                            로딩 중...
+                        </div>
+                        <button onclick="downloadClient()"
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                            ⬇️ 다운로드
+                        </button>
+                    </div>
+
+                    <!-- 크롬 익스텐션 -->
+                    <div
+                        style="padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; color: white;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+                            <span style="font-size: 32px;">🧩</span>
+                            <div>
+                                <div style="font-size: 16px; font-weight: 600;">크롬 익스텐션</div>
+                                <div style="font-size: 12px; opacity: 0.8;">자동 로그인 & 2차인증</div>
+                            </div>
+                        </div>
+                        <div id="extensionInfo" style="font-size: 12px; opacity: 0.9; margin-bottom: 15px;">
+                            로딩 중...
+                        </div>
+                        <button onclick="downloadExtension()"
+                            style="width: 100%; padding: 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                            ⬇️ 다운로드 (ZIP)
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: #e8f4fd; border-radius: 8px; font-size: 13px;">
+                    <strong>📌 설치 방법:</strong><br><br>
+                    <strong>클라이언트 프로그램:</strong> exe 파일 실행 → 서버 주소 입력 → 연결<br><br>
+                    <strong>크롬 익스텐션:</strong><br>
+                    1. ZIP 파일 다운로드 후 압축 해제<br>
+                    2. Chrome → 설정 → 확장 프로그램 → 개발자 모드 ON<br>
+                    3. "압축해제된 확장 프로그램 로드" → 압축 해제한 폴더 선택
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="accountModal">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">계정 추가</div>
+            <form id="accountForm">
+                <input type="hidden" id="editMode" value="add">
+                <input type="hidden" id="originalId">
+                <input type="hidden" id="originalPlatform">
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>플랫폼</label>
+                            <select id="formPlatform" onchange="toggleApiFields()">
+                                <option value="스마트스토어">스마트스토어</option>
+                                <option value="쿠팡">쿠팡</option>
+                                <option value="11번가">11번가</option>
+                                <option value="ESM통합">ESM통합</option>
+                                <option value="지마켓">지마켓</option>
+                                <option value="옥션">옥션</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>별칭</label><input type="text" id="formShopAlias"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>아이디 *</label><input type="text" id="formLoginId" required></div>
+                        <div class="form-group"><label>비밀번호 *</label><input type="text" id="formPassword" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>사업자번호</label><input type="text" id="formBusinessNumber"></div>
+                    </div>
+                </div>
+                <div class="form-section" id="ssApiSection">
+                    <div class="form-section-title">🟢 스마트스토어 API</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>판매자ID</label><input type="text" id="formSsSellerId"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>앱 ID</label><input type="text" id="formSsAppId"></div>
+                        <div class="form-group"><label>앱 시크릿</label><input type="text" id="formSsAppSecret"></div>
+                    </div>
+                </div>
+                <div class="form-section" id="cpApiSection" style="display:none;">
+                    <div class="form-section-title">🔴 쿠팡 API</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>업체코드</label><input type="text" id="formCpVendorCode"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Access Key</label><input type="text" id="formCpAccessKey"></div>
+                        <div class="form-group"><label>Secret Key</label><input type="text" id="formCpSecretKey"></div>
+                    </div>
+                </div>
+                <div class="form-section" id="stApiSection" style="display:none;">
+                    <div class="form-section-title">🟠 11번가 API</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>API KEY</label><input type="text" id="formStApiKey"></div>
+                    </div>
+                </div>
+                <div class="form-section" id="esmApiSection" style="display:none;">
+                    <div class="form-section-title">🔵 ESM 연결</div>
+                    <div class="form-row">
+                        <div class="form-group"><label>ESM ID</label><input type="text" id="formEsmMaster"
+                                placeholder="ESM 로그인 ID"></div>
+                        <div class="form-group"><label>ESM PW</label><input type="text" id="formEsmMasterPw"
+                                placeholder="ESM 로그인 비밀번호"></div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="modal-btn secondary" onclick="closeModal()">취소</button>
+                    <button type="submit" class="modal-btn primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 클라이언트 다운로드 안내 모달 -->
+    <div class="modal" id="clientModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>💻 클라이언트 프로그램 필요</h3>
+                <span class="close-btn" onclick="closeClientModal()">&times;</span>
+            </div>
+            <div style="padding: 20px;">
+                <p style="margin-bottom: 15px;">이 기능은 PC에 설치된 클라이언트 프로그램이 필요합니다.</p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="margin-bottom: 10px;"><strong>클라이언트 프로그램 기능:</strong></p>
+                    <ul style="margin: 0; padding-left: 20px; color: #666;">
+                        <li>자동 로그인 (크롬 세션 유지)</li>
+                        <li>올인원 작업 실행</li>
+                        <li>알리 송장 수집</li>
+                    </ul>
+                </div>
+                <div id="clientStatus"
+                    style="margin-bottom: 15px; padding: 10px; border-radius: 6px; text-align: center;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="modal-btn primary" onclick="downloadClient()" style="flex: 1;">
+                        📥 다운로드 (PkonomyClient.exe)
+                    </button>
+                    <button class="modal-btn" onclick="checkClientConnection()" style="flex: 1;">
+                        🔄 연결 확인
+                    </button>
+                </div>
+                <p style="margin-top: 15px; font-size: 12px; color: #999; text-align: center;">
+                    다운로드 후 실행하면 시스템 트레이에 상주합니다.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 마케팅분석 탭 -->
+    <div class="tab-content" id="tab-marketing">
+        <div class="marketing-container" style="max-width: 1400px; margin: 0 auto; padding: 20px;">
+            <h2 style="margin-bottom: 15px;">📈 마케팅 분석</h2>
+
+            <!-- 서브탭 네비게이션 -->
+            <div class="marketing-sub-tabs"
+                style="display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 0;">
+                <button class="mkt-sub-tab active" data-subtab="results" onclick="switchMarketingSubTab('results')"
+                    style="padding: 12px 24px; border: none; background: #667eea; color: white; border-radius: 8px 8px 0 0; font-size: 14px; font-weight: 600; cursor: pointer;">
+                    📊 분석 결과
+                </button>
+                <button class="mkt-sub-tab" data-subtab="collect" onclick="switchMarketingSubTab('collect')"
+                    style="padding: 12px 24px; border: none; background: #f0f0f0; color: #666; border-radius: 8px 8px 0 0; font-size: 14px; font-weight: 500; cursor: pointer;">
+                    🔄 데이터 수집
+                </button>
+            </div>
+
+            <!-- 분석 결과 서브탭 -->
+            <div class="mkt-sub-content active" id="mkt-subtab-results">
+                <!-- 스토어 선택 -->
+                <div class="section"
+                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="font-weight: 600;">스토어 선택:</label>
+                            <select id="mktStoreSelect" onchange="loadMarketingStoreData()"
+                                style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; min-width: 200px;">
+                                <option value="">-- 스토어 선택 --</option>
+                            </select>
+                        </div>
+                        <button onclick="loadMarketingStores()" class="refresh-btn" style="padding: 8px 16px;">🔄
+                            새로고침</button>
+                    </div>
+                </div>
+
+                <!-- 요약 카드 -->
+                <div id="mktSummaryCards"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div class="summary-card"
+                        style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 10px;">
+                        <div style="font-size: 12px; opacity: 0.9;">총 상품 수</div>
+                        <div id="mktTotalProducts" style="font-size: 28px; font-weight: bold;">-</div>
+                    </div>
+                    <div class="summary-card"
+                        style="background: linear-gradient(135deg, #11998e, #38ef7d); color: white; padding: 20px; border-radius: 10px;">
+                        <div style="font-size: 12px; opacity: 0.9;">총 노출수</div>
+                        <div id="mktTotalExposure" style="font-size: 28px; font-weight: bold;">-</div>
+                    </div>
+                    <div class="summary-card"
+                        style="background: linear-gradient(135deg, #ee0979, #ff6a00); color: white; padding: 20px; border-radius: 10px;">
+                        <div style="font-size: 12px; opacity: 0.9;">총 클릭수</div>
+                        <div id="mktTotalClicks" style="font-size: 28px; font-weight: bold;">-</div>
+                    </div>
+                    <div class="summary-card"
+                        style="background: linear-gradient(135deg, #4776E6, #8E54E9); color: white; padding: 20px; border-radius: 10px;">
+                        <div style="font-size: 12px; opacity: 0.9;">평균 클릭율</div>
+                        <div id="mktAvgCtr" style="font-size: 28px; font-weight: bold;">-</div>
+                    </div>
+                </div>
+
+                <!-- 비즈어드바이저 데이터 (상품노출성과) -->
+                <div class="section"
+                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0; color: #667eea;">📈 상품노출성과 (비즈어드바이저)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">상품명
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">채널
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">키워드
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">평균순위
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">유입수
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="mktBizTable">
+                                <tr>
+                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 쇼핑파트너 데이터 (클릭리포트) -->
+                <div class="section"
+                    style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0; color: #ee0979;">🛒 상품클릭리포트 (쇼핑파트너센터)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">상품명
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">노출수
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">클릭수
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">클릭율
+                                    </th>
+                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">수수료
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="mktPartnerTable">
+                                <tr>
+                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 전체채널 + 쇼핑몰정보 -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <!-- 전체채널 데이터 -->
+                    <div class="section"
+                        style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">
+                            📊 전체채널 유입
+                        </h3>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead style="position: sticky; top: 0; background: #f8f9fa;">
+                                    <tr>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            채널명</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">
+                                            유입수</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mktChannelTable">
+                                    <tr>
+                                        <td colspan="2" style="padding: 30px; text-align: center; color: #999;">스토어를
+                                            선택하세요</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 쇼핑몰 정보 -->
+                    <div class="section"
+                        style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">
+                            🏪 쇼핑몰 정보
+                        </h3>
+                        <div id="mktMallInfo" style="display: grid; gap: 10px;">
+                            <div style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 데이터 수집 서브탭 -->
+            <div class="mkt-sub-content" id="mkt-subtab-collect" style="display: none;">
+                <div class="info-box"
+                    style="background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <strong>💡 통합 시트 방식</strong><br>
+                    모든 계정의 마케팅 데이터가 하나의 "전체데이터" 시트에 누적됩니다.<br>
+                    스프레드시트 ID는 .env 파일의 MARKETING_SPREADSHEET_ID에 설정하세요.
+                </div>
+
+                <div class="section"
+                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">계정 선택</h3>
+                        <button onclick="initializeMarketingSheets()" class="btn-primary"
+                            style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+                            🔧 스프레드시트 초기화
+                        </button>
+                    </div>
+
+                    <!-- 필터 -->
+                    <div id="marketingFilters"
+                        style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+                        <!-- 필터 동적 생성 -->
+                    </div>
+
+                    <div id="marketingAccountList" class="account-list"
+                        style="max-height: 400px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; background: white;">
+                        <!-- 계정 목록 동적 생성 -->
+                    </div>
+                </div>
+
+                <div class="section" style="margin-bottom: 20px;">
+                    <div style="display: flex; gap: 10px;">
+                        <button id="marketingStartBtn" onclick="startMarketingCollection()" class="btn-primary"
+                            style="flex: 1; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                            ▶ 수집 시작
+                        </button>
+                        <button id="marketingStopBtn" onclick="stopMarketingCollection()" class="btn-danger" disabled
+                            style="flex: 1; padding: 14px; background: #f44336; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; opacity: 0.5; transition: all 0.3s;">
+                            ■ 중지
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section"
+                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0;">진행 상황</h3>
+                    <div id="marketingStatus" class="status-text"
+                        style="margin: 10px 0; font-weight: 600; color: #333;">대기 중</div>
+                    <div class="progress-bar-container"
+                        style="width: 100%; height: 32px; background: #f0f0f0; border-radius: 6px; overflow: hidden; margin: 10px 0;">
+                        <div id="marketingProgressBar" class="progress-bar"
+                            style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; transition: width 0.3s ease; font-size: 14px;">
+                            0 / 0
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section"
+                    style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0;">실행 로그</h3>
+                    <textarea id="marketingLogArea" class="log-area" readonly rows="12"
+                        style="width: 100%; font-family: 'Courier New', Consolas, monospace; font-size: 13px; background: #1e1e1e; color: #d4d4d4; border: none; border-radius: 6px; padding: 15px; line-height: 1.6;"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- SMS 템플릿 패널 (오른쪽 고정) -->
+    <div id="smsTemplateModal"
+        style="display:none; position:fixed; top:100px; right:20px; bottom:20px; width:360px; max-width:90vw; z-index:10000; background:white; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.3); flex-direction:column;">
+        <div style="display:flex; flex-direction:column; height:100%;">
+            <div
+                style="padding:12px 15px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; font-weight:bold; display:flex; justify-content:space-between; align-items:center; border-radius:12px 12px 0 0;">
+                <span>📋 문자 템플릿</span>
+                <button onclick="closeTemplateModal()"
+                    style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">×</button>
+            </div>
+            <div id="templateTabs" style="display:flex; border-bottom:1px solid #e0e0e0; flex-wrap:wrap;"></div>
+            <div id="templateList" style="flex:0 0 auto; overflow-y:auto; max-height:180px;"></div>
+            <div style="padding:10px 12px; background:#f8f9ff; border-top:1px solid #e0e0e0;">
+                <div style="font-size:12px; font-weight:bold; color:#667eea; margin-bottom:8px;">📝 변수 입력</div>
+                <div style="display:flex; align-items:center; margin-bottom:6px;">
+                    <label style="width:60px; font-size:11px; color:#666;">{수취인}</label>
+                    <input type="text" id="tplVarCustomer" placeholder="고객명" oninput="updateTemplatePreview()"
+                        style="flex:1; padding:5px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+                </div>
+                <div style="display:flex; align-items:center; margin-bottom:6px;">
+                    <label style="width:60px; font-size:11px; color:#666;">{마켓}</label>
+                    <input type="text" id="tplVarMarket" placeholder="마켓/스토어명" oninput="updateTemplatePreview()"
+                        style="flex:1; padding:5px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+                </div>
+                <div style="display:flex; align-items:center;">
+                    <label style="width:60px; font-size:11px; color:#666;">{상품명}</label>
+                    <input type="text" id="tplVarProduct" placeholder="상품명" oninput="updateTemplatePreview()"
+                        style="flex:1; padding:5px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+                </div>
+            </div>
+            <div
+                style="padding:10px 12px; border-top:1px solid #e0e0e0; flex:1; display:flex; flex-direction:column; min-height:0;">
+                <div style="font-size:12px; font-weight:bold; color:#333; margin-bottom:6px;">👁️ 미리보기</div>
+                <div id="templatePreviewContent"
+                    style="background:#fffde7; border:1px solid #fff59d; border-radius:6px; padding:10px; font-size:12px; line-height:1.6; flex:1; overflow-y:auto; min-height:80px; max-height:30vh;">
+                </div>
+                <div id="tplCharCount" style="font-size:10px; color:#888; text-align:right; margin-top:4px;">0자</div>
+            </div>
+            <div style="padding:10px 12px; border-top:1px solid #e0e0e0; display:flex; gap:8px;">
+                <button onclick="copyTemplateToClipboard()"
+                    style="padding:8px 12px; background:#f0f0f0; border:none; border-radius:5px; cursor:pointer; font-size:12px;">📋
+                    복사</button>
+                <button onclick="applyTemplateToInput()"
+                    style="flex:1; padding:8px 12px; background:#667eea; color:white; border:none; border-radius:5px; cursor:pointer; font-size:12px; font-weight:bold;">✅
+                    입력창에 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=20260115u"></script>
+</body>
+
+</html>

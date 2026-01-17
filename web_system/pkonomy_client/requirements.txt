@@ -1,0 +1,5 @@
+# Pkonomy Client
+PyQt6>=6.4.0
+requests>=2.28.0
+PyChromeDevTools>=0.5.3
+pyinstaller>=5.0.0

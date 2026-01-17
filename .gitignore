@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+venv/
+.venv/
+env/
+
+# Chrome profiles (캐시, 세션 데이터)
+chrome_profile*/
+chrome_profiles/
+web_system/pw_sessions/
+auto_sms/
+gmsg_profile/
+**/Cache/
+**/Cache_Data/
+**/GPUCache/
+**/Service Worker/
+**/IndexedDB/
+**/Local Storage/
+**/Session Storage/
+
+# Runtime data
+web_system/runtime/
+runtime/
+downloads/
+result/
+addressbooks_debug/
+debug_responses_meta/
+
+# Config files with secrets
+.env
+*.json
+!package.json
+!tsconfig.json
+
+# 임시 파일
+*.tmp
+*.log
+*.bak
+nul
+
+# 압축 파일
+*.zip
+*.7z
+*.rar
+
+# 대용량 시뮬레이션 및 데이터
+simulation_*.xlsx
+njob_db_*.csv
+*.xlsx
+*.csv
+
+# 바이너리
+*.exe
+*.dll
+*.bin
+web_system/pw_browsers/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 큰 데이터 폴더
+n8n-main/
+old/
+FocusFlow/
+oh-my-opencode/
+sa_automation/
+sa_automation_test/
+sms_gui_package/
+googlesms/
+
+# 스프레드시트 데이터
+*.spec
+
+# 임시 claude 파일
+tmpclaude-*
+
+# 에이전트 폴더
+.agent/
+
+# 한글 폴더 (데이터 분석용)
+스스데이터분석/
+찜자동화_프로필/
+
