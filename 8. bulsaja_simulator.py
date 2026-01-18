@@ -466,7 +466,7 @@ class BulsajaSimulator:
             col += 1
 
             # 8. AI판단
-            ws.cell(row=row_idx, column=col, value=result.get('ai_result', ''))
+            ws.cell(row=row_idx, column=col, value=result.get('ai_judgment', ''))
             col += 1
 
             # 9. 전체옵션
@@ -678,17 +678,277 @@ class BulsajaSimulator:
         return '\n'.join(result)
 
 
+# ==================== 엑셀 반영 클래스 ====================
+class ExcelApplier:
+    """엑셀에서 수정한 내용을 불사자에 반영"""
+
+    def __init__(self, api_client, log_callback=None):
+        self.api_client = api_client
+        self.log = log_callback or print
+        self.is_running = False
+
+        # 통계
+        self.stats = {
+            "total": 0,
+            "updated": 0,
+            "skipped": 0,
+            "failed": 0,
+            "danger_tagged": 0,
+        }
+
+    def read_excel(self, filepath: str) -> List[Dict]:
+        """엑셀 파일 읽기 (상세정보 시트 우선)"""
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(filepath, data_only=True)
+
+            # 상세정보 시트 우선, 없으면 첫 번째 시트
+            if "상세정보" in wb.sheetnames:
+                ws = wb["상세정보"]
+            else:
+                ws = wb.active
+
+            # 헤더 읽기
+            headers = []
+            for col in range(1, ws.max_column + 1):
+                val = ws.cell(row=1, column=col).value
+                headers.append(str(val).strip() if val else f"col_{col}")
+
+            # 데이터 읽기
+            data = []
+            for row_idx in range(2, ws.max_row + 1):
+                row_data = {}
+                for col_idx, header in enumerate(headers, 1):
+                    val = ws.cell(row=row_idx, column=col_idx).value
+                    row_data[header] = val
+                # 불사자ID가 있는 행만 추가
+                if row_data.get('불사자ID') or row_data.get('id'):
+                    data.append(row_data)
+
+            wb.close()
+            return data
+
+        except Exception as e:
+            self.log(f"❌ 엑셀 읽기 실패: {e}")
+            return []
+
+    def parse_selected_option(self, select_value: str, options_text: str) -> Optional[Dict]:
+        """
+        선택된 옵션 파싱
+        select_value: 'A', 'B', 'C' 등
+        options_text: 'A. 옵션1(10.5)\nB. 옵션2(15.0)' 형태
+
+        Returns: {'name': '옵션명', 'price': 10.5, 'index': 0}
+        """
+        if not select_value or not options_text:
+            return None
+
+        select_value = str(select_value).strip().upper()
+        if not select_value:
+            return None
+
+        # 옵션 목록 파싱
+        lines = options_text.strip().split('\n')
+        for idx, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                continue
+
+            # "A. 옵션명(가격)" 형태 파싱
+            if line.startswith(f"{select_value}."):
+                # 라벨 제거
+                option_part = line[2:].strip()
+
+                # 가격 추출 (마지막 괄호 안의 숫자)
+                import re
+                price_match = re.search(r'\((\d+\.?\d*)\)$', option_part)
+                price = float(price_match.group(1)) if price_match else 0
+
+                # 옵션명 (가격 부분 제거)
+                name = re.sub(r'\(\d+\.?\d*\)$', '', option_part).strip()
+
+                return {
+                    'name': name,
+                    'price': price,
+                    'index': idx,
+                    'label': select_value
+                }
+
+        return None
+
+    def apply_changes(self, excel_data: List[Dict], options: Dict):
+        """
+        엑셀 변경사항을 불사자에 반영
+
+        options:
+            - apply_main_option: 대표옵션 변경 반영
+            - apply_product_name: 상품명 변경 반영
+            - skip_dangerous: 위험상품(X) 스킵
+            - tag_dangerous: 위험상품에 태그 추가
+            - danger_tag_name: 위험상품 태그명
+            - remove_danger_tag: 안전상품에서 위험태그 제거
+        """
+        self.is_running = True
+        self.stats = {"total": 0, "updated": 0, "skipped": 0, "failed": 0, "danger_tagged": 0}
+
+        apply_main_option = options.get('apply_main_option', True)
+        apply_product_name = options.get('apply_product_name', False)
+        skip_dangerous = options.get('skip_dangerous', True)
+        tag_dangerous = options.get('tag_dangerous', False)
+        danger_tag_name = options.get('danger_tag_name', '위험상품')
+        remove_danger_tag = options.get('remove_danger_tag', False)
+
+        self.log("")
+        self.log("=" * 50)
+        self.log("📝 엑셀 반영 시작")
+        self.log(f"   총 {len(excel_data)}개 상품")
+        self.log(f"   대표옵션 반영: {'O' if apply_main_option else 'X'}")
+        self.log(f"   상품명 반영: {'O' if apply_product_name else 'X'}")
+        self.log(f"   위험상품 스킵: {'O' if skip_dangerous else 'X'}")
+        self.log(f"   위험상품 태그: {'O' if tag_dangerous else 'X'}")
+        self.log("=" * 50)
+
+        for idx, row in enumerate(excel_data):
+            if not self.is_running:
+                break
+
+            self.stats['total'] += 1
+            product_id = str(row.get('불사자ID') or row.get('id') or '').strip()
+
+            if not product_id:
+                self.stats['skipped'] += 1
+                continue
+
+            # 안전여부 확인
+            safety_value = str(row.get('안전여부', '')).strip().upper()
+            is_safe = safety_value in ['O', '안전', 'SAFE', 'TRUE', '1']
+            is_dangerous = safety_value in ['X', '위험', 'DANGER', 'FALSE', '0']
+
+            # 위험상품 처리
+            if is_dangerous:
+                if skip_dangerous and not tag_dangerous:
+                    self.stats['skipped'] += 1
+                    continue
+
+                if tag_dangerous:
+                    # 위험 태그 추가
+                    success = self._add_tag(product_id, danger_tag_name)
+                    if success:
+                        self.stats['danger_tagged'] += 1
+                        self.log(f"🏷️ [{idx+1}] {product_id} → 위험태그 추가")
+
+                    if skip_dangerous:
+                        self.stats['skipped'] += 1
+                        continue
+
+            # 안전상품에서 위험태그 제거
+            if is_safe and remove_danger_tag:
+                self._remove_tag(product_id, danger_tag_name)
+
+            # 업데이트할 데이터 준비
+            update_data = {}
+
+            # 1. 대표옵션 변경
+            if apply_main_option:
+                select_value = row.get('선택', 'A')
+                options_text = row.get('최종옵션목록') or row.get('옵션명', '')
+
+                selected = self.parse_selected_option(select_value, options_text)
+                if selected and selected['label'] != 'A':
+                    # A가 아닌 다른 옵션을 선택한 경우 → 대표옵션 변경 필요
+                    update_data['mainOptionIndex'] = selected['index']
+                    update_data['mainOptionName'] = selected['name']
+
+            # 2. 상품명 변경
+            if apply_product_name:
+                new_name = row.get('상품명', '').strip()
+                original_name = row.get('원본상품명', '').strip()
+
+                if new_name and new_name != original_name:
+                    update_data['uploadCommonProductName'] = new_name
+
+            # 업데이트 실행
+            if update_data:
+                success, msg = self.api_client.update_product_fields(product_id, update_data)
+                if success:
+                    self.stats['updated'] += 1
+                    changes = []
+                    if 'mainOptionIndex' in update_data:
+                        changes.append(f"대표옵션→{update_data.get('mainOptionName', '')[:15]}")
+                    if 'uploadCommonProductName' in update_data:
+                        changes.append("상품명변경")
+                    self.log(f"✅ [{idx+1}] {product_id} → {', '.join(changes)}")
+                else:
+                    self.stats['failed'] += 1
+                    self.log(f"❌ [{idx+1}] {product_id} → {msg[:50]}")
+            else:
+                self.stats['skipped'] += 1
+
+            # 진행상황 (50개마다)
+            if (idx + 1) % 50 == 0:
+                self.log(f"   ... {idx+1}/{len(excel_data)} 처리 완료")
+
+        # 결과 요약
+        self.log("")
+        self.log("=" * 50)
+        self.log("📊 반영 결과")
+        self.log(f"   전체: {self.stats['total']}개")
+        self.log(f"   업데이트: {self.stats['updated']}개")
+        self.log(f"   스킵: {self.stats['skipped']}개")
+        self.log(f"   실패: {self.stats['failed']}개")
+        if tag_dangerous:
+            self.log(f"   위험태그: {self.stats['danger_tagged']}개")
+        self.log("=" * 50)
+
+        self.is_running = False
+        return self.stats
+
+    def _add_tag(self, product_id: str, tag_name: str) -> bool:
+        """상품에 태그 추가"""
+        try:
+            # 현재 상품 정보 조회
+            detail = self.api_client.get_product_detail(product_id)
+            current_tags = detail.get('tags', []) or []
+
+            # 이미 태그가 있으면 스킵
+            if tag_name in current_tags:
+                return True
+
+            # 태그 추가
+            new_tags = current_tags + [tag_name]
+            success, msg = self.api_client.update_product_fields(product_id, {'tags': new_tags})
+            return success
+        except Exception as e:
+            return False
+
+    def _remove_tag(self, product_id: str, tag_name: str) -> bool:
+        """상품에서 태그 제거"""
+        try:
+            detail = self.api_client.get_product_detail(product_id)
+            current_tags = detail.get('tags', []) or []
+
+            if tag_name not in current_tags:
+                return True
+
+            new_tags = [t for t in current_tags if t != tag_name]
+            success, msg = self.api_client.update_product_fields(product_id, {'tags': new_tags})
+            return success
+        except Exception as e:
+            return False
+
+
 # ==================== GUI 클래스 ====================
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("불사자 시뮬레이터 v1.0 - 학습용 분석 도구")
-        self.geometry("900x750")
+        self.title("불사자 시뮬레이터 v1.1 - 분석 및 반영")
+        self.geometry("950x800")
         self.resizable(True, True)
 
         self.config_data = load_config()
         self.simulator = BulsajaSimulator(self)
+        self.excel_applier = None  # API 연결 후 초기화
         self.worker_thread = None
 
         self.create_widgets()
@@ -697,11 +957,12 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def create_widgets(self):
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # 메인 컨테이너
+        main_container = ttk.Frame(self, padding="5")
+        main_container.pack(fill=tk.BOTH, expand=True)
 
-        # === 1. API 연결 ===
-        conn_frame = ttk.LabelFrame(main_frame, text="🔑 API 연결", padding="5")
+        # === 상단: API 연결 (공통) ===
+        conn_frame = ttk.LabelFrame(main_container, text="🔑 API 연결", padding="5")
         conn_frame.pack(fill=tk.X, pady=(0, 5))
 
         row0 = ttk.Frame(conn_frame)
@@ -715,7 +976,37 @@ class App(tk.Tk):
         self.port_var = tk.StringVar(value="9222")
         ttk.Entry(row0, textvariable=self.port_var, width=6).pack(side=tk.RIGHT, padx=2)
 
-        # === 2. 시뮬레이션 설정 ===
+        # === 탭 노트북 ===
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # 탭1: 시뮬레이션
+        self.tab_simulation = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_simulation, text="🔬 시뮬레이션")
+        self.create_simulation_tab()
+
+        # 탭2: 엑셀 반영
+        self.tab_apply = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_apply, text="📝 엑셀 반영")
+        self.create_apply_tab()
+
+        # === 하단: 로그 (공통) ===
+        log_frame = ttk.LabelFrame(main_container, text="📋 로그", padding="5")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, state='disabled', font=('Consolas', 9))
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        # Footer
+        footer = ttk.Frame(main_container)
+        footer.pack(fill=tk.X, pady=(5, 0))
+        ttk.Label(footer, text="v1.1 by 프코노미 | 시뮬레이션 + 엑셀 반영", foreground="gray").pack(side=tk.RIGHT)
+
+    def create_simulation_tab(self):
+        """시뮬레이션 탭 생성"""
+        main_frame = self.tab_simulation
+
+        # === 1. 시뮬레이션 설정 ===
         sim_frame = ttk.LabelFrame(main_frame, text="🔬 시뮬레이션 설정", padding="5")
         sim_frame.pack(fill=tk.X, pady=(0, 5))
 
@@ -824,17 +1115,243 @@ class App(tk.Tk):
 
         ttk.Button(btn_frame, text="💾 설정 저장", command=self.save_settings).pack(side=tk.RIGHT)
 
-        # === 로그 ===
-        log_frame = ttk.LabelFrame(main_frame, text="📋 로그", padding="5")
-        log_frame.pack(fill=tk.BOTH, expand=True)
+    def create_apply_tab(self):
+        """엑셀 반영 탭 생성"""
+        main_frame = self.tab_apply
 
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, state='disabled', font=('Consolas', 9))
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        # === 1. 엑셀 파일 선택 ===
+        file_frame = ttk.LabelFrame(main_frame, text="📂 엑셀 파일 선택", padding="5")
+        file_frame.pack(fill=tk.X, pady=(0, 5))
 
-        # Footer
-        footer = ttk.Frame(main_frame)
-        footer.pack(fill=tk.X, pady=(5, 0))
-        ttk.Label(footer, text="v1.0 by 프코노미 | 학습용 분석 도구 (실제 업로드 없음)", foreground="gray").pack(side=tk.RIGHT)
+        file_row = ttk.Frame(file_frame)
+        file_row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(file_row, text="파일:").pack(side=tk.LEFT)
+        self.apply_file_var = tk.StringVar()
+        ttk.Entry(file_row, textvariable=self.apply_file_var, width=60).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+        ttk.Button(file_row, text="찾아보기", command=self.browse_apply_file, width=10).pack(side=tk.RIGHT)
+
+        # 파일 정보
+        self.apply_file_info = ttk.Label(file_frame, text="파일을 선택하세요", foreground="gray")
+        self.apply_file_info.pack(anchor=tk.W, pady=2)
+
+        # === 2. 반영 옵션 ===
+        option_frame = ttk.LabelFrame(main_frame, text="⚙️ 반영 옵션", padding="5")
+        option_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # 체크박스 옵션들
+        opt_row1 = ttk.Frame(option_frame)
+        opt_row1.pack(fill=tk.X, pady=2)
+
+        self.apply_main_option_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt_row1, text="대표옵션 변경 반영", variable=self.apply_main_option_var).pack(side=tk.LEFT, padx=(0, 20))
+
+        self.apply_product_name_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_row1, text="상품명 변경 반영", variable=self.apply_product_name_var).pack(side=tk.LEFT, padx=(0, 20))
+
+        opt_row2 = ttk.Frame(option_frame)
+        opt_row2.pack(fill=tk.X, pady=2)
+
+        self.skip_dangerous_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt_row2, text="위험상품(X) 스킵", variable=self.skip_dangerous_var).pack(side=tk.LEFT, padx=(0, 20))
+
+        self.tag_dangerous_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_row2, text="위험상품 태그 추가", variable=self.tag_dangerous_var).pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Label(opt_row2, text="태그명:").pack(side=tk.LEFT)
+        self.danger_tag_var = tk.StringVar(value="위험상품")
+        ttk.Entry(opt_row2, textvariable=self.danger_tag_var, width=15).pack(side=tk.LEFT, padx=2)
+
+        opt_row3 = ttk.Frame(option_frame)
+        opt_row3.pack(fill=tk.X, pady=2)
+
+        self.remove_danger_tag_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_row3, text="안전상품(O)에서 위험태그 제거", variable=self.remove_danger_tag_var).pack(side=tk.LEFT)
+
+        # 설명
+        ttk.Label(option_frame, text="※ 엑셀의 '선택' 컬럼에서 A가 아닌 다른 값(B,C,D...)을 선택한 상품만 대표옵션이 변경됩니다",
+                  foreground="gray").pack(anchor=tk.W, pady=(5, 0))
+
+        # === 3. 미리보기 ===
+        preview_frame = ttk.LabelFrame(main_frame, text="👁️ 미리보기 (변경될 항목)", padding="5")
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+
+        # 미리보기 리스트
+        columns = ('불사자ID', '상품명', '선택', '변경내용', '안전여부')
+        self.preview_tree = ttk.Treeview(preview_frame, columns=columns, show='headings', height=8)
+
+        for col in columns:
+            self.preview_tree.heading(col, text=col)
+            width = 80 if col in ['불사자ID', '선택', '안전여부'] else 200
+            self.preview_tree.column(col, width=width)
+
+        # 스크롤바
+        preview_scroll = ttk.Scrollbar(preview_frame, orient="vertical", command=self.preview_tree.yview)
+        self.preview_tree.configure(yscrollcommand=preview_scroll.set)
+
+        self.preview_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        preview_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # === 4. 버튼 ===
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Button(btn_frame, text="🔍 미리보기", command=self.preview_apply).pack(side=tk.LEFT, padx=(0, 10))
+
+        self.btn_apply = ttk.Button(btn_frame, text="📝 반영 실행", command=self.start_apply)
+        self.btn_apply.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.btn_apply_stop = ttk.Button(btn_frame, text="🛑 중지", command=self.stop_apply, state="disabled")
+        self.btn_apply_stop.pack(side=tk.LEFT)
+
+        # 진행상태
+        self.apply_progress_var = tk.StringVar(value="대기 중...")
+        ttk.Label(btn_frame, textvariable=self.apply_progress_var).pack(side=tk.RIGHT)
+
+    def browse_apply_file(self):
+        """엑셀 반영용 파일 선택"""
+        filepath = filedialog.askopenfilename(
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            initialdir="."
+        )
+        if filepath:
+            self.apply_file_var.set(filepath)
+            self.load_apply_preview()
+
+    def load_apply_preview(self):
+        """선택한 엑셀 파일 미리보기 로드"""
+        filepath = self.apply_file_var.get()
+        if not filepath or not os.path.exists(filepath):
+            return
+
+        try:
+            # 임시 ExcelApplier 생성 (API 없이 파일만 읽기)
+            temp_applier = ExcelApplier(None, self.log)
+            data = temp_applier.read_excel(filepath)
+
+            if not data:
+                self.apply_file_info.config(text="⚠️ 데이터를 읽을 수 없습니다", foreground="red")
+                return
+
+            # 파일 정보 업데이트
+            self.apply_file_info.config(
+                text=f"✅ {len(data)}개 상품 로드됨",
+                foreground="green"
+            )
+
+            # 미리보기 데이터 저장
+            self.apply_excel_data = data
+
+            # 미리보기 갱신
+            self.preview_apply()
+
+        except Exception as e:
+            self.apply_file_info.config(text=f"❌ 오류: {e}", foreground="red")
+            self.log(f"❌ 엑셀 로드 오류: {e}")
+
+    def preview_apply(self):
+        """변경될 항목 미리보기"""
+        # 기존 항목 삭제
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
+
+        if not hasattr(self, 'apply_excel_data') or not self.apply_excel_data:
+            self.log("⚠️ 먼저 엑셀 파일을 선택하세요")
+            return
+
+        temp_applier = ExcelApplier(None)
+        apply_main_option = self.apply_main_option_var.get()
+        skip_dangerous = self.skip_dangerous_var.get()
+        tag_dangerous = self.tag_dangerous_var.get()
+
+        changes_count = 0
+        for row in self.apply_excel_data:
+            product_id = str(row.get('불사자ID') or row.get('id') or '').strip()
+            product_name = str(row.get('상품명', ''))[:30]
+            select_value = str(row.get('선택', 'A')).strip().upper()
+            safety_value = str(row.get('안전여부', '')).strip().upper()
+
+            # 안전여부 판정
+            is_dangerous = safety_value in ['X', '위험', 'DANGER', 'FALSE', '0']
+            safety_display = 'X' if is_dangerous else 'O'
+
+            # 변경 내용 판정
+            changes = []
+
+            # 대표옵션 변경 체크
+            if apply_main_option and select_value and select_value != 'A':
+                options_text = row.get('최종옵션목록') or row.get('옵션명', '')
+                selected = temp_applier.parse_selected_option(select_value, options_text)
+                if selected:
+                    changes.append(f"대표옵션→{select_value}")
+
+            # 위험상품 태그
+            if is_dangerous and tag_dangerous:
+                changes.append("위험태그추가")
+
+            # 위험상품 스킵
+            if is_dangerous and skip_dangerous and not tag_dangerous:
+                changes.append("(스킵)")
+
+            change_text = ', '.join(changes) if changes else '-'
+
+            # 변경사항 있는 것만 표시 (또는 전체 표시)
+            if changes:
+                self.preview_tree.insert('', tk.END, values=(
+                    product_id, product_name, select_value, change_text, safety_display
+                ))
+                changes_count += 1
+
+        self.log(f"📊 미리보기: {changes_count}개 상품 변경 예정")
+
+    def start_apply(self):
+        """엑셀 반영 실행"""
+        if not self.simulator.api_client:
+            messagebox.showwarning("경고", "먼저 API에 연결하세요")
+            return
+
+        if not hasattr(self, 'apply_excel_data') or not self.apply_excel_data:
+            messagebox.showwarning("경고", "먼저 엑셀 파일을 선택하세요")
+            return
+
+        # ExcelApplier 초기화
+        self.excel_applier = ExcelApplier(self.simulator.api_client, self.log)
+
+        # 옵션 수집
+        options = {
+            'apply_main_option': self.apply_main_option_var.get(),
+            'apply_product_name': self.apply_product_name_var.get(),
+            'skip_dangerous': self.skip_dangerous_var.get(),
+            'tag_dangerous': self.tag_dangerous_var.get(),
+            'danger_tag_name': self.danger_tag_var.get(),
+            'remove_danger_tag': self.remove_danger_tag_var.get(),
+        }
+
+        self.btn_apply.config(state="disabled")
+        self.btn_apply_stop.config(state="normal")
+        self.apply_progress_var.set("반영 중...")
+
+        # 백그라운드 실행
+        def task():
+            try:
+                self.excel_applier.apply_changes(self.apply_excel_data, options)
+            finally:
+                self.after(0, self.on_apply_finished)
+
+        self.worker_thread = threading.Thread(target=task, daemon=True)
+        self.worker_thread.start()
+
+    def stop_apply(self):
+        """엑셀 반영 중지"""
+        if self.excel_applier:
+            self.excel_applier.is_running = False
+        self.log("🛑 반영 중지 요청...")
+
+    def on_apply_finished(self):
+        """엑셀 반영 완료"""
+        self.btn_apply.config(state="normal")
+        self.btn_apply_stop.config(state="disabled")
+        self.apply_progress_var.set("완료")
 
     def load_saved_settings(self):
         c = self.config_data
