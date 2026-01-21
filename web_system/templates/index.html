@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -118,6 +118,19 @@
             font-size: 13px;
             color: #333;
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .unread-badge {
+            background: #4caf50;
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
         }
 
         .panel-messages .msg-preview {
@@ -436,6 +449,51 @@
 
         .sales-table .negative {
             color: #c62828;
+        }
+
+        .dashboard-bulsaja .status-text-bulsaja {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .dashboard-bulsaja .status-name-bulsaja {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .dashboard-bulsaja .reason-text-bulsaja {
+            font-size: 10px;
+            color: var(--accent-red);
+            opacity: 0.9;
+            line-height: 1.3;
+            max-width: 150px;
+            margin: 0 auto;
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja {
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: right;
+            margin-top: 2px;
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.achieved {
+            color: var(--accent-green);
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.warning {
+            color: var(--accent-yellow);
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.danger {
+            color: var(--accent-red);
+        }
+
+        .dashboard-bulsaja .renewal-target-bulsaja {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         /* 관제센터 카드 크기 통일 - 강제 적용 */
@@ -803,6 +861,760 @@
             border-bottom: 1px solid #e0e0e0;
         }
 
+        /* 자동화 대시보드 (Bulsaja Dashboard) 전용 스타일 */
+        /* 라이트모드 (기본) */
+        .dashboard-bulsaja {
+            --bg-primary: #f5f7fa;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f0f4f8;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-pink: #ec4899;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: -20px;
+            /* 메인 content 패딩 상쇄 */
+            padding: 20px;
+            min-height: calc(100vh - 120px);
+        }
+
+        /* 다크모드 */
+        body.dark-mode .dashboard-bulsaja {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #222230;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #2a2a3a;
+        }
+
+        .dashboard-bulsaja * {
+            box-sizing: border-box;
+        }
+
+        .dashboard-bulsaja .header-bulsaja {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .dashboard-bulsaja .header-bulsaja h1 {
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+        }
+
+        .dashboard-bulsaja .logo-bulsaja {
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-yellow));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dashboard-bulsaja .header-subtitle-bulsaja {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .dashboard-bulsaja .header-right-bulsaja {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dashboard-bulsaja .status-badge-bulsaja {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--accent-green);
+        }
+
+        .dashboard-bulsaja .status-dot-bulsaja {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse-bulsaja 2s infinite;
+        }
+
+        @keyframes pulse-bulsaja {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .dashboard-bulsaja .time-badge-bulsaja {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .dashboard-bulsaja .stage-tabs-bulsaja {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja {
+            flex-shrink: 0;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 80px;
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:hover,
+        .dashboard-bulsaja .stage-tab-bulsaja.active {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-orange);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja.active {
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja .name-bulsaja {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja .count-bulsaja {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(1) .count-bulsaja {
+            color: var(--accent-cyan);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(2) .count-bulsaja {
+            color: var(--accent-green);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(3) .count-bulsaja {
+            color: var(--accent-yellow);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(4) .count-bulsaja {
+            color: var(--accent-red);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(5) .count-bulsaja {
+            color: var(--accent-purple);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(6) .count-bulsaja {
+            color: var(--accent-blue);
+        }
+
+        .dashboard-bulsaja .stage-tab-bulsaja:nth-child(7) .count-bulsaja {
+            color: var(--text-secondary);
+        }
+
+        .dashboard-bulsaja .filter-bar-bulsaja {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-bulsaja .search-box-bulsaja {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .dashboard-bulsaja .search-box-bulsaja input {
+            width: 100%;
+            padding: 10px 14px 10px 36px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        .dashboard-bulsaja .search-box-bulsaja::before {
+            content: '🔍';
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+        }
+
+        .dashboard-bulsaja .filter-pills-bulsaja {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+        }
+
+        .dashboard-bulsaja .filter-pill-bulsaja {
+            flex-shrink: 0;
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .dashboard-bulsaja .filter-pill-bulsaja.active {
+            background: var(--accent-orange);
+            color: #000;
+            border-color: var(--accent-orange);
+        }
+
+        .dashboard-bulsaja .table-header-bulsaja {
+            display: grid;
+            grid-template-columns: 180px repeat(6, 1fr) 220px;
+            gap: 2px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px 8px 0 0;
+        }
+
+        .dashboard-bulsaja .table-header-cell-bulsaja {
+            padding: 12px 8px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+
+        .dashboard-bulsaja .table-header-cell-bulsaja:last-child {
+            border-right: none;
+        }
+
+
+        .dashboard-bulsaja .table-body-bulsaja {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+
+        .dashboard-bulsaja .table-row-bulsaja {
+            display: grid;
+            grid-template-columns: 180px repeat(6, 1fr) 220px;
+            gap: 2px;
+            border-bottom: 1px solid var(--border-color);
+            align-items: stretch;
+            /* Stretch to fill height */
+            text-align: center;
+            min-height: 85px;
+            /* Increase height for the new layout */
+        }
+
+        .dashboard-bulsaja .account-cell-bulsaja {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-secondary);
+        }
+
+        .dashboard-bulsaja .account-info span {
+            font-size: 10px;
+            /* 11px -> 10px */
+            opacity: 0.7;
+            display: block;
+            margin-top: 1px;
+            /* 2px -> 1px */
+        }
+
+        .dashboard-bulsaja .account-info .name {
+            color: var(--text-primary);
+        }
+
+        .dashboard-bulsaja .orders-text {
+            color: var(--text-muted);
+        }
+
+        .dashboard-bulsaja .revenue-cell-bulsaja {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 12px;
+            background: var(--bg-secondary);
+        }
+
+        .dashboard-bulsaja .stage-cell-bulsaja {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja {
+            width: 24px;
+            /* 32px -> 24px */
+            height: 24px;
+            /* 32px -> 24px */
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            /* 12px -> 11px */
+            font-weight: 700;
+            color: white;
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja.naver {
+            background: #03C75A;
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja.coupang {
+            background: #00B4D8;
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja.gmarket {
+            background: #1A73E8;
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja.auction {
+            background: #9C27B0;
+        }
+
+        .dashboard-bulsaja .account-logo-bulsaja.st11,
+        .dashboard-bulsaja .account-logo-bulsaja.st11st,
+        .dashboard-bulsaja .account-logo-bulsaja.\31 1st {
+            background: #E31837;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            opacity: 0.25;
+            transition: all 0.3s ease;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja.active {
+            opacity: 1 !important;
+        }
+
+        /* New Progress Cell Layout (Upload & Revenue) */
+        .dashboard-bulsaja .progress-container-bulsaja {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .dashboard-bulsaja .progress-labels-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 2px;
+        }
+
+        .dashboard-bulsaja .progress-val-main {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .dashboard-bulsaja .progress-val-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .dashboard-bulsaja .progress-bar-bg {
+            width: 100%;
+            height: 10px;
+            background: var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+        }
+
+        body.dark-mode .dashboard-bulsaja .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        .dashboard-bulsaja .progress-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.8s ease;
+        }
+
+        .dashboard-bulsaja .progress-labels-bottom {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 2px;
+        }
+
+        .dashboard-bulsaja .progress-percent {
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        /* Horizontal Layout for Upload */
+        .dashboard-bulsaja .progress-container-bulsaja.horizontal {
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dashboard-bulsaja .progress-container-bulsaja.horizontal .progress-bar-bg {
+            flex: 1;
+        }
+
+        .dashboard-bulsaja .progress-val-text {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            white-space: nowrap;
+        }
+
+        .dashboard-bulsaja .progress-val-text .main {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .dashboard-bulsaja .progress-val-text .sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+
+        /* Dynamic Colors based on achievement */
+        .color-green {
+            color: #00d084 !important;
+        }
+
+        .bg-green {
+            background: #00d084 !important;
+        }
+
+        .color-orange {
+            color: #f97316 !important;
+        }
+
+        .bg-orange {
+            background: #f97316 !important;
+        }
+
+        .color-pink {
+            color: #f43f5e !important;
+        }
+
+        .bg-pink {
+            background: #f43f5e !important;
+        }
+
+        /* Operation Cell Customization */
+        .dashboard-bulsaja .op-days-text {
+            font-size: 14px;
+            font-weight: 800;
+            margin-top: 4px;
+        }
+
+
+        .dashboard-bulsaja .renewal-active {
+            opacity: 1 !important;
+            background: rgba(249, 115, 22, 0.15) !important;
+            border: 1px solid rgba(249, 115, 22, 0.4) !important;
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.2);
+        }
+
+        .dashboard-bulsaja .renewal-active .icon {
+            color: var(--accent-orange) !important;
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+
+        .dashboard-bulsaja .renewal-active .value {
+            color: var(--accent-orange) !important;
+            font-weight: 800 !important;
+        }
+
+        .btn-refresh-bulsaja {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0 16px;
+            height: 38px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-refresh-bulsaja:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-orange);
+        }
+
+        body.dark-mode .btn-refresh-bulsaja {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        body.dark-mode .btn-refresh-bulsaja:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-refresh-bulsaja .icon {
+            font-size: 14px;
+        }
+
+        @keyframes glow-bulsaja {
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 0 25px rgba(249, 115, 22, 0.5);
+            }
+        }
+
+        @keyframes led-pulse-orange {
+            0% {
+                box-shadow: 0 0 5px rgba(255, 87, 34, 0.2), inset 0 0 2px rgba(255, 87, 34, 0.1);
+                border-color: rgba(255, 87, 34, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(255, 87, 34, 0.6), inset 0 0 10px rgba(255, 87, 34, 0.3);
+                border-color: rgba(255, 87, 34, 0.8);
+            }
+
+            100% {
+                box-shadow: 0 0 5px rgba(255, 87, 34, 0.2), inset 0 0 2px rgba(255, 87, 34, 0.1);
+                border-color: rgba(255, 87, 34, 0.3);
+            }
+        }
+
+        .dashboard-bulsaja .blink-active {
+            animation: led-pulse-orange 1.5s infinite ease-in-out !important;
+            border: 1px solid rgba(255, 87, 34, 0.5) !important;
+            background: rgba(255, 87, 34, 0.05) !important;
+            border-radius: 6px;
+            opacity: 1 !important;
+        }
+
+        @keyframes iconPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.15);
+            }
+        }
+
+        /* 怨듯넻 ?뚰룷 ?덉씠?꾩썐 */
+        /* 怨듯넻 ?뚰룷 ?덉씠?꾩썐 */
+        .dashboard-bulsaja .stage-indicator .value,
+        .dashboard-bulsaja .stage-indicator-bulsaja .operation-days {
+            font-size: 9px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin: 1px 0;
+            white-space: nowrap;
+            opacity: 0.7;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .icon {
+            font-size: 16px;
+            /* 아이콘 크기 고정 */
+        }
+
+        .dashboard-bulsaja .stage-indicator .progress-bar {
+            width: 80%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .dashboard-bulsaja .stage-indicator .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f97316, #fb923c);
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .dashboard-bulsaja .stage-indicator.completed .progress-bar-fill {
+            background: linear-gradient(90deg, #10b981, #34d399);
+            /* ?꾨즺?? 寃쎌슦 珥덈줉?? */
+        }
+
+        /* Revenue Cell */
+        .dashboard-bulsaja .revenue-cell-bulsaja {
+            padding: 4px 12px;
+            background: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+
+        .dashboard-bulsaja .revenue-info-bulsaja {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .dashboard-bulsaja .revenue-bar-bulsaja {
+            width: 100%;
+            height: 18px;
+            /* 통통하게 */
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 9px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .dashboard-bulsaja .revenue-bar-fill-bulsaja {
+            height: 100%;
+            border-radius: 9px;
+            background: linear-gradient(90deg, #f97316, #fb923c, #f59e0b);
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+            transition: width 0.8s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dashboard-bulsaja .revenue-bar-text-bulsaja {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+            left: 0;
+        }
+
+        .dashboard-bulsaja .revenue-bar-fill-bulsaja.achieved {
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+        }
+
+        .dashboard-bulsaja .revenue-bar-fill-bulsaja.warning {
+            background: linear-gradient(90deg, var(--accent-yellow), var(--accent-orange));
+        }
+
+        .dashboard-bulsaja .revenue-bar-fill-bulsaja.danger {
+            background: linear-gradient(90deg, var(--accent-red), var(--accent-pink));
+        }
+
+        /* Mobile View (Card) */
+        .dashboard-bulsaja .card-view-bulsaja {
+            display: none;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-bulsaja .table-view-bulsaja {
+                display: none;
+            }
+
+            .dashboard-bulsaja .card-view-bulsaja {
+                display: block;
+            }
+        }
+
+        .dashboard-bulsaja .account-card-bulsaja {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .dashboard-bulsaja .card-header-bulsaja {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .dashboard-bulsaja .card-stage-bulsaja {
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .marketing-account-table th,
+        .marketing-account-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
         .marketing-account-table th {
             font-weight: 600;
             color: #333;
@@ -1065,6 +1877,7 @@
                 style="background:#4caf50;color:white;padding:4px 10px;border-radius:5px;font-weight:bold;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:5px;"
                 onclick="copyHeaderAuthCode()" title="클릭하여 복사">🔑 <span id="headerAuthCodeValue">------</span> 📋</span>
             <a href="/download/PkonomyClient.exe" class="client-download-btn">💾 클라이언트</a>
+            <button class="theme-toggle-btn" onclick="toggleTheme()" title="다크모드 전환" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:8px 12px;border-radius:5px;cursor:pointer;font-size:14px;">🌙</button>
             <span class="user-info">👤 {{ username }} <span class="role-badge role-{{ role }}">{{ role }}</span></span>
             <button class="logout-btn" onclick="logout()">로그아웃</button>
         </div>
@@ -1080,6 +1893,7 @@
         <div class="tab hide-for-viewer" data-tab="allinone">🛠️ All-in-One</div>
         <div class="tab hide-for-viewer" data-tab="scheduler">⏰ 스케줄러</div>
         <div class="tab hide-for-viewer" data-tab="bulsaja">🔥 불사자</div>
+        <div class="tab" data-tab="bulsaja-dashboard">💰 자동화 대시보드</div>
         <div class="tab hide-for-viewer" data-tab="tools">🔧 기타 기능</div>
         <div class="tab" data-tab="work-calendar">📅 작업달력</div>
         <div class="tab hide-for-operator" data-tab="settings">⚙️ 설정</div>
@@ -1412,7 +2226,7 @@
                                 <th style="width:40px; text-align:center;">No</th>
                                 <th style="width:80px; text-align:center;">플랫폼</th>
                                 <th style="width:160px; text-align:center;">
-                                    <input type="text" id="filterMarketName" placeholder="🔍 마켓명"
+                                    <input type="text" id="filterMarketName" placeholder="🔍 스토어명"
                                         class="th-filter-input" oninput="filterMarketTable()">
                                 </th>
                                 <th style="width:80px; text-align:center;">
@@ -1590,9 +2404,29 @@
                 <!-- 그래프 + 소유자별 매출 영역 (2열) -->
                 <div class="sales-main-row" style="display:flex; gap:20px; margin-bottom:20px;">
                     <!-- 왼쪽: 그래프 -->
-                    <div class="chart-container" style="flex:2;">
+                    <div class="chart-container" style="flex:2; display: flex; flex-direction: column;">
                         <h4>📈 일자별 매출/수익 추이</h4>
-                        <canvas id="dailySalesChart"></canvas>
+                        <div style="flex: 1; min-height: 200px;">
+                            <canvas id="dailySalesChart"></canvas>
+                        </div>
+                        <!-- 일일 통계 요약 영역 추가 -->
+                        <div id="dailySalesStats"
+                            style="display: flex; gap: 15px; margin-top: 15px; padding: 12px; background: #f1f3f9; border-radius: 8px; justify-content: space-around; font-size: 13px; color: #333; border: 1px solid #e0e6ed;">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; color: #666;">평균 일매출</span>
+                                <strong id="avgDailySales" style="font-size: 15px; color: #4e73df;">-</strong>
+                            </div>
+                            <div style="width: 1px; background: #d1d9e6;"></div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; color: #666;">최고 일매출</span>
+                                <strong id="maxDailySales" style="font-size: 15px; color: #1cc88a;">-</strong>
+                            </div>
+                            <div style="width: 1px; background: #d1d9e6;"></div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; color: #666;">최저 일매출</span>
+                                <strong id="minDailySales" style="font-size: 15px; color: #e74a3b;">-</strong>
+                            </div>
+                        </div>
                     </div>
                     <!-- 오른쪽: 소유자별 + 대량/반대량 매출 -->
                     <div style="flex:1; display:flex; flex-direction:column; gap:15px;">
@@ -1673,7 +2507,7 @@
                             <thead>
                                 <tr>
                                     <th style="width:40px;">No</th>
-                                    <th style="cursor:pointer;" onclick="sortSalesTable('name')">마켓명 ↕</th>
+                                    <th style="cursor:pointer;" onclick="sortSalesTable('name')">스토어명 ↕</th>
                                     <th style="cursor:pointer;" onclick="sortSalesTable('orders')">월주문 ↕</th>
                                     <th style="cursor:pointer;" onclick="sortSalesTable('orders_2w')">2주주문 ↕</th>
                                     <th style="cursor:pointer;" onclick="sortSalesTable('sales')">주문금액 ↕</th>
@@ -1735,7 +2569,7 @@
                         <thead>
                             <tr>
                                 <th>플랫폼</th>
-                                <th>별칭</th>
+                                <th>스토어명</th>
                                 <th>아이디</th>
                                 <th>비밀번호</th>
                                 <th>사업자번호</th>
@@ -1973,16 +2807,22 @@
                         </div>
                         <div class="form-group">
                             <label>작업</label>
-                            <select id="schedTask">
-                                <option value="등록갯수">등록갯수</option>
-                                <option value="배송코드">배송코드</option>
-                                <option value="배송변경">배송변경</option>
-                                <option value="상품삭제">상품삭제</option>
-                                <option value="혜택설정">혜택설정</option>
-                                <option value="중복삭제">중복삭제</option>
-                                <option value="KC인증">KC인증</option>
-                                <option value="기타기능">기타기능</option>
-                            </select>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <select id="schedTask" onchange="onSchedTaskChange()" style="flex: 1;">
+                                    <option value="등록갯수">등록갯수</option>
+                                    <option value="배송코드">배송코드</option>
+                                    <option value="배송변경">배송변경</option>
+                                    <option value="상품삭제">상품삭제</option>
+                                    <option value="혜택설정">혜택설정</option>
+                                    <option value="중복삭제">중복삭제</option>
+                                    <option value="KC인증">KC인증</option>
+                                    <option value="마케팅수집">마케팅수집</option>
+                                    <option value="기타기능">기타기능</option>
+                                </select>
+                                <button type="button" class="btn-icon" onclick="openTaskSettingsModal()" title="작업 상세 설정">
+                                    <span style="font-size: 18px;">⚙️</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="form-row">
@@ -2037,6 +2877,23 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 작업 상세 설정 모달 -->
+        <div class="modal" id="taskSettingsModal" style="display:none;">
+            <div class="modal-content" style="max-width: 550px;">
+                <div class="modal-header">
+                    <span class="modal-title" id="taskSettingsTitle">⚙️ 작업 상세 설정</span>
+                    <span class="modal-close" onclick="closeTaskSettingsModal()">&times;</span>
+                </div>
+                <div class="modal-body" id="taskSettingsBody">
+                    <!-- 작업별 설정 내용이 동적으로 삽입됨 -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn secondary" onclick="closeTaskSettingsModal()">취소</button>
+                    <button class="btn primary" onclick="saveTaskSettings()">💾 설정 저장</button>
                 </div>
             </div>
         </div>
@@ -2245,6 +3102,104 @@
                 <div class="log-section" id="bulsajaLogSection" style="display:none;">
                     <div class="section-title">📋 실시간 로그</div>
                     <div class="log-container" id="bulsajaLogs"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 자동화 대시보드 탭 (New) -->
+        <div class="tab-content" id="tab-bulsaja-dashboard">
+            <div class="dashboard-bulsaja">
+                <div class="dashboard">
+                    <!-- Header -->
+                    <header class="header-bulsaja">
+                        <div>
+                            <h1>💰 <span class="logo-bulsaja">Pconomy</span></h1>
+                            <div class="header-subtitle-bulsaja">업로드 → 운영 → 리뉴얼대상 → 삭제 → 변경 → 복사 🔄</div>
+                        </div>
+                        <div class="header-right-bulsaja">
+                            <div class="status-badge-bulsaja">
+                                <div class="status-dot-bulsaja"></div>
+                                가동중
+                            </div>
+                            <div class="time-badge-bulsaja" id="currentTimeBulsaja">00:00:00</div>
+                        </div>
+                    </header>
+
+                    <!-- Stage Tabs -->
+                    <div class="stage-tabs-bulsaja">
+                        <div class="stage-tab-bulsaja active" data-stage="all">
+                            <div class="name-bulsaja">전체</div>
+                            <div class="count-bulsaja" id="countAllBulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="1">
+                            <div class="name-bulsaja">📤 업로드</div>
+                            <div class="count-bulsaja" id="count1Bulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="2">
+                            <div class="name-bulsaja">🏪 운영</div>
+                            <div class="count-bulsaja" id="count2Bulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="3">
+                            <div class="name-bulsaja">🔨 리뉴얼대상</div>
+                            <div class="count-bulsaja" id="count3Bulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="4">
+                            <div class="name-bulsaja">🗑️ 삭제</div>
+                            <div class="count-bulsaja" id="count4Bulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="5">
+                            <div class="name-bulsaja">✏️ 변경</div>
+                            <div class="count-bulsaja" id="count5Bulsaja">0</div>
+                        </div>
+                        <div class="stage-tab-bulsaja" data-stage="6">
+                            <div class="name-bulsaja">📋 복사</div>
+                            <div class="count-bulsaja" id="count6Bulsaja">0</div>
+                        </div>
+                    </div>
+
+                    <div class="filter-bar-bulsaja">
+                        <div class="search-actions-bulsaja" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn-refresh-bulsaja" id="refreshBulsaja" title="새로고침">
+                                <span class="icon">🔄</span> 데이터 수동취합
+                            </button>
+                            <div class="search-box-bulsaja">
+                                <input type="text" placeholder="계정명 검색..." id="searchInputBulsaja">
+                            </div>
+                        </div>
+                        <div class="filter-pills-bulsaja">
+                            <div class="filter-pill-bulsaja active" data-platform="all">전체</div>
+                            <div class="filter-pill-bulsaja" data-platform="naver">네이버</div>
+                            <div class="filter-pill-bulsaja" data-platform="coupang">쿠팡</div>
+                            <div class="filter-pill-bulsaja" data-platform="11st">11번가</div>
+                            <div class="filter-pill-bulsaja" data-platform="gmarket">G마켓/옥션</div>
+                        </div>
+                        <div class="filter-pills-bulsaja usage-filter-bulsaja" style="margin-left: 20px;">
+                            <div class="filter-pill-bulsaja active" data-usage="all">전체용도</div>
+                            <div class="filter-pill-bulsaja" data-usage="대량">대량</div>
+                            <div class="filter-pill-bulsaja" data-usage="반대량">반대량</div>
+                            <div class="filter-pill-bulsaja" data-usage="반자동">반자동</div>
+                        </div>
+                    </div>
+
+                    <!-- PC: Table View -->
+                    <div class="table-view-bulsaja">
+                        <div class="table-header-bulsaja">
+                            <div class="table-header-cell-bulsaja">스토어명</div>
+                            <div class="table-header-cell-bulsaja">📤 업로드</div>
+                            <div class="table-header-cell-bulsaja">🏪 운영</div>
+                            <div class="table-header-cell-bulsaja">🔨 리뉴얼</div>
+                            <div class="table-header-cell-bulsaja">🗑️ 삭제</div>
+                            <div class="table-header-cell-bulsaja">✏️ 변경</div>
+                            <div class="table-header-cell-bulsaja">📋 복사</div>
+                            <div class="table-header-cell-bulsaja">💰 목표매출</div>
+                        </div>
+                        <div class="table-body-bulsaja" id="tableBodyBulsaja">
+                        </div>
+                    </div>
+
+                    <!-- Mobile: Card View -->
+                    <div class="card-view-bulsaja" id="cardViewBulsaja">
+                    </div>
                 </div>
             </div>
         </div>
@@ -2643,7 +3598,7 @@
 
             <!-- 컨텍스트 메뉴 (우클릭/더블클릭) -->
             <div class="context-menu" id="dailyContextMenu" style="display:none;">
-                <div class="context-menu-header" id="ctxHeader">마켓명</div>
+                <div class="context-menu-header" id="ctxHeader">스토어명</div>
                 <div class="context-menu-divider"></div>
                 <div class="context-menu-item" onclick="dailyContextAction('login')">🚀 로그인</div>
                 <div class="context-menu-item" onclick="dailyContextAction('shipping')">📦 배송변경</div>
@@ -3020,7 +3975,7 @@
                                 <option value="옥션">옥션</option>
                             </select>
                         </div>
-                        <div class="form-group"><label>별칭</label><input type="text" id="formShopAlias"></div>
+                        <div class="form-group"><label>스토어명</label><input type="text" id="formShopAlias"></div>
                     </div>
                     <div class="form-row">
                         <div class="form-group"><label>아이디 *</label><input type="text" id="formLoginId" required></div>
@@ -3113,21 +4068,25 @@
         <div class="marketing-container" style="max-width: 1400px; margin: 0 auto; padding: 20px;">
             <h2 style="margin-bottom: 15px;">📈 마케팅 분석</h2>
 
-            <!-- 서브탭 네비게이션 -->
-            <div class="marketing-sub-tabs"
-                style="display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 0;">
-                <button class="mkt-sub-tab active" data-subtab="results" onclick="switchMarketingSubTab('results')"
-                    style="padding: 12px 24px; border: none; background: #667eea; color: white; border-radius: 8px 8px 0 0; font-size: 14px; font-weight: 600; cursor: pointer;">
-                    📊 분석 결과
+            <!-- 마케팅 분석 내부 서브탭 -->
+            <div class="mkt-sub-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button onclick="switchMarketingSubTab('performance')" class="mkt-sub-tab active"
+                    data-subtab="performance"
+                    style="padding: 10px 20px; border: none; border-radius: 6px; background: #667eea; color: white; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    📊 전체 통합 분석 (전사)
                 </button>
-                <button class="mkt-sub-tab" data-subtab="collect" onclick="switchMarketingSubTab('collect')"
-                    style="padding: 12px 24px; border: none; background: #f0f0f0; color: #666; border-radius: 8px 8px 0 0; font-size: 14px; font-weight: 500; cursor: pointer;">
-                    🔄 데이터 수집
+                <button onclick="switchMarketingSubTab('results')" class="mkt-sub-tab" data-subtab="results"
+                    style="padding: 10px 20px; border: none; border-radius: 6px; background: #f0f0f0; color: #666; cursor: pointer; font-weight: 500; transition: all 0.2s;">
+                    🏪 개별 스토어 분석
+                </button>
+                <button onclick="switchMarketingSubTab('collect')" class="mkt-sub-tab" data-subtab="collect"
+                    style="padding: 10px 20px; border: none; border-radius: 6px; background: #f0f0f0; color: #666; cursor: pointer; font-weight: 500; transition: all 0.2s;">
+                    ⚙️ 데이터 수집 설정
                 </button>
             </div>
 
-            <!-- 분석 결과 서브탭 -->
-            <div class="mkt-sub-content active" id="mkt-subtab-results">
+            <!-- 개별 스토어 분석 결과 서브탭 (기존 '분석 결과') -->
+            <div class="mkt-sub-content" id="mkt-subtab-results" style="display:none;">
                 <!-- 스토어 선택 -->
                 <div class="section"
                     style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
@@ -3140,7 +4099,7 @@
                                 <option value="">-- 스토어 선택 --</option>
                             </select>
                         </div>
-                        <button onclick="loadMarketingStores()" class="refresh-btn" style="padding: 8px 16px;">🔄
+                        <button onclick="loadMarketingStores(true)" class="refresh-btn" style="padding: 8px 16px;">🔄
                             새로고침</button>
                     </div>
                 </div>
@@ -3170,68 +4129,8 @@
                     </div>
                 </div>
 
-                <!-- 비즈어드바이저 데이터 (상품노출성과) -->
-                <div class="section"
-                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h3 style="margin: 0 0 15px 0; color: #667eea;">📈 상품노출성과 (비즈어드바이저)</h3>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                            <thead>
-                                <tr style="background: #f8f9fa;">
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">상품명
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">채널
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">키워드
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">평균순위
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">유입수
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody id="mktBizTable">
-                                <tr>
-                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- 쇼핑파트너 데이터 (클릭리포트) -->
-                <div class="section"
-                    style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h3 style="margin: 0 0 15px 0; color: #ee0979;">🛒 상품클릭리포트 (쇼핑파트너센터)</h3>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                            <thead>
-                                <tr style="background: #f8f9fa;">
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">상품명
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">노출수
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">클릭수
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">클릭율
-                                    </th>
-                                    <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">수수료
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody id="mktPartnerTable">
-                                <tr>
-                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- 전체채널 + 쇼핑몰정보 -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <!-- 전체채널 + 쇼핑몰정보 (상단으로 이동) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                     <!-- 전체채널 데이터 -->
                     <div class="section"
                         style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
@@ -3240,7 +4139,7 @@
                         </h3>
                         <div style="max-height: 300px; overflow-y: auto;">
                             <table style="width: 100%; border-collapse: collapse;">
-                                <thead style="position: sticky; top: 0; background: #f8f9fa;">
+                                <thead style="position: sticky; top: 0; background: #f8f9fa; z-index: 10;">
                                     <tr>
                                         <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
                                             채널명</th>
@@ -3258,18 +4157,225 @@
                         </div>
                     </div>
 
-                    <!-- 쇼핑몰 정보 -->
+                    <!-- 스토어별 유입수 현황 -->
                     <div class="section"
                         style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                         <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">
-                            🏪 쇼핑몰 정보
+                            🏪 스토어별 유입수 현황
                         </h3>
                         <div id="mktMallInfo" style="display: grid; gap: 10px;">
                             <div style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요</div>
                         </div>
                     </div>
                 </div>
+
+                <!-- 비즈어드바이저 데이터 (상품노출성과) -->
+                <div class="section"
+                    style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0; color: #667eea;">📈 상품노출성과 (비즈어드바이저)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                        상품명</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                        채널</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                        키워드</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktBizTable', 3, 'num')">평균순위 ↕</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktBizTable', 4, 'num')">유입수 ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mktBizTable">
+                                <tr>
+                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 쇼핑파트너 데이터 (클릭리포트) -->
+                <div class="section"
+                    style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="margin: 0 0 15px 0; color: #ee0979;">🛒 상품클릭리포트 (쇼핑파트너센터)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                        상품명</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktPartnerTable', 1, 'num')">노출수 ↕</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktPartnerTable', 2, 'num')">클릭수 ↕</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktPartnerTable', 3, 'pct')">클릭율 ↕</th>
+                                    <th style="padding: 12px 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                        onclick="sortMarketingTable('mktPartnerTable', 4, 'num')">수수료 ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mktPartnerTable">
+                                <tr>
+                                    <td colspan="5" style="padding: 30px; text-align: center; color: #999;">스토어를 선택하세요
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
+
+            <!-- 전체 통합 분석 (전사) 서브탭 -->
+            <div class="mkt-sub-content active" id="mkt-subtab-performance" style="display:block;">
+                <!-- 내부 탭 버튼 추가 -->
+                <div
+                    style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">
+                    <button class="inner-tab-btn active" onclick="switchMarketingInnerTab('visitors')">
+                        📊 유입수
+                    </button>
+                    <button class="inner-tab-btn" onclick="switchMarketingInnerTab('products')">
+                        📦 품목별 통합 상세 성과
+                    </button>
+                </div>
+
+                <!-- 유입수 탭 컨텐츠 -->
+                <div class="inner-tab-content active" id="mkt-inner-visitors">
+                    <!-- 통합 요약 카드 (전체 계정 합계) -->
+                    <div id="mktOverallSummary"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div class="summary-card"
+                            style="background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(30,60,114,0.3);">
+                            <div style="font-size: 13px; opacity: 0.8; margin-bottom: 5px;">🏢 전체 방문자수 (합산)</div>
+                            <div id="mktOverallVisitors" style="font-size: 28px; font-weight: 800;">-</div>
+                        </div>
+                        <div class="summary-card"
+                            style="background: linear-gradient(135deg, #2c3e50, #4ca1af); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(44,62,80,0.3);">
+                            <div style="font-size: 13px; opacity: 0.8; margin-bottom: 5px;">📄 전체 페이지뷰 (합산)</div>
+                            <div id="mktOverallPageviews" style="font-size: 28px; font-weight: 800;">-</div>
+                        </div>
+                        <div class="summary-card"
+                            style="background: linear-gradient(135deg, #ff9966, #ff5e62); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(255,153,102,0.3);">
+                            <div style="font-size: 13px; opacity: 0.8; margin-bottom: 5px;">💰 전사 평균 전환율</div>
+                            <div id="mktOverallConvRate" style="font-size: 28px; font-weight: 800;">-</div>
+                        </div>
+                        <div class="summary-card"
+                            style="background: linear-gradient(135deg, #56ab2f, #a8e063); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(86,171,47,0.3);">
+                            <div style="font-size: 13px; opacity: 0.8; margin-bottom: 5px;">📉 전사 평균 이탈률</div>
+                            <div id="mktOverallBounceRate" style="font-size: 28px; font-weight: 800;">-</div>
+                        </div>
+                    </div>
+
+                    <!-- [Section 1] 스토어별 통합 분석 (스토어별 유입수 현황) -->
+                    <div class="section"
+                        style="margin-bottom: 25px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: #667eea;">📊 스토어별 통합 성과 요약 (스토어별 유입수 현황)</h3>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <button id="btnMktSyncTotal" onclick="syncMarketingTotalData()" class="primary-btn"
+                                    style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                                    📥 데이터 수동 취합
+                                </button>
+                                <button onclick="loadMarketingIntegratedData(true)" class="refresh-btn"
+                                    style="padding: 8px 16px;">🔄 전체 새로고침</button>
+                            </div>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" id="mktPerformanceTableMain"
+                                style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            수집일시
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            스토어명
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 2, 'num')">총방문자수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 3, 'num')">재방문자수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 4, 'num')">신규방문자수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 5, 'num')">총페이지뷰 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right;">
+                                            평균체류시간</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 7, 'pct')">이탈률 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktPerformanceTable', 8, 'pct')">구매전환율 ↕</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mktPerformanceTable">
+                                    <tr>
+                                        <td colspan="9" style="padding: 30px; text-align: center; color: #999;">데이터를
+                                            불러오는
+                                            중...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- 유입수 탭 컨텐츠 끝 -->
+
+                <!-- 품목별 통합 상세 성과 탭 컨텐츠 -->
+                <div class="inner-tab-content" id="mkt-inner-products">
+                    <!-- [Section 2] 품목별 통합 분석 (전체데이터) -->
+                    <div class="section"
+                        style="margin-bottom: 20px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: #ee0979;">📦 품목별 통합 상세 성과 (전체데이터)</h3>
+                        </div>
+                        <div style="overflow-x: auto; max-height: 500px;">
+                            <table class="data-table" id="mktSummaryTableMain"
+                                style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                <thead style="position: sticky; top: 0; background: #f8f9fa; z-index: 10;">
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            수집일시
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            스토어명
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            상품번호
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left;">
+                                            상품명
+                                        </th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktSummaryTable', 4, 'num')">방문횟수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktSummaryTable', 5, 'num')">유입수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktSummaryTable', 6, 'num')">클릭수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktSummaryTable', 7, 'num')">전환수 ↕</th>
+                                        <th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer;"
+                                            onclick="sortMarketingTable('mktSummaryTable', 8, 'num')">판매액 ↕</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mktSummaryTable">
+                                    <tr>
+                                        <td colspan="9" style="padding: 30px; text-align: center; color: #999;">데이터를
+                                            불러오는
+                                            중...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <!-- 전체 통합 분석 (전사) 서브탭 끝 -->
 
             <!-- 데이터 수집 서브탭 -->
             <div class="mkt-sub-content" id="mkt-subtab-collect" style="display: none;">
@@ -3378,7 +4484,8 @@
                 <div id="templatePreviewContent"
                     style="background:#fffde7; border:1px solid #fff59d; border-radius:6px; padding:10px; font-size:12px; line-height:1.6; flex:1; overflow-y:auto; min-height:80px; max-height:30vh;">
                 </div>
-                <div id="tplCharCount" style="font-size:10px; color:#888; text-align:right; margin-top:4px;">0자</div>
+                <div id="tplCharCount" style="font-size:10px; color:#888; text-align:right; margin-top:4px;">0자
+                </div>
             </div>
             <div style="padding:10px 12px; border-top:1px solid #e0e0e0; display:flex; gap:8px;">
                 <button onclick="copyTemplateToClipboard()"
@@ -3392,6 +4499,243 @@
     </div>
 
     <script src="/static/app.js?v=20260115u"></script>
+    <script>
+        // (2026-01-20) 마케팅 테이블 정렬 기능
+        function sortMarketingTable(tableId, colIndex, type) {
+            var table = document.getElementById(tableId);
+            if (!table) return;
+
+            // 테이블 내 rows 수집 (tbody 기준)
+            var tbody = table;
+            if (table.tagName.toLowerCase() === 'table') {
+                tbody = table.querySelector('tbody') || table;
+            }
+
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length < 2) return; // 데이터 없음
+
+            // 데이터 로딩 중 체크
+            if (rows[0].innerText.includes('데이터를 불러오는 중') || rows[0].innerText.includes('데이터가 없습니다')) return;
+
+            // 정렬 방향 (속성 저장)
+            var currentOrder = table.getAttribute('data-mid-sort-order') || 'asc';
+            var newOrder = (currentOrder === 'asc') ? 'desc' : 'asc';
+            table.setAttribute('data-mid-sort-order', newOrder);
+
+            // 정렬 실행
+            rows.sort(function (rowA, rowB) {
+                var cellA = rowA.children[colIndex] ? rowA.children[colIndex].innerText.trim() : '';
+                var cellB = rowB.children[colIndex] ? rowB.children[colIndex].innerText.trim() : '';
+
+                // 콤마, % 제거
+                var valA = cellA.replace(/,/g, '').replace(/%/g, '');
+                var valB = cellB.replace(/,/g, '').replace(/%/g, '');
+
+                if (type === 'num' || type === 'pct') {
+                    var numA = parseFloat(valA);
+                    var numB = parseFloat(valB);
+
+                    if (isNaN(numA)) numA = -999999;
+                    if (isNaN(numB)) numB = -999999;
+
+                    return (newOrder === 'asc') ? (numA - numB) : (numB - numA);
+                } else {
+                    return (newOrder === 'asc') ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+                }
+            });
+
+            // 재배치
+            rows.forEach(function (row) {
+                tbody.appendChild(row);
+            });
+        }
+
+        // (2026-01-20) 초기화 버튼 로직 변경 (Override)
+        async function initializeMarketingSheets() {
+            if (!confirm('마케팅 데이터를 취합하여 통합 시트를 갱신하시겠습니까?\n\n- "스토어유입수": 날짜별 데이터 누적 (기존 데이터 보존)\n- "전체데이터": 최신 데이터로 갱신\n- 개별 스토어 시트: 유지')) {
+                return;
+            }
+            showToast('데이터 취합 및 갱신 중...', 'info');
+            try {
+                // create-sheets(초기화) 대신 sync-manual(취합) 호출
+                const resp = await fetch('/api/marketing/sync-manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await resp.json();
+
+                if (data.success === false || data.error) {
+                    showToast(data.message || data.error || '작업 실패', 'error');
+                    return;
+                }
+
+                let msg = data.message || '데이터 취합 완료!';
+                alert(msg);
+                showToast(msg, 'success');
+
+                // 데이터 갱신
+                if (window.loadMarketingIntegratedData) window.loadMarketingIntegratedData();
+
+            } catch (e) {
+                console.error(e);
+                showToast('서버 통신 오류 발생', 'error');
+            }
+        }
+
+        // (2026-01-20) 스토어별 통합 성과 요약 데이터 로딩 (Override)
+        // 기존 app.js 함수를 덮어쓰고, /api/marketing/summary API를 사용하도록 변경
+        window.loadMarketingIntegratedData = async function (refresh = false) {
+            const tableBody = document.getElementById('mktPerformanceTable');
+            const tableHead = document.querySelector('#mktPerformanceTableMain thead');
+            if (!tableBody) return;
+
+            tableBody.innerHTML = '<tr><td colspan="15" class="loading">데이터 로딩 중...</td></tr>';
+
+            try {
+                // 1. API 호출
+                const resp = await fetch(`/api/marketing/summary?refresh=${refresh}`);
+                const res = await resp.json();
+
+                if (!res.success) {
+                    tableBody.innerHTML = `<tr><td colspan="15" class="error">${res.error || '데이터 로드 실패'}</td></tr>`;
+                    return;
+                }
+
+                const dates = res.dates || [];
+                const data = res.data || [];
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="15" class="empty">데이터가 없습니다. [데이터 수동 취합]을 실행해보세요.</td></tr>';
+                    return;
+                }
+
+                // 2. 헤더 동적 생성 (용도 | 스토어명 | 날짜들... | 유입수흐름)
+                let headerHtml = '<tr style="background: #f8f9fa;">';
+                headerHtml += '<th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left; cursor: pointer;" onclick="sortMarketingTable(\'mktPerformanceTableMain\', 0)">용도 ↕</th>';
+                headerHtml += '<th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: left; cursor: pointer;" onclick="sortMarketingTable(\'mktPerformanceTableMain\', 1)">스토어명 ↕</th>';
+
+                // 날짜 컬럼
+                dates.forEach((date, idx) => {
+                    let displayDate = date;
+                    let style = 'padding: 10px; border-bottom: 2px solid #dee2e6; text-align: right; cursor: pointer; min-width: 80px;';
+
+                    // 오늘 날짜(마지막 날짜)는 "Today"로 표시하고 배경색 강조 및 가운데 정렬
+                    if (idx === dates.length - 1) {
+                        displayDate = "Today";
+                        style += ' background-color: #fff3cd; font-weight: bold; border-bottom: 2px solid #ffecb3; text-align: center;';
+                    }
+
+                    headerHtml += `<th style="${style}" onclick="sortMarketingTable('mktPerformanceTableMain', ${idx + 2}, 'num')">${displayDate}</th>`;
+                });
+
+                // 유입수흐름 컬럼 (주간 흐름 이모티콘)
+                headerHtml += '<th style="padding: 10px; border-bottom: 2px solid #dee2e6; text-align: center; cursor: pointer; width: 150px;">유입수흐름 (7일)</th>';
+                headerHtml += '</tr>';
+
+                if (tableHead) tableHead.innerHTML = headerHtml;
+
+                // 3. 바디 생성
+                const rowsHtml = data.map(item => {
+                    const storeName = item.store;
+                    const usage = item.usage || '-';
+                    const values = item.values || {};
+
+                    // 날짜별 셀 생성 (값 + 증감표시)
+                    const dateCells = dates.map((date, idx) => {
+                        const val = values[date] !== undefined ? values[date] : 0;
+                        // 메인 값은 검정색 (기본)
+                        let cellContent = `<span style="color: #333;">${val.toLocaleString()}</span>`;
+                        let cellStyle = 'text-align: right; font-size: 13px;';
+
+                        // Today 컬럼 배경 강조
+                        if (idx === dates.length - 1) {
+                            cellStyle += ' background-color: #fff3cd; font-weight: bold;';
+                        }
+
+                        // 전일 대비 증감 계산 및 표시 (indx > 0 일 때만)
+                        if (idx > 0) {
+                            const prevDate = dates[idx - 1];
+                            const prevVal = values[prevDate] !== undefined ? values[prevDate] : 0;
+                            const diff = val - prevVal;
+
+                            if (prevVal > 0 || val > 0) { // 둘 다 0이면 표시 안 함
+                                if (diff > 0) {
+                                    // 괄호 안에만 빨간색 적용
+                                    cellContent += ` <span style="font-size: 11px; color: #e53935;">(+${diff})</span>`;
+                                } else if (diff < 0) {
+                                    // 괄호 안에만 파란색 적용
+                                    cellContent += ` <span style="font-size: 11px; color: #1976d2;">(${diff})</span>`;
+                                } else {
+                                    cellContent += ` <span style="font-size: 11px; color: #999;">(-)</span>`;
+                                }
+                            }
+                        }
+
+                        return `<td style="${cellStyle}">${cellContent}</td>`;
+                    }).join('');
+
+                    // 유입수 흐름 (Sparkline 이모티콘)
+                    // 최근 7일(가능한 만큼)의 추이를 🔺🔻➖ 로 표시
+                    let flowHtml = '';
+                    const flowLength = 7;
+                    const startIdx = Math.max(1, dates.length - flowLength); // 최소 1부터 시작 (전일대비가 필요하므로)
+
+                    if (dates.length > 1) {
+                        const trends = [];
+                        for (let i = startIdx; i < dates.length; i++) {
+                            const curr = values[dates[i]] || 0;
+                            const prev = values[dates[i - 1]] || 0;
+                            const diff = curr - prev;
+
+                            if (diff > 0) trends.push('<span style="color: #e53935; font-weight: bold;">▲</span>');
+                            else if (diff < 0) trends.push('<span style="color: #1976d2; font-weight: bold;">▼</span>');
+                            else trends.push('<span style="color: #999;">━</span>');
+                        }
+                        flowHtml = `<span style="font-size: 10px; letter-spacing: -1px;">${trends.join('')}</span>`;
+                    } else {
+                        flowHtml = '<span style="color: #ccc;">-</span>';
+                    }
+
+                    return `<tr>
+                        <td>${usage}</td>
+                        <td style="font-weight: 500;">${storeName}</td>
+                        ${dateCells}
+                        <td style="text-align: center;">${flowHtml}</td>
+                    </tr>`;
+                }).join('');
+
+                tableBody.innerHTML = rowsHtml;
+
+                // 요약 카드 업데이트 (전체 합계)
+                updateMarketingSummaryCards(dates, data);
+
+            } catch (e) {
+                console.error(e);
+                tableBody.innerHTML = `<tr><td colspan="15" class="error">로드 오류: ${e.message}</td></tr>`;
+            }
+        };
+
+        // 요약 카드 업데이트 함수
+        function updateMarketingSummaryCards(dates, data) {
+            if (!dates || dates.length === 0) return;
+
+            // 가장 최근 날짜 기준
+            const lastDate = dates[dates.length - 1];
+            let totalVisitors = 0;
+
+            data.forEach(item => {
+                const val = (item.values && item.values[lastDate]) || 0;
+                totalVisitors += val;
+            });
+
+            const elVisitors = document.getElementById('mktOverallVisitors');
+            if (elVisitors) elVisitors.innerText = totalVisitors.toLocaleString();
+
+            // 다른 카드는 데이터가 없으므로 '-' 처리하거나 숨김
+            // mktOverallPageviews, mktOverallConvRate, mktOverallBounceRate
+        }
+    </script>
 </body>
 
 </html>

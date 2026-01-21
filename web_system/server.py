@@ -17,14 +17,10 @@ import re
 import sys
 import json
 import time
-
-print("\n" + "="*50)
-print("🚀 [2026-01-12 UPDATED] WEB SYSTEM SERVER STARTING...")
-print("🚀 [CHECK] IF YOU SEE THIS, THE CODE IS RELOADED.")
-print("="*50 + "\n")
-
 import asyncio
 import hashlib
+import threading
+
 import secrets
 import requests
 from pathlib import Path
@@ -68,7 +64,7 @@ env_path = APP_DIR / ".env"
 if not env_path.exists():
     env_path = APP_DIR.parent / ".env"
 load_dotenv(env_path)
-print(f"📁 .env 로드: {env_path} (존재: {env_path.exists()})")
+print(f"[ENV] .env 로드: {env_path} (존재: {env_path.exists()})")
 
 # Playwright 브라우저 경로 설정 (sms_gui.py와 동일 - 다른 PC에서도 작동하도록)
 PLAYWRIGHT_BROWSER_DIR = os.environ.get(
@@ -76,11 +72,12 @@ PLAYWRIGHT_BROWSER_DIR = os.environ.get(
     str(APP_DIR / "pw_browsers")
 )
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = PLAYWRIGHT_BROWSER_DIR
-print(f"🌐 Playwright 브라우저 경로: {PLAYWRIGHT_BROWSER_DIR}")
+print(f"[PLAYWRIGHT] Playwright 브라우저 경로: {PLAYWRIGHT_BROWSER_DIR}")
 
-# Playwright (SMS 브라우저) - sync_playwright 사용 (sms_gui.py와 동일)
-from playwright.sync_api import sync_playwright, Page, BrowserContext as SyncBrowserContext
+# Playwright (SMS 브라우저) - async_playwright 전용
+# (sync_playwright import 제거됨)
 
+    
 # 구글 시트 설정
 def get_rel_path(env_key, default_name):
     env_val = os.environ.get(env_key)
@@ -142,7 +139,7 @@ SHEET_COLUMNS = [
     "플랫폼",
     "아이디",
     "패스워드",
-    "쇼핑몰 별칭",
+    "스토어명",
     "사업자번호",
     "스마트스토어 API 연동용 판매자ID",
     "스마트스토어 애플리케이션 ID",
@@ -155,6 +152,12 @@ SHEET_COLUMNS = [
     "ESM통합비밀번호"  # ESM통합 계정 비밀번호
 ]
 
+# 스토어명 헤더 별칭 목록 (통일)
+STORE_NAME_ALIASES = [
+    "스토어명", "store_name", "쇼핑몰 별칭", "쇼핑몰별칭", 
+    "계정명", "계정", "별칭", "사업자", "이름"
+]
+
 # 세션 설정
 SESSION_EXPIRE_HOURS = 8
 SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
@@ -162,6 +165,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 # 서버 설정
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", 8000))
+# PORT = 8001
 
 # ========== 스케줄러 설정 ==========
 scheduler = AsyncIOScheduler(
@@ -202,6 +206,7 @@ async def execute_scheduled_task(schedule_id: str, platform: str, task: str, sto
             env = os.environ.copy()
             env["SERVICE_ACCOUNT_JSON"] = os.environ.get("SERVICE_ACCOUNT_JSON", "")
             env["SPREADSHEET_KEY"] = os.environ.get("SPREADSHEET_KEY", "")
+            env["DELETE_SOURCE_SPREADSHEET_KEY"] = SALES_SHEET_ID
             env["PARALLEL_STORES"] = "true"
             env["PARALLEL_WORKERS"] = "4"
             env["PYTHONIOENCODING"] = "utf-8"
@@ -344,6 +349,7 @@ class SMSMessage:
     content: str
     timestamp: str
     auth_code: Optional[str] = None
+    unread: bool = False  # 안읽음 상태
 
 # ========== 권한 레벨 ==========
 # 구글 시트 "담당자" 탭의 "권한" 열에 입력
@@ -425,6 +431,14 @@ class GoogleSheetManager:
         self.client = None
         self.sheet = None
         self.connected = False
+        self._cache = {}  # (sheet_key, worksheet_name) -> records
+        self._cache_time = {}  # (sheet_key, worksheet_name) -> timestamp
+        self._worksheet_names_cache = {} # sheet_key -> list of names
+        self._worksheet_names_time = {} # sheet_key -> timestamp
+        self._cache_lock = threading.Lock()
+        self.CACHE_TTL = 12 * 3600  # 12시간 캐시
+        self.LIST_CACHE_TTL = 3600   # 워크시트 목록은 1시간 캐시
+        self.MARKETING_CACHE_FILE = os.path.join(APP_DIR, "marketing_cache.json")
     
     def connect(self):
         try:
@@ -450,6 +464,386 @@ class GoogleSheetManager:
             print(f"❌ 구글 시트 연결 실패: {e}")
             self.connected = False
             return False
+
+    def get_market_status(self, force_refresh=False) -> Dict[str, Dict]:
+        """마켓상태현황 탭에서 스토어별 판매액 및 상태 등 조회"""
+        if not self.connected:
+            if not self.connect():
+                return {}
+        
+        # 캐시 확인 (5분)
+        cache_key = (SPREADSHEET_KEY, "마켓상태현황")
+        now = time.time()
+        if not force_refresh and cache_key in self._cache:
+            if now - self._cache_time.get(cache_key, 0) < 300: # 5분 캐시
+                return self._cache[cache_key]
+        
+        try:
+            ws = self.sheet.worksheet("마켓상태현황")
+            all_values = ws.get_all_values()
+            
+            if not all_values: return {}
+            
+            headers = all_values[0]
+            # Headers Check: ['스토어명', ..., '판매액']
+            
+            # 인덱스 찾기
+            try:
+                idx_name = -1
+                idx_revenue = -1
+                for i, h in enumerate(headers):
+                    h_clean = h.strip()
+                    if h_clean in STORE_NAME_ALIASES: idx_name = i
+                    elif h_clean == "판매액": idx_revenue = i
+                
+                if idx_name == -1 or idx_revenue == -1:
+                    print(f"❌ 마켓상태현황 헤더 매칭 실패: {headers} (스토어명 또는 판매액 없음)")
+                    return {}
+            except Exception as e:
+                print(f"❌ 마켓상태현황 헤더 파싱 오류: {e}")
+                return {}
+
+            status_map = {}
+            for row in all_values[1:]:
+                if len(row) <= max(idx_name, idx_revenue): continue
+                
+                store_name = row[idx_name].strip()
+                if not store_name: continue
+                
+                # 판매액 파싱 (쉼표, 원 등 제거)
+                raw_revenue = row[idx_revenue].strip()
+                try:
+                    revenue = int(str(raw_revenue).replace(",", "").replace("원", ""))
+                except:
+                    revenue = 0
+                
+                # 스토어명 정규화 (괄호 내용 제거, 공백 제거)
+                # 예: "루센코(스마트스토어)" -> "루센코"
+                import re
+                normalized_name = re.sub(r'\(.*?\)', '', store_name).strip()
+                
+                status_map[store_name] = {
+                    "revenue": revenue,
+                    "raw_row": row
+                }
+                # 정규화된 이름으로도 매핑 추가 (단, 원본 이름이 우선)
+                if normalized_name and normalized_name != store_name:
+                    if normalized_name not in status_map:
+                         status_map[normalized_name] = {
+                            "revenue": revenue,
+                            "raw_row": row
+                        }
+            
+            # 캐시 업데이트
+            with self._cache_lock:
+                self._cache[cache_key] = status_map
+                self._cache_time[cache_key] = now
+            
+            print(f"✅ 마켓상태현황 로드 완료: {len(status_map)}개 스토어")
+            return status_map
+            
+        except Exception as e:
+            print(f"❌ 마켓상태현황 조회 실패: {e}")
+            return {}
+
+    async def sync_manual_marketing_data(self):
+        """각 스토어 시트에서 T2(방문자수) 값을 직접 읽어와서 저장 (수동 취합)"""
+        if not self.connected:
+            if not self.connect():
+                return {"success": False, "message": "Google Sheets 연결 실패"}
+
+        print("🔄 [Manual Sync] Starting T2 cell collection...")
+        
+        # 1. 계정 목록 가져오기 (시트 URL 확인용)
+        accounts = self.get_accounts()
+        if not accounts:
+            return {"success": False, "message": "등록된 계정이 없습니다."}
+            
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        updated_count = 0
+        
+        # 이력 파일 로드
+        stats_file = os.path.join(APP_DIR, "marketing_stats.json")
+        history_data = {}
+        if os.path.exists(stats_file):
+            try:
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    history_data = json.load(f)
+            except: pass
+
+        results = []
+
+        for acc in accounts:
+            store_name = acc.get('name')
+            sheet_url = acc.get('sheet_url') # 계정 시트 URL
+            if not store_name or not sheet_url:
+                continue
+                
+            try:
+                # 시트 열기
+                try:
+                    doc = self.client.open_by_url(sheet_url)
+                    # "종합" 탭 또는 첫 번째 탭 가정. 
+                    # T2 셀이 있는 시트명을 정확히 알아야 함. 보통 첫번째 시트(dashboard)일 가능성 높음.
+                    # 사용자 요청: "데이터 수동취합 누르면 각 계정에 T2값을 가져와서"
+                    # 기본적으로 첫 번째 시트를 대상으로 함.
+                    ws = doc.get_worksheet(0) 
+                except Exception as e:
+                    print(f"⚠️ {store_name} 시트 열기 실패: {e}")
+                    results.append(f"{store_name}: 시트 접속 실패")
+                    continue
+
+                # T2 셀 값 읽기 (방문자수)
+                t2_val = ws.acell('T2').value
+                
+                # 숫자 파싱
+                visitors = 0
+                if t2_val:
+                    try:
+                        visitors = int(str(t2_val).replace(',', '').replace('명', '').strip())
+                    except:
+                        visitors = 0
+                
+                print(f"✅ {store_name}: T2 Visit Count = {visitors}")
+                
+                # 데이터 저장
+                if store_name not in history_data:
+                    history_data[store_name] = {}
+                
+                history_data[store_name][today_str] = {
+                    "visitors": visitors,
+                    "updated_at": datetime.now().strftime("%H:%M:%S"),
+                    "source": "manual_T2"
+                }
+
+                # T2 값 업데이트 결과를 리스트에 저장
+                results.append(f"{store_name}: {visitors}명")
+                updated_count += 1
+                
+            except Exception as e:
+                print(f"❌ {store_name} 처리 중 오류: {e}")
+                results.append(f"{store_name}: 오류 ({str(e)[:20]})")
+
+        # 파일 저장
+        try:
+            with open(stats_file, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"❌ 이력 파일 저장 실패: {e}")
+            
+        return {
+            "success": True, 
+            "message": f"{updated_count}개 스토어 업데이트 완료",
+            "details": results
+        }
+
+    def get_marketing_data(self, force_refresh=False) -> Dict[str, Dict]:
+        """마케팅 시트 '전체데이터' 탭에서 스토어별 매출/유입/주문 집계 및 이력 관리"""
+        if not self.connected:
+            if not self.connect():
+                return {}
+
+        # 캐시 확인 (5분)
+        cache_key = (MARKETING_SPREADSHEET_KEY, "전체데이터")
+        now = time.time()
+        
+        if not force_refresh:
+            # 1. 메모리 캐시 확인
+            if cache_key in self._cache:
+                if now - self._cache_time.get(cache_key, 0) < 300:
+                    print("[CACHE] Using memory marketing data")
+                    return self._cache[cache_key]
+            
+            # 2. 파일 캐시 확인 (메모리에 없으면)
+            if os.path.exists(self.MARKETING_CACHE_FILE):
+                try:
+                    with open(self.MARKETING_CACHE_FILE, 'r', encoding='utf-8') as f:
+                        print("[CACHE] Using persistent marketing data")
+                        data = json.load(f)
+                        
+                        # [Smart Validation] 캐시 데이터가 유효한지 검사 (매출 정보가 전부 0이면 무효)
+                        has_valid_revenue = any(d.get("revenue", 0) > 0 for d in data.values()) if data else False
+                        if not has_valid_revenue and data:
+                            print("[CACHE] Cached data seems invalid (All revenue 0). Forcing refresh.")
+                            # 캐시 무시하고 진행
+                        else:
+                            with self._cache_lock:
+                                self._cache[cache_key] = data
+                                self._cache_time[cache_key] = now
+                            return data
+                except: pass
+
+        try:
+            # 1. 시트 데이터 가져오기 (전체데이터)
+            print(f"[Marketing] Fetching data from {MARKETING_SPREADSHEET_KEY}...")
+             # 시트 키가 다를 수 있으므로 명시적으로 열기
+            try:
+                sheet = self.client.open_by_key(MARKETING_SPREADSHEET_KEY)
+                ws = sheet.worksheet("전체데이터")
+            except Exception as e:
+                print(f"❌ 마케팅 시트 열기 실패: {e}")
+                return {}
+
+            all_values = ws.get_all_values()
+            if not all_values: return {}
+            
+            headers = all_values[0]
+            # Headers: ['수집일시', '스토어명', ..., '방문횟수', '유입수', '클릭수', '전환수', '판매액']
+            
+            try:
+                idx_store = -1
+                
+                # 스토어명 컬럼 찾기 (STORE_NAME_ALIASES 활용)
+                for i, h in enumerate(headers):
+                    if h.strip() in STORE_NAME_ALIASES:
+                        idx_store = i
+                        break
+                        
+                # 판매액, 유입수 등 컬럼 찾기 (공백 등 처리를 위해 루프 사용 권장되나 index 시도)
+                idx_revenue = -1
+                idx_visitors = -1
+                idx_orders = -1
+
+                for i, h in enumerate(headers):
+                    h_clean = h.strip()
+                    if h_clean in ["판매액", "매출", "매출액", "총결제금액", "결제금액"]: idx_revenue = i
+                    elif h_clean in ["유입수", "방문횟수", "방문자", "방문자수"]: idx_visitors = i
+                    elif h_clean in ["전환수", "결제건수", "주문수", "판매건수"]: idx_orders = i
+                
+                if idx_store == -1 or idx_revenue == -1:
+                     print(f"❌ 마케팅 데이터 필수 헤더 누락: {headers} (스토어명 확인 필요)")
+                     return {}
+                
+            except ValueError:
+                print("❌ 마케팅 데이터 헤더 매칭 실패")
+                return {}
+
+            # 2. 데이터 집계 (스토어별)
+            # {store_name: {revenue: 0, visitors: 0, orders: 0}}
+            current_stats = {}
+            
+            for row in all_values[1:]:
+                if len(row) <= idx_store: continue
+                store_name = row[idx_store].strip()
+                if not store_name: continue
+                
+                # 값 파싱
+                def parse_int(val):
+                    try: return int(str(val).replace(",", "").replace("원", "").strip())
+                    except: return 0
+                
+                rev_raw = row[idx_revenue] if idx_revenue != -1 and idx_revenue < len(row) else "0"
+                rev = parse_int(rev_raw)
+                
+                vis = parse_int(row[idx_visitors]) if idx_visitors != -1 and idx_visitors < len(row) else 0
+                ord_ = parse_int(row[idx_orders]) if idx_orders != -1 and idx_orders < len(row) else 0
+
+                if len(current_stats) < 5: # Debug first 5 rows
+                    print(f"[DEBUG_REV] Store: {store_name}, Raw Revenue: '{rev_raw}', Parsed: {rev}")
+                
+                if store_name not in current_stats:
+                    current_stats[store_name] = {"revenue": 0, "visitors": 0, "orders": 0}
+                
+                current_stats[store_name]["revenue"] += rev
+                current_stats[store_name]["visitors"] += vis
+                current_stats[store_name]["orders"] += ord_
+
+            # 3. 이력 관리 (marketing_stats.json) - 일별 데이터 기록
+            stats_file = os.path.join(APP_DIR, "marketing_stats.json")
+            history_data = {}
+            if os.path.exists(stats_file):
+                try:
+                    with open(stats_file, 'r', encoding='utf-8') as f:
+                        history_data = json.load(f)
+                except: pass
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            
+            for store, data in current_stats.items():
+                if store not in history_data:
+                    history_data[store] = {}
+                
+                # 오늘 데이터 업데이트 (덮어쓰기)
+                history_data[store][today_str] = {
+                    "visitors": data["visitors"],
+                    "orders": data["orders"],
+                    "revenue": data["revenue"]
+                }
+                
+                # 10일치 유지 (오래된 키 삭제)
+                dates = sorted(history_data[store].keys())
+                if len(dates) > 10:
+                    for d in dates[:-10]:
+                        del history_data[store][d]
+            
+            # 파일 저장
+            try:
+                with open(stats_file, 'w', encoding='utf-8') as f:
+                    json.dump(history_data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"❌ 마케팅 이력 저장 실패: {e}")
+
+            # 4. 결과 반환 (현재 집계 + 이력 분석 결과)
+            final_data = {}
+            for store, data in current_stats.items():
+                # 리뉴얼 기준 분석
+                # 1) 5일 연속 방문자 감소
+                # 2) 7일간 주문 0건
+                
+                is_declining = False
+                zero_orders_7days = False
+                
+                hist = history_data.get(store, {})
+                sorted_dates = sorted(hist.keys(), reverse=True) # 최신순 [오늘, 어제, ...]
+                
+                # 5일 연속 감소 체크 (데이터가 5일 이상 있어야 함)
+                if len(sorted_dates) >= 5:
+                    v = [hist[d]["visitors"] for d in sorted_dates[:5]]
+                    # v[0] (오늘) < v[1] (어제) < v[2] < v[3] < v[4]
+                    if v[4] > v[3] > v[2] > v[1] > v[0]:
+                        is_declining = True
+                
+                # 7일간 주문 0건 체크
+                check_days = sorted_dates[:7]
+                if len(check_days) > 0:
+                     recent_orders = sum(hist[d]["orders"] for d in check_days)
+                     if recent_orders == 0 and len(check_days) >= 1: # 데이터가 있는 한 0건인지 체크
+                        zero_orders_7days = True
+
+                final_data[store] = {
+                    "revenue": data["revenue"],
+                    "visitors": data["visitors"],
+                    "orders": data["orders"],
+                    "is_declining": is_declining,
+                    "zero_orders": zero_orders_7days,
+                    "history": hist
+                }
+                
+                # 정규화된 이름 매핑 추가
+                import re
+                norm_name = re.sub(r'\(.*?\)', '', store).strip()
+                if norm_name and norm_name != store:
+                    if norm_name not in final_data:
+                        final_data[norm_name] = final_data[store]
+
+            # 캐시 업데이트
+            with self._cache_lock:
+                self._cache[cache_key] = final_data
+                self._cache_time[cache_key] = now
+                # 파일Persistent 캐시 저장
+                try:
+                    with open(self.MARKETING_CACHE_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(final_data, f, ensure_ascii=False, indent=2)
+                except: pass
+            
+            print(f"✅ 마케팅 데이터 로드 완료: {len(final_data)}개 스토어")
+            return final_data
+
+        except Exception as e:
+            print(f"❌ 마케팅 데이터 조회 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
     
     def get_worksheet(self, name: str):
         if not self.connected:
@@ -458,6 +852,29 @@ class GoogleSheetManager:
             return self.sheet.worksheet(name)
         except:
             return None
+
+    def get_worksheet_names_with_cache(self, sheet_key: str = None, force_refresh: bool = False) -> List[str]:
+        """워크시트 목록 가져오기 (캐시 적용)"""
+        s_key = sheet_key or SPREADSHEET_KEY
+        with self._cache_lock:
+            now = time.time()
+            if not force_refresh and s_key in self._worksheet_names_cache:
+                if (now - self._worksheet_names_time.get(s_key, 0)) < self.LIST_CACHE_TTL:
+                    return self._worksheet_names_cache[s_key]
+
+        try:
+            if not self.connected: self.connect()
+            target_sheet = self.client.open_by_key(s_key) if sheet_key else self.sheet
+            worksheets = target_sheet.worksheets()
+            names = [ws.title for ws in worksheets]
+            
+            with self._cache_lock:
+                self._worksheet_names_cache[s_key] = names
+                self._worksheet_names_time[s_key] = now
+            return names
+        except Exception as e:
+            print(f"❌ 워크시트 목록 로드 실패 ({s_key}): {e}")
+            return self._worksheet_names_cache.get(s_key, [])
 
     def get_external_worksheet(self, key: str, name: str):
         """특정 키를 가진 외부 스프레드시트의 워크시트 가져오기"""
@@ -485,17 +902,91 @@ class GoogleSheetManager:
             print(f"❌ 외부 인증 시트 로드 실패 ({ws_name}): {e}")
             return None
     
-    # 담당자 인증
-    def verify_user(self, username: str, password: str) -> Dict:
-        ws = self.get_worksheet(USERS_TAB)
-        if not ws:
-            # 시트 없으면 기본 계정 허용 (admin/admin)
-            if username == "admin" and password == "admin":
-                return {"success": True, "name": "관리자", "role": ROLE_ADMIN}
-            return {"success": False, "name": "", "role": ""}
+    def get_records_with_cache(self, ws_name: str, sheet_key: str = None, force_refresh: bool = False) -> List[Dict]:
+        """캐시를 사용하여 워크시트 레코드 가져오기"""
+        s_key = sheet_key or SPREADSHEET_KEY
+        cache_key = (s_key, ws_name)
+        
+        with self._cache_lock:
+            now = time.time()
+            if not force_refresh and cache_key in self._cache and (now - self._cache_time.get(cache_key, 0)) < self.CACHE_TTL:
+                return self._cache[cache_key]
+        
+        # 캐시 없거나 만료됨 또는 강제 새로고침 -> API 호출
+        try:
+            if sheet_key and sheet_key != SPREADSHEET_KEY:
+                ws = self.get_external_worksheet(sheet_key, ws_name)
+            else:
+                ws = self.get_worksheet(ws_name)
+            
+            if not ws:
+                return []
+                
+            print(f"[CACHE] Fetching fresh records: {ws_name} (force={force_refresh})")
+            # get_all_records 대신 get_all_values를 사용하여 수동 파싱 (헤더 중복이나 공백 문제 방지)
+            all_values = ws.get_all_values()
+            if not all_values:
+                return []
+                
+            headers = [str(h).strip() for h in all_values[0]]
+            records = []
+            for row in all_values[1:]:
+                # 행의 길이를 헤더와 맞춤
+                row_data = row + [""] * (len(headers) - len(row))
+                record = {headers[i]: row_data[i] for i in range(len(headers)) if headers[i]}
+                records.append(record)
+                
+            print(f"[CACHE] Loaded {len(records)} records from {ws_name}")
+            
+            with self._cache_lock:
+                self._cache[cache_key] = records
+                self._cache_time[cache_key] = time.time()
+            return records
+        except Exception as e:
+            print(f"❌ 시트 데이터 읽기 실패 ({ws_name}): {e}")
+            with self._cache_lock:
+                return self._cache.get(cache_key, [])
+
+    def get_values_with_cache(self, ws_name: str, sheet_key: str = None, force_refresh: bool = False) -> List[List]:
+        """캐시를 사용하여 워크시트 전체 값(get_all_values) 가져오기"""
+        s_key = sheet_key or SPREADSHEET_KEY
+        cache_key = (s_key, ws_name, "values")
+        
+        with self._cache_lock:
+            now = time.time()
+            if not force_refresh and cache_key in self._cache and (now - self._cache_time.get(cache_key, 0)) < self.CACHE_TTL:
+                return self._cache[cache_key]
         
         try:
-            records = ws.get_all_records()
+            if sheet_key and sheet_key != SPREADSHEET_KEY:
+                ws = self.get_external_worksheet(sheet_key, ws_name)
+            else:
+                ws = self.get_worksheet(ws_name)
+                
+            if not ws:
+                return []
+                
+            print(f"[CACHE] Fetching fresh values: {ws_name} (force={force_refresh})")
+            values = ws.get_all_values()
+            with self._cache_lock:
+                self._cache[cache_key] = values
+                self._cache_time[cache_key] = time.time()
+            return values
+        except Exception as e:
+            print(f"❌ 시트 값 읽기 실패 ({ws_name}): {e}")
+            with self._cache_lock:
+                return self._cache.get(cache_key, [])
+    
+    # 담당자 인증
+    def verify_user(self, username: str, password: str, force_refresh: bool = False) -> Dict:
+        try:
+            records = self.get_records_with_cache(USERS_TAB, force_refresh=force_refresh)
+            if not records:
+                # 시트 없거나 비어있으면 기본 계정 허용 (admin/admin)
+                if username == "admin" and password == "admin":
+                    return {"success": True, "name": "관리자", "role": ROLE_ADMIN}
+                return {"success": False, "name": "", "role": ""}
+            
             pw_hash = hashlib.sha256(password.encode()).hexdigest()
             
             for row in records:
@@ -537,13 +1028,12 @@ class GoogleSheetManager:
             return {"success": False, "name": "", "role": ""}
     
     # 계정 목록 조회
-    def get_accounts(self, platform: str = None) -> List[Dict]:
-        ws = self.get_worksheet(ACCOUNTS_TAB)
-        if not ws:
-            return []
-        
+    def get_accounts(self, platform: str = None, force_refresh: bool = False) -> List[Dict]:
         try:
-            records = ws.get_all_records()
+            records = self.get_records_with_cache(ACCOUNTS_TAB, force_refresh=force_refresh)
+            if not records:
+                return []
+            
             accounts = []
             
             # 첫 번째 레코드의 컬럼명 출력 (디버그)
@@ -555,12 +1045,17 @@ class GoogleSheetManager:
                 print(f"[계정목록] ESM 관련 컬럼: {esm_keys}")
             
             for idx, row in enumerate(records):
-                # 스토어명: 스토어명 우선, 하위 호환용으로 다른 컬럼명도 체크
-                store_name = (row.get("스토어명", "") or 
-                              row.get("쇼핑몰 별칭", "") or 
-                              row.get("스토어명", "") or 
-                              row.get("마켓명", "") or
-                              row.get("계정명", ""))
+                # 스토어명: STORE_NAME_ALIASES 활용하여 자동 매칭
+                store_name = ""
+                for alias in STORE_NAME_ALIASES:
+                    if row.get(alias):
+                        store_name = row.get(alias)
+                        break
+                
+                # 그래도 없으면 첫 번째 키값을 스토어명으로 간주하거나 빈값
+                if not store_name:
+                    # fallback (거의 발생 안함)
+                    pass
                 
                 # ESM ID/PW: 공백 포함된 키도 시도
                 esm_id = ""
@@ -771,6 +1266,9 @@ class SMSBrowserManager:
         self.image_cache: Dict[str, Dict[str, str]] = {}  # {sender: {element_idx: filepath}} - 번호별 이미지 캐시
         self.image_cache_limit = 10  # 번호당 최대 캐시 수
         self.cache_file = APP_DIR / "sms_cache.json"
+        self.api_log_file = APP_DIR / "sms_api_log.json"  # API 분석용 로그
+        self.captured_apis: List[dict] = []  # 캡처된 API 요청들
+        self.api_capture_enabled = False  # API 캡처 활성화 플래그
         self.lock = asyncio.Lock()  # 동시 실행 방지를 위한 락 추가
         self.load_cache()
 
@@ -934,7 +1432,7 @@ class SMSBrowserManager:
             if source_local_state.exists():
                 import shutil
                 shutil.copy2(source_local_state, profile_dir / "Local State")
-                print(f"📋 [{profile_id}] 브라우저 식별자 복사됨 (from sms_gui)")
+                print(f"[BROWSER] [{profile_id}] 브라우저 식별자 복사됨 (from sms_gui)")
         else:
             profile_dir.mkdir(parents=True, exist_ok=True)
         
@@ -1008,47 +1506,144 @@ class SMSBrowserManager:
                         }
                     })
             except Exception as e:
-                print(f"⚠️ [{profile_id}] 창 크기 강제 설정 실패: {e}")
+                print(f"[WARN] [{profile_id}] 창 크기 강제 설정 실패: {e}")
             
             self.browsers[profile_id] = context
             self.pages[profile_id] = page
             self.ready[profile_id] = True
-            
+
+            # API 캡처 리스너 등록 (분석용)
+            if self.api_capture_enabled:
+                await self._setup_api_capture(page, profile_id)
+
             # sms_gui.py와 동일하게 초기화 (멀티 세션 지원을 위해 필수)
             await self._clear_emulation_overrides(page, context)
             await self._stabilize_messages_ui(page, context)
             await self._ensure_conversation_visible(page)
-            
-            print(f"✅ [{profile_id}] 브라우저 시작됨")
+
+            print(f"[SUCCESS] [{profile_id}] 브라우저 시작됨")
             
         except Exception as e:
-            print(f"❌ [{profile_id}] 브라우저 시작 실패: {e}")
+            print(f"[ERROR] [{profile_id}] 브라우저 시작 실패: {e}")
             self.ready[profile_id] = False
     
     async def launch_all(self):
         """모든 브라우저 실행 (async)"""
         for profile_id in PHONE_PROFILES:
             await self.launch_browser(profile_id)
+
+    async def _setup_api_capture(self, page: Page, profile_id: str):
+        """네트워크 요청 캡처 설정 (API 분석용)"""
+        async def on_request(request):
+            url = request.url
+            # 구글 메시지 관련 API만 캡처
+            if any(x in url for x in ['messages.google.com', 'instantmessaging', 'tachyon', 'mobilemessaging']):
+                try:
+                    api_entry = {
+                        "profile": profile_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "method": request.method,
+                        "url": url,
+                        "headers": dict(request.headers),
+                        "post_data": request.post_data[:2000] if request.post_data else None
+                    }
+                    self.captured_apis.append(api_entry)
+                    # 최대 500개 유지
+                    if len(self.captured_apis) > 500:
+                        self.captured_apis = self.captured_apis[-500:]
+                    print(f"  [API] {request.method} {url[:100]}")
+                except:
+                    pass
+
+        async def on_response(response):
+            url = response.url
+            if any(x in url for x in ['messages.google.com', 'instantmessaging', 'tachyon', 'mobilemessaging']):
+                try:
+                    # 기존 캡처에 응답 정보 추가
+                    for entry in reversed(self.captured_apis):
+                        if entry.get("url") == url and "response_status" not in entry:
+                            entry["response_status"] = response.status
+                            try:
+                                body = await response.text()
+                                entry["response_body"] = body[:5000] if body else None
+                            except:
+                                pass
+                            break
+                except:
+                    pass
+
+        page.on("request", on_request)
+        page.on("response", on_response)
+        print(f"[API분석] [{profile_id}] 네트워크 캡처 활성화됨")
+
+    def enable_api_capture(self, enable: bool = True):
+        """API 캡처 활성화/비활성화"""
+        self.api_capture_enabled = enable
+        if enable:
+            print("[API분석] API 캡처 활성화됨 - 브라우저 재시작 필요")
+        else:
+            print("[API분석] API 캡처 비활성화됨")
+
+    def get_captured_apis(self) -> List[dict]:
+        """캡처된 API 목록 반환"""
+        return self.captured_apis
+
+    def save_api_log(self):
+        """캡처된 API를 파일로 저장"""
+        try:
+            with open(self.api_log_file, 'w', encoding='utf-8') as f:
+                json.dump(self.captured_apis, f, ensure_ascii=False, indent=2)
+            print(f"[API분석] {len(self.captured_apis)}개 API 로그 저장됨: {self.api_log_file}")
+        except Exception as e:
+            print(f"[API분석] 저장 오류: {e}")
+
+    def clear_api_log(self):
+        """캡처된 API 로그 초기화"""
+        self.captured_apis = []
+        print("[API분석] API 로그 초기화됨")
     
     async def refresh_messages(self) -> List[SMSMessage]:
         """메시지 새로고침 (부분 업데이트 및 캐시 강화)"""
         async with self.lock:  # 락 적용하여 중복 실행 및 경합 방지
             updated_any = False
-            
+
             # 딕셔너리 복사본으로 순회 (동시 수정 방지)
             for profile_id, page in list(self.pages.items()):
                 if not self.ready.get(profile_id):
                     continue
-                
+
                 try:
                     # 해당 프로필의 새로운 메시지 목록 수집 (임시 리스트)
                     new_profile_messages = []
+                    # 안읽음 상태였던 항목들 추적 (캐시 후 다시 안읽음으로 표시용)
+                    unread_items_to_restore = []
+
                     # 대화 목록 항목들 가져오기
                     items = await page.locator('mws-conversation-list-item').all()
-                    
+
                     # 최대 50개까지 가져오기
                     for idx, item in enumerate(items[:50]):
                         try:
+                            # 안읽음 상태 확인 (여러 방법 시도)
+                            is_unread = await item.evaluate('''el => {
+                                // 1. is-unread 클래스 체크
+                                if (el.classList.contains("is-unread")) return true;
+                                // 2. unread 클래스 체크
+                                if (el.classList.contains("unread")) return true;
+                                // 3. aria-label에 "unread" 또는 "읽지 않음" 포함 체크
+                                const ariaLabel = el.getAttribute("aria-label") || "";
+                                if (ariaLabel.toLowerCase().includes("unread") || ariaLabel.includes("읽지 않음")) return true;
+                                // 4. 내부에 unread indicator 요소가 있는지 체크
+                                if (el.querySelector(".unread-indicator, .unread-count, [data-unread]")) return true;
+                                // 5. 볼드체 이름 (안읽음 메시지는 보통 볼드체)
+                                const nameEl = el.querySelector(".name");
+                                if (nameEl) {
+                                    const style = window.getComputedStyle(nameEl);
+                                    if (parseInt(style.fontWeight) >= 600 || style.fontWeight === "bold") return true;
+                                }
+                                return false;
+                            }''')
+
                             sender = await item.locator('.name').first.inner_text() if await item.locator('.name').count() else ""
                             content = await item.locator('.snippet, .text-content').first.inner_text() if await item.locator('.snippet, .text-content').count() else ""
                             
@@ -1099,10 +1694,15 @@ class SMSBrowserManager:
                                     sender=sender.strip(),
                                     content=content.strip()[:100],
                                     timestamp=timestamp,
-                                    auth_code=auth_code
+                                    auth_code=auth_code,
+                                    unread=is_unread  # 안읽음 상태 저장
                                 )
                                 new_profile_messages.append(msg)
-                                
+
+                                # 안읽음 상태였으면 복원 대상에 추가
+                                if is_unread:
+                                    unread_items_to_restore.append(item)
+
                                 # 최신 인증코드 업데이트 (화면의 가장 첫 번째 항목일 때)
                                 if auth_code and idx == 0:
                                     from datetime import datetime
@@ -1114,14 +1714,21 @@ class SMSBrowserManager:
                                     }
                         except:
                             continue
-                    
+
                     # 해당 프로필에서 메시지 수집에 성공했을 경우에만 목록 갱신
                     if new_profile_messages:
                         # 기존 리스트에서 해당 프로필 메시지만 제거 후 합치기
                         self.messages = [m for m in self.messages if m.phone_profile != profile_id]
                         self.messages.extend(new_profile_messages)
                         updated_any = True
-                        
+
+                    # 안읽음 상태였던 메시지들 다시 안읽음으로 표시 (우클릭 메뉴 사용)
+                    for unread_item in unread_items_to_restore:
+                        try:
+                            await self._mark_as_unread(page, unread_item)
+                        except Exception as e:
+                            print(f"[{profile_id}] 안읽음 표시 실패: {e}")
+
                 except Exception as e:
                     print(f"[{profile_id}] 메시지 읽기 오류: {e}")
             
@@ -1190,9 +1797,47 @@ class SMSBrowserManager:
             
         except:
             pass
-        
+
         # 파싱 실패 시 현재 시간
         return time.time()
+
+    async def _mark_as_unread(self, page, item):
+        """대화 항목을 읽지 않음으로 표시 (구글 메시지 우클릭 메뉴 사용)"""
+        try:
+            # 1. 해당 항목 우클릭
+            await item.click(button="right")
+            await page.wait_for_timeout(300)
+
+            # 2. 컨텍스트 메뉴에서 "읽지 않음으로 표시" 버튼 찾기 (여러 선택자 시도)
+            selectors = [
+                'button.mat-menu-item:has-text("읽지 않음")',
+                'button.mat-menu-item:has-text("Mark as unread")',
+                '[role="menuitem"]:has-text("읽지 않음")',
+                '[role="menuitem"]:has-text("Mark as unread")',
+                '.mat-menu-content button:has-text("읽지 않음")',
+                '.mat-menu-content button:has-text("Mark as unread")'
+            ]
+
+            clicked = False
+            for selector in selectors:
+                unread_btn = page.locator(selector)
+                if await unread_btn.count() > 0:
+                    await unread_btn.first.click()
+                    await page.wait_for_timeout(100)
+                    print(f"  [SMS] 안읽음으로 표시 완료")
+                    clicked = True
+                    break
+
+            if not clicked:
+                # 메뉴가 열렸지만 옵션이 없으면 ESC로 닫기
+                await page.keyboard.press("Escape")
+        except Exception as e:
+            # 실패 시 ESC로 메뉴 닫기 시도
+            try:
+                await page.keyboard.press("Escape")
+            except:
+                pass
+            raise e
 
     def _extract_auth_code(self, text: str) -> Optional[str]:
         if not text:
@@ -1449,12 +2094,14 @@ class SMSBrowserManager:
             # 메시지 읽기 (일반 메시지 + 타임스탬프 tombstone 포함)
             messages = []
             
+            # 메시지 읽기 (일반 메시지 + 타임스탬프 tombstone 포함)
+            messages = []
+            
             # 모든 메시지 관련 요소 가져오기 (메시지 + 타임스탬프)
-            # 수동 전송 중이거나 로딩 중인 메시지도 포함하도록 선택자 확장
-            all_elements = await page.locator('mws-message-wrapper, mws-tombstone-message-wrapper, mws-message-part, .message-row, .msg-part').all()
+            # mws-message-part를 제외하여 중복 수집 방지 (wrapper만 수집)
+            all_elements = await page.locator('mws-message-wrapper, mws-tombstone-message-wrapper').all()
             
             total_count = len(all_elements)
-            # print(f"[{profile_id}] 메시지 요소 발견: {total_count}개")
             
             # offset과 limit 적용
             if offset == 0:
@@ -1498,11 +2145,10 @@ class SMSBrowserManager:
                             msg_data["type"] = "message"
                             messages.append(msg_data)
                             
-                            # 인증코드 추출 확인 (디버그)
+                            # 인증코드 추출 확인
                             if msg_data.get("text"):
                                 auth_code = self._extract_auth_code(msg_data["text"])
                                 if auth_code:
-                                    print(f"  -> 인증코드 감지: {auth_code}")
                                     msg_data["auth_code"] = auth_code
                                     
                 except Exception as e:
@@ -1526,19 +2172,25 @@ class SMSBrowserManager:
     async def _parse_message_element(self, msg_el, page: Page, download_dir: Path, idx: int) -> Optional[Dict]:
         """개별 메시지 요소 파싱"""
         try:
-            # 발신/수신 구분 - 여러 패턴 체크
+            # 발신/수신 구분 - 여러 패턴 체크 (wrapper 레벨에서 체크)
             class_attr = await msg_el.get_attribute("class") or ""
             
-            # outgoing/from-me 등이 있으면 발신, 없으면 수신
+            # wrapper의 클래스로 1차 판단
             is_outgoing = any(kw in class_attr.lower() for kw in ["outgoing", "from-me", "sent", "self"])
             is_incoming = any(kw in class_attr.lower() for kw in ["incoming", "received"])
             
+            # 자식 요소(mws-message-part)의 속성으로 2차 판단 (더 정확함)
+            if not is_outgoing and not is_incoming:
+                part_el = msg_el.locator('mws-message-part').first
+                if await part_el.count():
+                    part_class = await part_el.get_attribute("class") or ""
+                    is_outgoing = "is-me" in part_class.lower()
+                    is_incoming = "is-not-me" in part_class.lower()
+
             if is_outgoing:
                 direction = "outgoing"
-            elif is_incoming:
-                direction = "incoming"
             else:
-                # 클래스로 판단 안 되면 기본 수신
+                # 기본적으로 수신으로 간주
                 direction = "incoming"
             
             # 디버그: 첫 5개 메시지만 클래스 출력 (비활성화)
@@ -2203,31 +2855,31 @@ class BulsajaManager:
             program = settings.get("program", "")
             if program:
                 ws.update_acell("C10", program)
-                self._add_log(f"📝 C10 → {program}")
+                self._add_log(f"[LOG] C10 → {program}")
                 
                 if "상품업로드" in program:
                     target_cell = "C15"
                     if settings.get("uploadMarket"):
                         ws.update_acell("C17", settings["uploadMarket"])
-                        self._add_log(f"📝 C17 → {settings['uploadMarket']}")
+                        self._add_log(f"[LOG] C17 → {settings['uploadMarket']}")
                     if settings.get("uploadCount"):
                         ws.update_acell("C18", settings["uploadCount"])
-                        self._add_log(f"📝 C18 → {settings['uploadCount']}")
+                        self._add_log(f"[LOG] C18 → {settings['uploadCount']}")
                         
                 elif "상품삭제" in program:
                     target_cell = "C29"
                     if settings.get("deleteCount"):
                         ws.update_acell("C32", settings["deleteCount"])
-                        self._add_log(f"📝 C32 → {settings['deleteCount']}")
+                        self._add_log(f"[LOG] C32 → {settings['deleteCount']}")
                         
                 elif "상품복사" in program:
                     target_cell = "C35"
                     if settings.get("copySourceMarket"):
                         ws.update_acell("C29", settings["copySourceMarket"])
-                        self._add_log(f"📝 C29 → {settings['copySourceMarket']}")
+                        self._add_log(f"[LOG] C29 → {settings['copySourceMarket']}")
                     if settings.get("copyCount"):
                         ws.update_acell("C37", settings["copyCount"])
-                        self._add_log(f"📝 C37 → {settings['copyCount']}")
+                        self._add_log(f"[LOG] C37 → {settings['copyCount']}")
                 else:
                     target_cell = "C15"
             else:
@@ -2252,7 +2904,7 @@ class BulsajaManager:
             
             while group_idx < len(groups) or running_processes:
                 if self.stop_flag:
-                    self._add_log("⏹️ 중지 요청됨")
+                    self._add_log("[STOP] 중지 요청됨")
                     break
                 
                 # 완료된 프로세스 정리
@@ -2262,10 +2914,10 @@ class BulsajaManager:
                         exit_code = proc.returncode
                         if exit_code == 0:
                             self._update_group_status(gnum, "completed", "완료")
-                            self._add_log(f"✅ 그룹 {gnum} 완료")
+                            self._add_log(f"[SUCCESS] 그룹 {gnum} 완료")
                         else:
                             self._update_group_status(gnum, "failed", f"exit: {exit_code}")
-                            self._add_log(f"❌ 그룹 {gnum} 실패 (exit={exit_code})")
+                            self._add_log(f"[ERROR] 그룹 {gnum} 실패 (exit={exit_code})")
                         running_processes.remove(proc_info)
                 
                 # 새 프로세스 시작 (동시 실행 수 이내)
@@ -2280,16 +2932,16 @@ class BulsajaManager:
                     market_name = self.group_to_market_name(gnum)
                     try:
                         ws.update_acell(target_cell, market_name)
-                        self._add_log(f"📝 {target_cell} → {market_name}")
+                        self._add_log(f"[LOG] {target_cell} → {market_name}")
                     except Exception as e:
                         self._update_group_status(gnum, "failed", f"시트 오류: {e}")
-                        self._add_log(f"❌ 그룹 {gnum} 시트 변경 실패: {e}")
+                        self._add_log(f"[ERROR] 그룹 {gnum} 시트 변경 실패: {e}")
                         continue
                     
                     # exe 실행 (별도 창에서)
                     try:
                         self._update_group_status(gnum, "running", "실행 중")
-                        self._add_log(f"🔧 exe 경로: {exe_path}")
+                        self._add_log(f"[ENV] exe 경로: {exe_path}")
                         
                         # Windows에서 별도 창으로 exe 실행
                         if os.name == "nt":
@@ -2304,18 +2956,18 @@ class BulsajaManager:
                                 cwd=str(exe_path.parent)
                             )
                         running_processes.append((proc, gnum))
-                        self._add_log(f"🚀 그룹 {gnum} exe 실행 (PID: {proc.pid})")
+                        self._add_log(f"[RUN] 그룹 {gnum} exe 실행 (PID: {proc.pid})")
                         
                         # 다음 그룹 전 간격 대기
                         if group_idx < len(groups):
-                            self._add_log(f"⏳ {group_gap}초 대기...")
+                            self._add_log(f"[WAIT] {group_gap}초 대기...")
                             for _ in range(group_gap):
                                 if self.stop_flag:
                                     break
                                 time.sleep(1)
                     except Exception as e:
                         self._update_group_status(gnum, "failed", f"실행 오류: {e}")
-                        self._add_log(f"❌ 그룹 {gnum} exe 실행 실패: {e}")
+                        self._add_log(f"[ERROR] 그룹 {gnum} exe 실행 실패: {e}")
                 
                 time.sleep(1)  # 폴링 간격
             
@@ -2330,10 +2982,10 @@ class BulsajaManager:
                 except:
                     self._update_group_status(gnum, "failed", "타임아웃")
             
-            self._add_log("✅ 모든 작업 완료!")
+            self._add_log("[SUCCESS] 모든 작업 완료!")
             
         except Exception as e:
-            self._add_log(f"❌ 오류: {e}")
+            self._add_log(f"[ERROR] 오류: {e}")
             for g in self.groups:
                 if g["status"] in ["pending", "running"]:
                     g["status"] = "failed"
@@ -2422,6 +3074,7 @@ bulsaja_manager = BulsajaManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 시작시
+    print(f"[DEBUG] Starting lifespan. Active loop: {type(asyncio.get_running_loop()).__name__}")
     gsheet.connect()
     
     # 스케줄러 시작
@@ -2438,7 +3091,7 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 print(f"[스케줄러] 복원 실패: {s.get('name')} - {e}")
     
-    # SMS 브라우저 자동 실행 (기존 오전 10시 원본 복구)
+    # SMS 브라우저 자동 실행
     async def delayed_sms_launch():
         await asyncio.sleep(5)  # 서버 완전히 뜬 후 5초 대기
         print("[서버시작] SMS 브라우저 전체 실행 중...")
@@ -2544,8 +3197,8 @@ async def login_page(request: Request):
 
 # 로그인 처리
 @app.post("/api/login")
-async def login(req: LoginRequest):
-    result = gsheet.verify_user(req.username, req.password)
+async def login(req: LoginRequest, refresh: bool = False):
+    result = gsheet.verify_user(req.username, req.password, force_refresh=refresh)
     if result["success"]:
         staff_name = result["name"] or req.username
         role = result.get("role", ROLE_VIEWER)
@@ -2624,12 +3277,12 @@ async def get_me(request: Request):
 
 # 계정 목록
 @app.get("/api/accounts")
-async def get_accounts(request: Request, platform: str = None):
+async def get_accounts(request: Request, platform: str = None, refresh: bool = False):
     get_current_user(request)
-    accounts = gsheet.get_accounts(platform)
+    accounts = gsheet.get_accounts(platform, force_refresh=refresh)
     
     # 플랫폼별 수량 계산
-    all_accounts = gsheet.get_accounts(None)
+    all_accounts = gsheet.get_accounts(None, force_refresh=refresh)
     platform_counts = {}
     for acc in all_accounts:
         p = acc.get("platform", "")
@@ -2906,6 +3559,7 @@ async def get_daily_status(request: Request):
                 key = f"{item['account']}_{item['market']}"
                 if key in status_map:
                     status_info = status_map[key]
+
                     status = status_info["status"]
                     item["note"] = status_info["note"]
                     if status == "정지": item["status"] = "stopped"
@@ -3864,6 +4518,45 @@ async def clear_auth_code(request: Request):
     
     return {"success": True, "message": "인증코드 초기화됨"}
 
+# SMS API 분석 - 캡처 활성화 (관리자 전용)
+@app.post("/api/sms/api-capture/enable")
+async def enable_sms_api_capture(request: Request):
+    """API 캡처 활성화 - 브라우저 재시작 필요"""
+    require_permission(request, "admin")
+    sms_manager.enable_api_capture(True)
+    return {"success": True, "message": "API 캡처 활성화됨. SMS 브라우저를 재시작하세요."}
+
+@app.post("/api/sms/api-capture/disable")
+async def disable_sms_api_capture(request: Request):
+    """API 캡처 비활성화"""
+    require_permission(request, "admin")
+    sms_manager.enable_api_capture(False)
+    return {"success": True, "message": "API 캡처 비활성화됨"}
+
+@app.get("/api/sms/api-capture/logs")
+async def get_sms_api_logs(request: Request):
+    """캡처된 API 로그 조회"""
+    require_permission(request, "admin")
+    return {
+        "enabled": sms_manager.api_capture_enabled,
+        "count": len(sms_manager.captured_apis),
+        "apis": sms_manager.captured_apis[-100:]  # 최근 100개만
+    }
+
+@app.post("/api/sms/api-capture/save")
+async def save_sms_api_logs(request: Request):
+    """캡처된 API 로그를 파일로 저장"""
+    require_permission(request, "admin")
+    sms_manager.save_api_log()
+    return {"success": True, "file": str(sms_manager.api_log_file), "count": len(sms_manager.captured_apis)}
+
+@app.post("/api/sms/api-capture/clear")
+async def clear_sms_api_logs(request: Request):
+    """캡처된 API 로그 초기화"""
+    require_permission(request, "admin")
+    sms_manager.clear_api_log()
+    return {"success": True, "message": "API 로그 초기화됨"}
+
 # SMS 브라우저 시작 (운영자 이상)
 @app.post("/api/sms/launch/{profile_id}")
 async def launch_sms_browser(request: Request, profile_id: str):
@@ -4116,6 +4809,296 @@ async def get_bulsaja_status(request: Request):
     get_current_user(request)
     return bulsaja_manager.get_status()
 
+@app.post("/api/bulsaja/update_account_info")
+async def update_bulsaja_account_info(request: Request):
+    """계정별 운영 정보(운영일수 등) 업데이트"""
+    get_current_user(request)
+    data = await request.json()
+    store_name = data.get("name")
+    
+    if not store_name:
+        return {"success": False, "message": "스토어명이 필요합니다."}
+
+    # 3. [New] 마켓상태현황(매출) 가져오기
+    # account_info API에서는 사용하지 않지만 로직 일관성을 위해 추가하거나 생략 가능
+    # 여기서는 dashboard_data API를 수정해야 함.
+    
+    settings_path = os.path.join(os.path.dirname(__file__), "bulsaja_settings.json")
+    settings = {}
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        except: pass
+        
+    if store_name not in settings:
+        settings[store_name] = {}
+        
+    # 지원하는 필드 업데이트
+    if "operationDays" in data:
+        settings[store_name]["operationDays"] = int(data["operationDays"])
+    if "inflowDecreaseDays" in data:
+        settings[store_name]["inflowDecreaseDays"] = int(data["inflowDecreaseDays"])
+    if "revenue30d" in data:
+        settings[store_name]["revenue30d"] = int(data["revenue30d"])
+        
+    try:
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=4)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.get("/api/bulsaja/dashboard_data_deprecated")
+async def get_bulsaja_dashboard_data_deprecated(request: Request, refresh: bool = False):
+    """자동화 대시보드용 실제 계정 데이터 조회"""
+    get_current_user(request)
+    
+    try:
+        # [2026-01-19 Updated] 마케팅 데이터 로드 (매출, 유입수, 주문수, 이력분석)
+        market_stats = gsheet.get_marketing_data(force_refresh=refresh)
+        
+        # 1. 마켓별 상품수 정보 가져오기 (get_market_summary 로직 재사용)
+        ss_counts = {} # 스마트스토어
+        st_counts = {} # 11번가
+        
+        # 스마트스토어 상품수 (등록갯수 시트)
+        try:
+            ws_counts = gsheet.sheet.worksheet("등록갯수")
+            counts_data = ws_counts.get_all_values()
+            if counts_data and len(counts_data) > 1:
+                headers = counts_data[0]
+                name_idx = next((i for i, h in enumerate(headers) if h == "스토어명"), None)
+                count_idx = next((i for i, h in enumerate(headers) if h == "판매중"), None)
+                if name_idx is not None and count_idx is not None:
+                    for row in counts_data[1:]:
+                        if len(row) > max(name_idx, count_idx):
+                            store = row[name_idx].strip()
+                            try: cnt = int(row[count_idx]) if row[count_idx] else 0
+                            except: cnt = 0
+                            if store: ss_counts[store] = cnt
+        except: pass
+
+        # 11번가 상품수 (11번가 시트)
+        try:
+            ws_11st = gsheet.sheet.worksheet("11번가")
+            st_data = ws_11st.get_all_values()
+            if st_data and len(st_data) > 1:
+                headers = st_data[0]
+                name_idx = next((i for i, h in enumerate(headers) if h in ["store_name", "쇼핑몰 별칭", "스토어명"]), None)
+                count_idx = next((i for i, h in enumerate(headers) if h in ["on_sale", "판매중"]), None)
+                if name_idx is not None and count_idx is not None:
+                    for row in st_data[1:]:
+                        if len(row) > max(name_idx, count_idx):
+                            store = row[name_idx].strip()
+                            try: cnt = int(row[count_idx]) if row[count_idx] else 0
+                            except: cnt = 0
+                            if store: st_counts[store] = cnt
+        except: pass
+
+        # ESM판매중 시트에서 지마켓/옥션 상품수 가져오기
+        esm_counts = {}
+        try:
+            ws_esm = gsheet.sheet.worksheet("ESM판매중")
+            esm_data = ws_esm.get_all_values()
+            if esm_data and len(esm_data) > 1:
+                headers = esm_data[0]
+                name_idx = next((i for i, h in enumerate(headers) if h == "스토어명"), None)
+                platform_idx = next((i for i, h in enumerate(headers) if h == "platform"), None)
+                count_idx = next((i for i, h in enumerate(headers) if h == "product_count"), None)
+                if name_idx is not None and count_idx is not None:
+                    for row in esm_data[1:]:
+                        if len(row) > max(name_idx, count_idx):
+                            store = row[name_idx].strip()
+                            plat = row[platform_idx].strip() if platform_idx is not None and platform_idx < len(row) else ""
+                            try: cnt = int(row[count_idx]) if row[count_idx] else 0
+                            except: cnt = 0
+                            if store:
+                                # 스토어명_플랫폼 형식과 스토어명 형식 둘 다 저장
+                                esm_counts[f"{store}_{plat}"] = cnt
+                                # 스토어명만으로도 매칭 가능하게 (첫 번째 값 우선)
+                                if store not in esm_counts:
+                                    esm_counts[store] = cnt
+            print(f"[ESM판매중] 로드 완료: {len(esm_counts)}개 스토어")
+        except Exception as e:
+            print(f"[ESM판매중] 로드 실패: {e}")
+
+        # 3. [New] 마켓상태현황(매출) 가져오기
+        market_status = gsheet.get_market_status(force_refresh=refresh)
+
+        # 2. 계정 정보 가져오기
+        accounts = gsheet.get_accounts(None, force_refresh=refresh)
+        
+        dashboard_accounts = []
+        for acc in accounts:
+            platform = acc.get("platform", "기타")
+            store_name = acc.get("스토어명") or acc.get("login_id", "계정")
+            
+            # 마켓명 정규화 및 상품수 매칭
+            product_count = 0
+            mapped_platform = "etc"
+            
+            if "스마트" in platform or "네이버" in platform:
+                mapped_platform = "naver"
+                product_count = ss_counts.get(store_name, 0)
+                if product_count == 0 and "_" in store_name:
+                    product_count = ss_counts.get(store_name.split("_", 1)[1], 0)
+            elif "쿠팡" in platform:
+                mapped_platform = "coupang"
+                # 쿠팡은 현재 별도 상품수 시트가 없으므로 마케팅 데이터 등에서 가져와야 하나 일단 0으로 시작
+                # (추후 쿠팡 상품수 수집 로직 추가 필요)
+            elif "11" in platform:
+                mapped_platform = "11st"
+                product_count = st_counts.get(store_name, 0) or st_counts.get(acc.get("login_id"), 0)
+            elif "지마켓" in platform or "Gmarket" in platform:
+                mapped_platform = "gmarket"
+                # ESM판매중 시트에서 스토어명으로 매칭
+                product_count = esm_counts.get(f"{store_name}_gmarket", 0) or esm_counts.get(store_name, 0)
+            elif "옥션" in platform or "Auction" in platform:
+                mapped_platform = "auction"
+                # ESM판매중 시트에서 스토어명으로 매칭
+                product_count = esm_counts.get(f"{store_name}_auction", 0) or esm_counts.get(store_name, 0)
+            elif "ESM" in platform:
+                mapped_platform = "esm"
+
+            # 3. 운영 단계 판별 및 리뉴얼 로직 (사용자 요청 기준 개편)
+            # 설정 파일에서 수동 설정값 로드
+            settings_path = os.path.join(os.path.dirname(__file__), "bulsaja_settings.json")
+            acc_settings = {}
+            if os.path.exists(settings_path):
+                try:
+                    with open(settings_path, 'r', encoding='utf-8') as f:
+                        all_settings = json.load(f)
+                        acc_settings = all_settings.get(store_name, {})
+                except: pass
+
+            # 11번가: 4000개 이상이면 운영중, 나머지는 등록율 90% 기준
+            # 스마트스토어/쿠팡: 10,000개 * 0.9 = 9,000개
+            # 지마켓/옥션: 2,000개 * 0.9 = 1,800개
+            if mapped_platform == "11st":
+                # 11번가: 4000개 이상이면 운영중
+                is_operating = product_count >= 4000
+            else:
+                target_products = 10000
+                if mapped_platform in ["gmarket", "auction"]:
+                    target_products = 2000
+                # 90% 이상 상품등록 시 운영 단계로 전환
+                is_operating = product_count >= target_products * 0.9
+            stage = "운영" if is_operating else "업로드"
+            
+            # 수동 설정값이 있으면 우선 적용, 아니면 자동 계산
+            if "operationDays" in acc_settings:
+                operation_days = int(acc_settings["operationDays"])
+            elif is_operating:
+                operation_days = 30 # 기본값 (로직에 따라 수정 가능)
+            else:
+                operation_days = 0 
+            
+            # [Cleaned up duplicated logic]
+
+            # 리뉴얼 판별 정책: 60일 경과 OR 매출 50만 이하 OR 유입수 5일 연속 하락
+            
+            # [2026-01-19 Updated] 마케팅 데이터(매출/유입/주문) 매칭
+            # market_stats는 get_marketing_data()로 이미 로드됨
+            
+            m_data = {"revenue": 0, "visitors": 0, "orders": 0, "is_declining": False, "zero_orders": False}
+            
+            # 1. 스토어명 매칭
+            # [Debug] 매출 데이터 매칭 디버깅 (상세 로그)
+            if len(dashboard_accounts) < 5: # 처음 5개만 로그
+                 print(f"[Dashboard Debug] Checking revenue for '{store_name}' (Platform: {mapped_platform})")
+                 # print(f"  - Available keys in market stats (sample): {list(market_stats.keys())[:5]} ... total {len(market_stats)}")
+            
+            if store_name in market_stats:
+                m_data = market_stats[store_name]
+                if len(dashboard_accounts) < 5: print(f"  - Matched exactly: {store_name} -> Revenue: {m_data.get('revenue', 0):,}")
+            # 2. '_' 뒤 이름 매칭
+            elif "_" in store_name:
+                 short_name = store_name.split("_", 1)[1]
+                 if short_name in market_stats:
+                     m_data = market_stats[short_name]
+                     if len(dashboard_accounts) < 5: print(f"  - Matched by short name '{short_name}' -> Revenue: {m_data.get('revenue', 0):,}")
+            # 3. 정규화 매칭 (이미 get_marketing_data에서 매핑 처리했지만 안전장치)
+            if m_data["revenue"] == 0:
+                 import re
+                 norm_name = re.sub(r'\(.*?\)', '', store_name).strip()
+                 if norm_name in market_stats:
+                     m_data = market_stats[norm_name]
+                     if len(dashboard_accounts) < 5: print(f"  - Matched by norm name '{norm_name}' -> Revenue: {m_data.get('revenue', 0):,}")
+            
+            real_revenue = m_data.get("revenue", 0)
+            visitors = m_data.get("visitors", 0)
+            orders = m_data.get("orders", 0)
+
+            # 만약 시트에 없으면 기존 설정값 사용 (하위 호환)
+            if real_revenue == 0:
+                settings_rev = acc_settings.get("revenue30d", 0)
+                if settings_rev > 0:
+                    real_revenue = settings_rev
+                    if len(dashboard_accounts) < 5: print(f"  - Using manual settings revenue: {real_revenue:,}")
+                else:
+                    if len(dashboard_accounts) < 5: print(f"  - No revenue found (0)")
+
+            revenue_30d = real_revenue
+            
+            # 리뉴얼 판별 정책 업데이트
+            renewal_reasons = []
+            if is_operating:
+                # 1. 운영 60일 경과
+                if operation_days >= 60:
+                    renewal_reasons.append(f"운영기간 {operation_days}일 경과")
+                
+                # 2. 운영 30일 이상 & 매출 50만 이하
+                if operation_days >= 30 and revenue_30d < 500000:
+                    renewal_reasons.append(f"운영 {operation_days}일차 매출 {revenue_30d//10000}만원 (50만 미만)")
+                
+                # 3. [New] 유입수 5일 연속 하락
+                if m_data.get("is_declining"):
+                    renewal_reasons.append(f"방문자 5일 연속 감소 ({visitors}명)")
+                
+                # 4. [New] 7일간 주문 0건
+                if m_data.get("zero_orders"):
+                    renewal_reasons.append(f"최근 7일 주문 0건")
+                
+                # 기존 설정값 하락일수 체크 (하위 호환 유지)
+                inflow_decrease_days = acc_settings.get("inflowDecreaseDays", 0)
+                if inflow_decrease_days >= 5 and not m_data.get("is_declining"):
+                     renewal_reasons.append(f"유입수 {inflow_decrease_days}일 연속 하락(수동설정)")
+                
+            renewal_reason = ""
+            if renewal_reasons:
+                stage = "리뉴얼대상"
+                renewal_reason = " | ".join(renewal_reasons)
+            
+            # 4. 목표 매출 정책 반영
+            target_revenue = 2000000  # 모든 플랫폼 목표 매출 200만원으로 통일
+            if len(dashboard_accounts) < 1: # Log only once
+                print(f"[Dashboard] Force setting target revenue to {target_revenue} for {store_name}")
+            
+            # 업로드 진행률 계산
+            progress = min(int((product_count / target_products) * 100), 100) if target_products > 0 else 0
+
+            dashboard_accounts.append({
+                "name": store_name,
+                "platform": mapped_platform,
+                "stage": stage,
+                "products": product_count,
+                "targetProducts": target_products,
+                "progress": progress,
+                "revenue": revenue_30d, 
+                "targetRevenue": target_revenue,
+                "visitors": visitors, # New
+                "orders": orders,    # New
+                "status": "success" if stage == "운영" else ("danger" if stage == "리뉴얼대상" else "warning"),
+                "operationDays": operation_days,
+                "renewalReason": renewal_reason
+            })
+            
+        return {"success": True, "accounts": dashboard_accounts}
+    except Exception as e:
+        print(f"[대시보드] 데이터 조회 오류: {e}")
+        return {"success": False, "message": str(e)}
+
 @app.get("/api/bulsaja/logs")
 async def get_bulsaja_logs(request: Request):
     get_current_user(request)
@@ -4129,6 +5112,45 @@ class WorkLogRequest(BaseModel):
     detail: str = ""  # 상세 내용
     method: str = ""  # 실행 방법
     datetime: str = ""  # 날짜/시간 (YYYY-MM-DD HH:MM:SS) - 비어있으면 현재 시간
+
+@app.post("/api/bulsaja/update_settings")
+async def update_bulsaja_settings(request: Request):
+    """불사자 대시보드 수동 설정 저장 (운영일수 등)"""
+    get_current_user(request)
+
+    # JSON body 직접 파싱
+    data = await request.json()
+    store_name = data.get("store_name")
+    operation_days = data.get("operation_days")
+
+    print(f"[DEBUG] update_bulsaja_settings called: store_name={store_name}, operation_days={operation_days}")
+
+    if not store_name:
+        return {"success": False, "message": "스토어명이 필요합니다."}
+
+    settings_path = os.path.join(os.path.dirname(__file__), "bulsaja_settings.json")
+    settings = {}
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        except: pass
+
+    if store_name not in settings:
+        settings[store_name] = {}
+
+    if operation_days is not None:
+        settings[store_name]["operationDays"] = int(operation_days)
+        print(f"[DEBUG] Setting operationDays for {store_name} = {operation_days}")
+
+    try:
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=4)
+        print(f"[DEBUG] Settings saved successfully")
+        return {"success": True}
+    except Exception as e:
+        print(f"[DEBUG] Error saving settings: {e}")
+        return {"success": False, "message": str(e)}
 
 class BulsajaFolderRequest(BaseModel):
     folder: str
@@ -4688,6 +5710,20 @@ async def get_bulsaja_settings(request: Request):
             "upload": upload,
             "deleteCopy": deleteCopy
         }
+        
+        # [Alias Logic] 로컬 설정 파일 병합
+        try:
+            settings_path = os.path.join(os.path.dirname(__file__), "bulsaja_settings.json")
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    local_settings = json.load(f)
+                    # sales_key_alias 병합
+                    if "sales_key_alias" in local_settings:
+                        result["sales_key_alias"] = local_settings["sales_key_alias"]
+        except Exception as e:
+            print(f"[불사자] 로컬 설정 병합 오류: {e}")
+            
+        return result
     except Exception as e:
         print(f"[불사자] 시트 설정 조회 오류: {e}")
         return {"success": False, "message": str(e)}
@@ -4785,20 +5821,42 @@ def create_aio_status():
     }
 
 # 플랫폼별 상태 관리
+# 플랫폼별 상태 관리
 aio_status_by_platform = {
-    "스마트스토어": create_aio_status(),
-    "11번가": create_aio_status(),
-    "쿠팡": create_aio_status(),
-    "ESM": create_aio_status(),
+    "스마트스토어": {},
+    "11번가": {},
+    "쿠팡": {},
+    "ESM": {},
 }
 
 # 기존 호환성을 위한 기본 상태 (플랫폼 미지정시 사용)
 aio_status = create_aio_status()
 
-def get_aio_status(platform: str = None):
-    """플랫폼별 상태 반환"""
+def get_aio_status(platform: str = None, task: str = None):
+    """플랫폼/작업별 상태 반환"""
     if platform and platform in aio_status_by_platform:
-        return aio_status_by_platform[platform]
+        platform_dict = aio_status_by_platform[platform]
+        
+        # task가 주어지면 해당 task 상태 반환 (없으면 생성)
+        if task:
+            if task not in platform_dict:
+                platform_dict[task] = create_aio_status()
+            return platform_dict[task]
+            
+        # task가 없으면(legacy), 첫 번째 실행 중인 작업 반환 or 첫 번째 작업 반환
+        if platform_dict:
+            # 1. 실행 중인 작업 검색
+            for t, status in platform_dict.items():
+                if status.get("running"):
+                    return status
+            # 2. 없으면 아무거나 반환 (첫번째)
+            return list(platform_dict.values())[0]
+            
+        # 3. 아예 없으면 기본 생성 (default 키 사용)
+        if "default" not in platform_dict:
+            platform_dict["default"] = create_aio_status()
+        return platform_dict["default"]
+        
     return aio_status
 
 # 스마트스토어 API 인증
@@ -5486,7 +6544,7 @@ async def run_allinone_task(request: Request, req: AioRunRequest):
     require_permission(request, "edit")
 
     # 플랫폼별 상태 가져오기
-    platform_status = get_aio_status(req.platform)
+    platform_status = get_aio_status(req.platform, req.task)
 
     if platform_status["running"]:
         return {"success": False, "message": f"{req.platform} 작업이 이미 실행 중입니다"}
@@ -5669,22 +6727,20 @@ async def run_allinone_task(request: Request, req: AioRunRequest):
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         
         # 플랫폼별 상태 초기화
-        aio_status_by_platform["스마트스토어"] = {
-            "running": True,
-            "progress": 0,
-            "status": "running",
-            "results": [],
-            "process": None,
-            "options": req.options,
-            "current_store": "",
-            "current_action": "프로세스 시작 중...",
-            "total": 0,
-            "completed": 0,
-            "logs": [],
-            "log_file": log_file,
-            "log_pos": 0  # 로그 파일 읽기 위치
-        }
-        platform_status = aio_status_by_platform["스마트스토어"]
+        # get_aio_status가 이미 생성/반환하므로 초기화만 다시 해줌
+        platform_status["running"] = True
+        platform_status["progress"] = 0
+        platform_status["status"] = "running"
+        platform_status["results"] = []
+        platform_status["process"] = None
+        platform_status["options"] = req.options
+        platform_status["current_store"] = ""
+        platform_status["current_action"] = "프로세스 시작 중..."
+        platform_status["total"] = 0
+        platform_status["completed"] = 0
+        platform_status["logs"] = []
+        platform_status["log_file"] = log_file
+        platform_status["log_pos"] = 0
         
         # 환경변수 설정
         env = os.environ.copy()
@@ -5720,22 +6776,20 @@ async def run_allinone_task(request: Request, req: AioRunRequest):
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         
         # 플랫폼별 상태 초기화
-        aio_status_by_platform["11번가"] = {
-            "running": True,
-            "progress": 0,
-            "status": "running",
-            "results": [],
-            "process": None,
-            "options": req.options,
-            "current_store": "",
-            "current_action": "프로세스 시작 중...",
-            "total": 0,
-            "completed": 0,
-            "logs": [],
-            "log_file": log_file,
-            "log_pos": 0
-        }
-        platform_status = aio_status_by_platform["11번가"]
+        platform_status["running"] = True
+        platform_status["progress"] = 0
+        platform_status["status"] = "running"
+        platform_status["results"] = []
+        platform_status["process"] = None
+        platform_status["options"] = req.options
+        platform_status["current_store"] = ""
+        platform_status["current_action"] = "프로세스 시작 중..."
+        platform_status["total"] = 0
+        platform_status["completed"] = 0
+        platform_status["logs"] = []
+        platform_status["log_file"] = log_file
+        platform_status["log_pos"] = 0
+
         
         if req.task == "등록갯수":
             # 등록갯수(판매중) 조회 - 인라인 처리
@@ -5776,12 +6830,12 @@ async def run_allinone_task(request: Request, req: AioRunRequest):
         return {"success": False, "message": f"지원하지 않는 플랫폼: {req.platform}"}
 
 @app.get("/api/allinone/progress")
-async def get_allinone_progress(request: Request, platform: str = None):
+async def get_allinone_progress(request: Request, platform: str = None, task: str = None):
     """올인원 진행상황 조회 (플랫폼별)"""
     require_permission(request, "edit")
     
     # 플랫폼별 상태 가져오기
-    status = get_aio_status(platform)
+    status = get_aio_status(platform, task)
     
     # 프로세스 상태 확인
     if status.get("process"):
@@ -5871,12 +6925,12 @@ async def get_allinone_progress(request: Request, platform: str = None):
     }
 
 @app.post("/api/allinone/stop")
-async def stop_allinone_task(request: Request, platform: str = None):
+async def stop_allinone_task(request: Request, platform: str = None, task: str = None):
     """올인원 작업 중지 (플랫폼별)"""
     require_permission(request, "edit")
     
     # 플랫폼별 상태 가져오기
-    status = get_aio_status(platform)
+    status = get_aio_status(platform, task)
     
     if status.get("process"):
         try:
@@ -6260,17 +7314,31 @@ sales_cache = {
 }
 
 @app.get("/api/sales/from-sheet")
-async def get_sales_from_sheet(request: Request, force: bool = False):
+async def get_sales_from_sheet_v2(request: Request, force: bool = False):
     """구글시트에서 마켓별 매출 집계"""
-    get_current_user(request)
+    import os
+    log_path = os.path.abspath("debug_sales_log.txt")
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"\n[DEBUG] get_sales_from_sheet CALLED. force={force}\n")
+        f.flush()
     
+    with open("debug_filtering_stats.txt", "w", encoding="utf-8") as f:
+        f.write("[DEBUG] get_sales_from_sheet START\n")
+
     from datetime import datetime
     
     # 캐시 확인 (5분 이내면 캐시 사용)
     if not force and sales_cache["updated_at"]:
         cache_age = (datetime.now() - sales_cache["updated_at"]).total_seconds()
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[DEBUG] Cache hit check. Age: {cache_age}\n")
         if cache_age < 300:  # 5분
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] RETURNING CACHED DATA\n")
             return {"success": True, "data": sales_cache["data"], "daily": sales_cache.get("daily", []), "total": sales_cache.get("total", {}), "cached": True}
+    
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"[DEBUG] Proceeding to fetch from sheet...\n")
     
     try:
         # 현재 월 탭 이름 (예: "12월")
@@ -6356,6 +7424,8 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                 print(f"[매출집계] {tab_name} 탭 로드 실패: {e}")
         
         if not headers or len(all_data) < 1:
+            with open("debug_filtering_stats.txt", "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] Early Return: No Data (headers={bool(headers)}, len={len(all_data)})\n")
             return {"success": False, "message": "데이터 없음"}
         
         # 컬럼 인덱스 찾기 (이름으로) - 줄바꿈 제거
@@ -6379,7 +7449,7 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
         
         # 이름으로 먼저 찾고, 못 찾으면 직접 열 인덱스 사용
         col_market = find_col(["마켓"])  # E열: 스마트스토어, 11번가, 쿠팡 등
-        col_owner = find_col(["사업자"])
+        col_owner = find_col(STORE_NAME_ALIASES) # 스토어명(사업자) 식별 컬럼 통합
         col_order_date = find_col(["주문일자"])
         col_payment = find_col(["실결제금액(배송비포함)", "실결제금액"])
         col_settlement = find_col(["정산금액(배송비포함)", "정산금액"])
@@ -6405,7 +7475,10 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
         if col_profit_rate < 0: col_profit_rate = col_letter_to_idx('AZ')    # AZ열: 수익률
         if col_cargo_shipping < 0: col_cargo_shipping = col_letter_to_idx('AU')  # AU열: 화물택배비
         
-        print(f"[매출집계] 컬럼 - 마켓:{col_market}, 주문일자:{col_order_date}, 실결제:{col_payment}, 정산:{col_settlement}, 수익금:{col_profit}, 사업자번호:{col_biz_number}")
+        debug_msg = f"[매출집계] 컬럼 - 마켓:{col_market}, 주문일자:{col_order_date}, 실결제:{col_payment}, 정산:{col_settlement}, 수익금:{col_profit}, 사업자번호:{col_biz_number}"
+        print(debug_msg)
+        with open("debug_sales_log.txt", "a", encoding="utf-8") as f:
+            f.write(debug_msg + "\n")
         
         if col_market < 0 or col_order_date < 0:
             return {"success": False, "message": "필수 컬럼 없음 (마켓, 주문일자)"}
@@ -6419,6 +7492,10 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
         
         # 2주 기준일
         days_14_ago = (datetime.now() - timedelta(days=14)).date()
+        # 7일 기준일
+        days_7_ago = (datetime.now() - timedelta(days=7)).date()
+        # 7일 기준일
+        days_7_ago = (datetime.now() - timedelta(days=7)).date()
         
         # stores 시트의 모든 계정을 0으로 초기화
         for store_key in all_store_keys:
@@ -6428,6 +7505,7 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                 "month_sales": 0,
                 "month_orders": 0,
                 "orders_2w": 0,  # 2주 주문
+                "orders_7d": 0,  # 7일 주문
                 "month_profit": 0,
                 "month_settlement": 0,
                 "month_purchase": 0,
@@ -6446,13 +7524,16 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
             except:
                 return 0
         
-        # 날짜 파싱 함수
         def parse_date(date_str):
             try:
-                # 2025-06-01 10:08 형식
-                return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+                # 1. 2025-06-01 10:08 형식 (YYYY-MM-DD HH:MM)
+                return datetime.strptime(date_str[:16], "%Y-%m-%d %H:%M").date()
             except:
-                return None
+                try:
+                    # 2. 2025-06-01 형식 (YYYY-MM-DD)
+                    return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+                except:
+                    return None
         
         # 데이터 집계
         biz_sales = {}  # 사업자번호별 집계
@@ -6529,6 +7610,22 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                 int_shipping = parse_amount(row, col_int_shipping)
                 cargo_shipping = parse_amount(row, col_cargo_shipping)
             
+            # [DEBUG RE-ADDED] 값 확인 (첫 5개만)
+            if len(market_sales) < 5:
+                print(f"[DEBUG_DATA_V2] Key: {store_key} | Payment Raw: '{row[col_payment]}' -> Parsed: {payment} | Return: {is_return}")
+
+            # [DEBUG] 특정 스토어 상세 확인 (필요시 활성화)
+            # if "이모티보이" in store_key: 
+            #     pass
+            
+            # [DEBUG] 값 확인 (첫 5개만)
+            if len(market_sales) < 5:
+                print(f"[DEBUG_DATA] Key: {store_key} | Date: {order_date} | Return: {is_return} | Payment Raw: '{row[col_payment]}' -> Parsed: {payment}")
+
+            # [DEBUG] 특정 스토어 상세 확인
+            if "이모티보이" in store_key and len(market_sales) < 20: 
+                 print(f"[DEBUG_EMOTI] Key: {store_key} | Payment Raw: '{row[col_payment]}' | Status: '{order_status}'")
+            
             # 스토어 키 초기화 (목록에 없는 경우)
             if store_key not in market_sales:
                 # 먼저 store_key로 매칭 시도, 없으면 사업자번호로 매칭
@@ -6540,6 +7637,7 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                     "month_sales": 0,
                     "month_orders": 0,
                     "orders_2w": 0,  # 2주 주문
+                    "orders_7d": 0,  # 7일 주문
                     "month_profit": 0,
                     "month_settlement": 0,
                     "month_purchase": 0,
@@ -6599,6 +7697,14 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                 if order_date >= days_14_ago:
                     market_sales[store_key]["orders_2w"] = market_sales[store_key].get("orders_2w", 0) + 1
                 
+                # 7일 이내 주문
+                if order_date >= days_7_ago:
+                    market_sales[store_key]["orders_7d"] = market_sales[store_key].get("orders_7d", 0) + 1
+                
+                # 7일 이내 주문
+                if order_date >= days_7_ago:
+                    market_sales[store_key]["orders_7d"] = market_sales[store_key].get("orders_7d", 0) + 1
+                
                 # 일자별 집계
                 daily_sales[date_key]["sales"] += payment
                 daily_sales[date_key]["settlement"] += settlement
@@ -6620,6 +7726,16 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
         sales_cache["daily"] = daily_list
         sales_cache["updated_at"] = datetime.now()
         
+        
+        # DEBUG: Write filtering stats
+        with open("debug_filtering_stats.txt", "w", encoding="utf-8") as f:
+            f.write(f"Total Rows: {len(all_data)}\n")
+            f.write(f"Skipped Old: {skip_old}\n")
+            f.write(f"Skipped Cancel: {skip_cancel}\n")
+            f.write(f"Skipped Return: {skip_return}\n")
+            f.write(f"Processed: {len(all_data) - skip_old - skip_cancel - skip_return}\n")
+            f.write(f"Sample First 5 Keys: {list(market_sales.keys())[:5]}\n")
+            
         print(f"[매출집계] {len(market_sales)}개 계정 집계 완료 (취소:{skip_cancel}, 반품:{skip_return}, 30일이전:{skip_old} 제외)")
         
         # 전체 합계 계산
@@ -6652,6 +7768,7 @@ async def get_sales_from_sheet(request: Request, force: bool = False):
                     "purchase": 0, "shipping": 0, "orders": 0,
                     "stores": sorted(list(stores))
                 }
+        
         
         return {
             "success": True, 
@@ -7928,10 +9045,13 @@ async def complete_login(request: Request):
     return {"success": True}
 
 @app.get("/download/PkonomyClient.exe")
-async def download_client():
-    """클라이언트 프로그램 다운로드"""
+async def download_client_legacy():
+    """클라이언트 프로그램 다운로드 (레거시 경로)"""
     from fastapi.responses import FileResponse
-    client_path = APP_DIR / "PkonomyClient.exe"
+    # dist 폴더 우선
+    client_path = APP_DIR / "dist" / "PkonomyClient.exe"
+    if not client_path.exists():
+        client_path = APP_DIR / "PkonomyClient.exe"
     if not client_path.exists():
         client_path = Path(r"C:\autosystem\PkonomyClient.exe")
     if client_path.exists():
@@ -8501,10 +9621,8 @@ async def refresh_all_11st_counts(request: Request):
 # ========== 배송조회 API (모듈 사용) ==========
 from modules.delivery_check import DeliveryChecker
 
-# 배송조회용 별도 인증 파일 (레거시 호환)
-DELIVERY_CREDENTIALS = r"C:\autosystem\autosms-466614-951e91617c69.json"
-# 배송조회 인스턴스 초기화
-delivery_checker = DeliveryChecker(DELIVERY_CREDENTIALS)
+# 배송조회 인스턴스 초기화 (전역 CREDENTIALS_FILE 사용)
+delivery_checker = DeliveryChecker(CREDENTIALS_FILE)
 
 @app.post("/api/delivery/check")
 async def start_delivery_check(request: Request):
@@ -8810,7 +9928,7 @@ async def start_marketing_collection(request: Request, req: MarketingCollectRequ
             if proc.returncode == 0:
                 marketing_tasks[task_id]["status"] = "completed"
                 marketing_tasks[task_id]["current"] = marketing_tasks[task_id]["total"]
-                marketing_tasks[task_id]["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ 수집 완료!")
+                marketing_tasks[task_id]["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] [SUCCESS] 수집 완료!")
             elif proc.returncode is None or proc.returncode == -15 or proc.returncode == 1:
                 if marketing_tasks[task_id]["status"] == "running":
                     marketing_tasks[task_id]["status"] = "stopped"
@@ -8830,8 +9948,62 @@ async def start_marketing_collection(request: Request, req: MarketingCollectRequ
     
     # 비동기 실행
     asyncio.create_task(run_collection())
-    
+
     return {"task_id": task_id, "total": len(req.account_ids)}
+
+@app.get("/api/marketing/collected-today")
+async def get_marketing_collected_today(request: Request):
+    """각 스토어의 마지막 수집 시간 조회"""
+    require_permission(request, "view")
+
+    try:
+        from google.oauth2.service_account import Credentials
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
+        gc = gspread.authorize(creds)
+        sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        collected_stores = []  # 오늘 수집된 스토어
+        last_collected = {}    # {스토어명: 마지막수집시간}
+
+        # 시스템 시트 제외
+        system_sheets = {"전체데이터", "쇼핑몰정보", "템플릿", "설정", "스토어유입수"}
+
+        worksheets = sheet.worksheets()
+        for ws in worksheets:
+            if ws.title in system_sheets:
+                continue
+
+            try:
+                # A열(수집일자)에서 마지막 날짜 확인 (새 구조: 날짜별 누적)
+                a_col = ws.col_values(1)  # A열 전체
+                if len(a_col) > 1:  # 헤더 제외
+                    # A열에서 날짜 형식인 마지막 값 찾기
+                    last_date = None
+                    for val in reversed(a_col):
+                        if val and len(val) >= 10 and val[:4].isdigit():  # YYYY-MM-DD 형식
+                            last_date = val
+                            break
+
+                    if last_date:
+                        last_collected[ws.title] = last_date
+                        if today == last_date or today in last_date:
+                            collected_stores.append(ws.title)
+            except:
+                pass
+
+        return {
+            "success": True,
+            "date": today,
+            "collected": collected_stores,
+            "count": len(collected_stores),
+            "last_collected": last_collected
+        }
+
+    except Exception as e:
+        print(f"수집 현황 조회 오류: {e}")
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/marketing/stop")
 async def stop_marketing_collection(request: Request):
@@ -8921,7 +10093,7 @@ async def create_marketing_sheets(request: Request):
         sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
 
         results = []
-        system_sheets = {"전체데이터", "쇼핑몰정보", "템플릿", "설정"}
+        system_sheets = {"전체데이터", "쇼핑몰정보", "템플릿", "설정", "스토어유입수"}
 
         # 개별 마켓 시트 데이터 초기화 (삭제하지 않고 내용만 비움)
         all_worksheets = sheet.worksheets()
@@ -8975,58 +10147,47 @@ async def create_marketing_sheets(request: Request):
 
 
 @app.get("/api/marketing/data")
-async def get_marketing_data(request: Request, store: str = None):
+async def get_marketing_data(request: Request, store: str = None, refresh: bool = False):
     """마케팅 수집 데이터 조회
-    - store: 특정 스토어명 (없으면 전체)
+    - store: 특정 스토어명 (없으면 전체 목록만 반환)
     """
     require_permission(request, "view")
 
     try:
-        from google.oauth2.service_account import Credentials
-
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
-        gc = gspread.authorize(creds)
-        sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
-
+        # 모든 워크시트 조회 (캐시 활용)
+        store_names = gsheet.get_worksheet_names_with_cache(sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+        store_names = [name for name in store_names if name not in ["템플릿", "설정", "전체데이터", "쇼핑몰정보", "스토어유입수"]]
+        
         result = {
-            "stores": [],
+            "success": True,
+            "stores": store_names,
             "data": {}
         }
 
-        # 모든 워크시트 조회
-        worksheets = sheet.worksheets()
-        store_names = [ws.title for ws in worksheets if ws.title not in ["템플릿", "설정", "전체데이터"]]
-        result["stores"] = store_names
-
         if store:
-            # 특정 스토어 데이터만
+            # 특정 스토어 데이터만 (상세 정보 요청 시에만 시트 접근)
             try:
-                ws = sheet.worksheet(store)
-                all_values = ws.get_all_values()
+                # gsheet 인스턴스의 캐시 기능 활용
+                all_values = gsheet.get_values_with_cache(store, sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
 
                 # 데이터 파싱 (열 위치 기반 - data111.py 구조)
-                # A~G(0-6): 마케팅분석, I~O(8-14): 상품클릭리포트, Q~R(16-17): 쇼핑몰정보, S~T(18-19): 전체채널
                 biz_data = []       # 마케팅분석 (상품노출성과)
                 partner_data = []   # 상품클릭리포트
                 mall_info = {}      # 쇼핑몰정보
                 channel_data = []   # 전체채널
 
-                # 헤더 키워드 목록 (필터링용)
+                # 헤더 키워드 목록
                 header_keywords = {"상품명", "상품ID", "상품 ID", "채널그룹", "채널명", "키워드",
                                    "평균노출순위", "유입수", "노출수", "클릭수", "클릭율", "클릭률",
                                    "적용수수료", "클릭당수수료", "항목", "노출", "성과"}
 
                 for i, row in enumerate(all_values):
-                    if i == 0:  # 헤더 행 스킵
-                        continue
+                    if i == 0: continue
 
-                    # 마케팅분석 (A~G열, index 0-6)
+                    # 마케팅분석 (A~G열)
                     if len(row) > 6 and row[0]:
                         product_name = row[0].strip()
-                        # 헤더 키워드가 아닌 경우만 추가
                         if product_name and product_name not in header_keywords:
-                            inflow = row[6].strip() if len(row) > 6 else "0"
                             biz_data.append({
                                 "상품명": product_name,
                                 "상품ID": row[1].strip() if len(row) > 1 else "",
@@ -9034,13 +10195,12 @@ async def get_marketing_data(request: Request, store: str = None):
                                 "채널명": row[3].strip() if len(row) > 3 else "",
                                 "키워드": row[4].strip() if len(row) > 4 else "",
                                 "평균노출순위": row[5].strip() if len(row) > 5 else "",
-                                "유입수": inflow
+                                "유입수": row[6].strip() if len(row) > 6 else "0"
                             })
 
-                    # 상품클릭리포트 (I~O열, index 8-14)
+                    # 상품클릭리포트 (I~O열)
                     if len(row) > 14 and row[8]:
                         product_id = row[8].strip()
-                        # 헤더 키워드가 아니고 숫자로 시작하는 경우만 (상품ID는 숫자)
                         if product_id and product_id not in header_keywords and product_id[0].isdigit():
                             partner_data.append({
                                 "상품ID": product_id,
@@ -9052,13 +10212,13 @@ async def get_marketing_data(request: Request, store: str = None):
                                 "클릭당수수료": row[14].strip() if len(row) > 14 else ""
                             })
 
-                    # 쇼핑몰정보 (Q~R열, index 16-17)
+                    # 쇼핑몰정보 (Q~R열)
                     if len(row) > 17 and row[16]:
-                        key = row[16].strip()
-                        if key and key not in header_keywords:
-                            mall_info[key] = row[17].strip() if len(row) > 17 else ""
+                        p_key = row[16].strip()
+                        if p_key and p_key not in header_keywords:
+                            mall_info[p_key] = row[17].strip() if len(row) > 17 else ""
 
-                    # 전체채널 (S~T열, index 18-19)
+                    # 전체채널 (S~T열)
                     if len(row) > 19 and row[18]:
                         channel_name = row[18].strip()
                         if channel_name and channel_name not in header_keywords:
@@ -9073,102 +10233,405 @@ async def get_marketing_data(request: Request, store: str = None):
                     "mall_info": mall_info,
                     "channel_data": channel_data
                 }
-
             except Exception as e:
                 result["data"][store] = {"error": str(e)}
-        else:
-            # 모든 스토어의 요약 정보
-            for store_name in store_names[:50]:  # 최대 50개
-                try:
-                    ws = sheet.worksheet(store_name)
-                    all_values = ws.get_all_values()
+        
+        return result
 
-                    # 간단한 요약 (행 수)
-                    biz_count = 0
-                    partner_count = 0
-                    collect_time = ""
+    except Exception as e:
+        print(f"마케팅 데이터 조회 오류: {e}")
+        return {"success": False, "error": str(e)}
 
-                    for row in all_values:
-                        if row and "수집일시" in str(row[0]):
-                            collect_time = row[1] if len(row) > 1 else ""
-                        elif row and row[0] and row[0] != "상품명" and row[0] != "상품ID":
-                            if "상품ID" in str(row):
-                                continue
-                            biz_count += 1
 
-                    result["data"][store_name] = {
-                        "collect_time": collect_time,
-                        "biz_count": biz_count,
-                        "partner_count": partner_count
-                    }
-                except:
-                    pass
+@app.get("/api/marketing/store-traffic")
+async def get_marketing_store_traffic(request: Request):
+    """스토어유입수 시트 데이터 조회 (날짜별 추이) - 전일대비용"""
+    require_permission(request, "view")
+    try:
+        from google.oauth2.service_account import Credentials
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
+        gc = gspread.authorize(creds)
+        sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
+        
+        target_ws = None
+        try:
+            target_ws = sheet.worksheet("스토어유입수")
+        except:
+            try:
+                target_ws = sheet.worksheet("쇼핑몰정보")
+            except:
+                return {"success": False, "error": "'스토어유입수' 또는 '쇼핑몰정보' 시트를 찾을 수 없습니다."}
+        
+        rows = target_ws.get_all_values()
+        if len(rows) < 2:
+            return {"success": True, "data": [], "dates": []}
+            
+        header = rows[0]
+        # 날짜 컬럼 찾기 (용도, 스토어명 제외한 나머지)
+        date_cols = []
+        usage_idx = -1
+        store_idx = -1
+        
+        for i, col in enumerate(header):
+            col = col.strip()
+            if col == "용도": usage_idx = i
+            elif col == "스토어명": store_idx = i
+            elif col: # 날짜로 추정 (나머지는 다 날짜 컬럼으로 간주)
+                date_cols.append({"index": i, "label": col})
+        
+        if store_idx == -1:
+             return {"success": False, "error": "'스토어명' 컬럼을 찾을 수 없습니다."}
 
-        return {"success": True, **result}
+        result_data = []
+        for r in rows[1:]:
+            if len(r) <= store_idx: continue
+            store_name = r[store_idx].strip()
+            if not store_name: continue
+            
+            usage = r[usage_idx].strip() if usage_idx != -1 and len(r) > usage_idx else ""
+            
+            date_values = {}
+            for dc in date_cols:
+                idx = dc["index"]
+                val = r[idx].strip() if len(r) > idx else "0"
+                # 숫자 변환 (콤마 제거)
+                try: 
+                    val_int = int(val.replace(",", ""))
+                except: 
+                    val_int = 0
+                date_values[dc["label"]] = val_int
+            
+            result_data.append({
+                "store": store_name,
+                "usage": usage,
+                "values": date_values
+            })
+            
+        return {
+            "success": True,
+            "dates": [d["label"] for d in date_cols],
+            "data": result_data
+        }
 
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-@app.get("/api/marketing/summary")
-async def get_marketing_summary(request: Request):
-    """마케팅 데이터 요약 (대시보드용)"""
-    require_permission(request, "view")
+@app.post("/api/marketing/sync-manual")
+async def sync_marketing_manual(request: Request):
+    """마케팅 데이터 수동 취합 (T2 셀 수집)"""
+    require_permission(request, "edit")
+    
+    # (수정) 불필요한 위임 코드 삭제됨 - 아래 직접 구현된 로직 사용
+
 
     try:
         from google.oauth2.service_account import Credentials
-
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
         gc = gspread.authorize(creds)
         sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
 
-        # 전체데이터 시트에서 요약
+        # 1. 모든 워크시트 목록 조회
+        all_worksheets = sheet.worksheets()
+        system_sheets = {"전체데이터", "쇼핑몰정보", "템플릿", "설정", "스토어유입수"}
+        store_sheets = [ws for ws in all_worksheets if ws.title not in system_sheets]
+
+        if not store_sheets:
+            return {"success": False, "error": "취합할 개별 스토어 시트가 없습니다."}
+
+        performance_rows = []  # 쇼핑몰정보에 들어갈 행들
+        summary_rows = []      # 전체데이터에 들어갈 행들
+        cleared_sheets = []    # 초기화된 시트 목록
+        
+        # 헤더 키워드 (데이터 시작점 판별용)
+        header_keywords = {"상품명", "상품ID", "상품 ID", "채널그룹", "채널명", "키워드", "평균노출순위", "유입수", "노출수", "클릭수", "클릭율", "클릭률", "적용수수료", "클릭당수수료", "항목", "노출", "성과"}
+
+        for ws in store_sheets:
+            try:
+                values = ws.get_all_values()
+                if not values or len(values) < 2: continue
+                
+                store_name = ws.title
+                collect_time = ""
+                
+                # Q-R열 등에서 공통 정보(mall_info) 추출
+                mall_info = {}
+                for row in values:
+                    # 수집일시 찾기 (보통 특정 셀에 기록됨)
+                    if len(row) > 1 and "수집일시" in str(row[0]):
+                        collect_time = row[1]
+                    
+                    # mall_info (Q-R열 등 - get_marketing_data 로직 참조)
+                    if len(row) > 17 and row[16]:
+                        key = row[16].strip()
+                        if key and key not in header_keywords:
+                            mall_info[key] = row[17].strip()
+                
+                # 수집시간이 없으면 현재 시간으로
+                if not collect_time: collect_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # (1) 쇼핑몰정보 데이터 생성
+                if mall_info:
+                    performance_rows.append([
+                        collect_time,
+                        store_name,
+                        mall_info.get("총 방문자수", "0"),
+                        mall_info.get("재방문자수", "0"),
+                        mall_info.get("신규방문자수", "0"),
+                        mall_info.get("페이지뷰", "0"),
+                        mall_info.get("평균 체류시간", "-"),
+                        mall_info.get("이탈률", "-"),
+                        mall_info.get("구매전환율", "-")
+                    ])
+
+                # (2) 전체데이터 (제품별) 생성 - biz_advisor 및 shopping_partner 병합 시도
+                # 참고: 개별 시트에서 정확한 상품번호/방문횟수 등을 가져오기 어려울 수 있으므로
+                # biz_advisor(A-G)와 shopping_partner(I-O) 데이터를 최대한 조합합니다.
+                
+                # 실제 '전체데이터' 시트는 외부 수집 프로그램(data111.py)에서 직접 기록하도록 설계되어 있으나
+                # 여기서도 개별 시트 기반으로 보완 집계합니다.
+                for row in values:
+                    if not row or row[0] in header_keywords: continue
+                    
+                    # 상품명(A)이 있는 행 필터링
+                    product_name = row[0].strip() if len(row) > 0 else ""
+                    if not product_name: continue
+                    
+                    # 데이터 추출
+                    summary_rows.append([
+                        collect_time,
+                        store_name,
+                        row[1].strip() if len(row) > 1 else "",  # 상품번호
+                        product_name,
+                        "0", # 방문횟수 (개별 시트엔 합산만 있는 경우가 많음)
+                        row[6].strip() if len(row) > 6 else "0", # 유입수
+                        "0", # 클릭수
+                        "0", # 전환수
+                        "0"  # 판매액
+                    ])
+            except Exception as e:
+                print(f"📦 [취합] {ws.title} 처리 중 오류: {e}")
+
+        # 1.5. 개별 스토어 시트 초기화 (스토어유입수 제외)
+        for ws in store_sheets:
+            try:
+                ws.clear()
+                cleared_sheets.append(ws.title)
+                print(f"📦 [취합] {ws.title} 시트 초기화 완료")
+            except Exception as e:
+                print(f"📦 [취합] {ws.title} 시트 초기화 실패: {e}")
+
+        # 2. 마스터 시트에 쓰기 (Batch Update)
+        # (1) 쇼핑몰정보 업데이트
         try:
-            all_data_ws = sheet.worksheet("전체데이터")
-            all_values = all_data_ws.get_all_values()
+            # (1) 스토어유입수 (구 쇼핑몰정보) 업데이트
+            sheet_name = "스토어유입수"
+            try:
+                ws_perf = sheet.worksheet(sheet_name)
+            except:
+                try:
+                    ws_perf = sheet.worksheet("쇼핑몰정보") # 구 이름 호환
+                    ws_perf.update_title(sheet_name)
+                except:
+                    ws_perf = sheet.add_worksheet(sheet_name, 1000, 20)
+                    ws_perf.append_row(["용도", "스토어명"])
 
-            if len(all_values) < 2:
-                return {"success": True, "data": [], "total": 0}
+            # 기존 데이터 읽기 (데이터 보존)
+            existing_data = ws_perf.get_all_values()
+            
+            # 헤더 초기화
+            if not existing_data:
+                header = ["용도", "스토어명"]
+                existing_data = [header]
+            else:
+                header = existing_data[0]
+                if len(header) < 2:
+                    header = ["용도", "스토어명"]
+                    existing_data[0] = header
 
-            headers = all_values[0]
-            data = []
+            # 오늘 날짜 (M월 D일 포맷)
+            now = datetime.now()
+            today_str = f"{now.month}월 {now.day}일"
+            
+            # 날짜 컬럼 추가
+            if today_str not in header:
+                header.append(today_str)
+                # 기존 행에도 빈 칸 추가
+                for row in existing_data[1:]:
+                    row.append("")
+            
+            # 날짜 컬럼 30개 유지 (인덱스 2부터)
+            # 날짜 컬럼만 추출해서 정렬하거나, 단순히 길이로 판단
+            # 여기서는 단순히 가장 왼쪽의 날짜(인덱스 2)를 삭제하는 방식을 사용 (사용자 요청: 왼쪽으로 당겨짐)
+            # 헤더의 길이가 2(기본) + 30(날짜) = 32개를 넘으면
+            while len(header) > 32:
+                # 인덱스 2 제거
+                header.pop(2)
+                for row in existing_data[1:]:
+                    if len(row) > 2:
+                        row.pop(2)
 
-            for row in all_values[1:]:
-                if not any(row):
-                    continue
+            # 오늘 날짜 컬럼 인덱스 재계산
+            today_col_idx = header.index(today_str)
 
-                row_dict = {}
-                for i, header in enumerate(headers):
-                    row_dict[header] = row[i] if i < len(row) else ""
-                data.append(row_dict)
+            # 데이터 병합 (스토어명 기준)
+            # performance_rows 구조: [수집일시, 스토어명, 총방문자수, ...]
+            
+            # 스토어명 매핑 (스토어명 -> 행 인덱스)
+            store_row_map = {}
+            for i, row in enumerate(existing_data):
+                if i == 0: continue
+                if len(row) > 1:
+                    store_row_map[row[1].strip()] = i
 
-            return {"success": True, "data": data, "total": len(data)}
+            for p_row in performance_rows:
+                s_name = p_row[1].strip()
+                visits = p_row[2] # 총방문자수
 
+                if s_name in store_row_map:
+                    row_idx = store_row_map[s_name]
+                    target_row = existing_data[row_idx]
+                    # 행 길이 보정
+                    while len(target_row) <= today_col_idx:
+                        target_row.append("")
+                    target_row[today_col_idx] = visits
+                else:
+                    # 신규 스토어
+                    new_row = [""] * len(header)
+                    new_row[0] = "" # 용도
+                    new_row[1] = s_name
+                    new_row[today_col_idx] = visits
+                    existing_data.append(new_row)
+
+            # 시트 업데이트
+            ws_perf.clear()
+            ws_perf.update('A1', existing_data)
         except Exception as e:
-            # 전체데이터 시트가 없으면 개별 시트에서 수집
-            worksheets = sheet.worksheets()
-            store_names = [ws.title for ws in worksheets if ws.title not in ["템플릿", "설정", "전체데이터"]]
+            print(f"📦 [취합] 쇼핑몰정보 쓰기 실패: {e}")
 
+        # (2) 전체데이터 업데이트
+        try:
+            try:
+                ws_total = sheet.worksheet("전체데이터")
+            except:
+                ws_total = sheet.add_worksheet("전체데이터", 10000, 26) # Z열까지 넉넉하게
+
+            ws_total.clear()
+            header = ["수집일시", "스토어명", "상품번호", "상품명", "방문횟수", "유입수", "클릭수", "전환수", "판매액"]
+            ws_total.update('A1', [header] + summary_rows[:10000]) # 너무 많으면 자름
+        except Exception as e:
+            print(f"📦 [취합] 전체데이터 쓰기 실패: {e}")
+
+        return {
+            "success": True,
+            "message": f"{len(store_sheets)}개 스토어 취합 완료 (성과 {len(performance_rows)}건, 상세 {len(summary_rows)}건, 개별시트 {len(cleared_sheets)}개 초기화)",
+            "perf_count": len(performance_rows),
+            "summary_count": len(summary_rows),
+            "cleared_sheets": len(cleared_sheets)
+        }
+
+    except Exception as e:
+        print(f"마케팅 통합 취합 오류: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/marketing/summary")
+async def get_marketing_summary(request: Request, refresh: bool = False):
+    """마케팅 데이터 요약 (대시보드용)"""
+    require_permission(request, "view")
+
+    try:
+        # gsheet 인스턴스의 캐시 기능 활용
+        all_values = gsheet.get_values_with_cache("전체데이터", sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+
+        if not all_values or len(all_values) < 2:
+            # 전체데이터 시트가 없으면 워크시트 목록 반환 (캐시 활용)
+            store_names = gsheet.get_worksheet_names_with_cache(sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+            store_names = [name for name in store_names if name not in ["템플릿", "설정", "전체데이터", "쇼핑몰정보"]]
             return {
                 "success": True,
                 "stores": store_names,
                 "message": "전체데이터 시트 없음. 개별 스토어 조회 필요"
             }
 
+        headers = all_values[0]
+        data = []
+
+        for row in all_values[1:]:
+            if not any(row): continue
+            row_dict = {header: row[i] if i < len(row) else "" for i, header in enumerate(headers)}
+            data.append(row_dict)
+
+        return {"success": True, "data": data, "total": len(data)}
+
     except Exception as e:
+        print(f"마케팅 요약 조회 오류: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/marketing/history")
+async def get_marketing_history(request: Request):
+    """마케팅 일별 방문자 이력 조회 (marketing_stats.json)"""
+    require_permission(request, "view")
+    
+    stats_file = os.path.join(APP_DIR, "marketing_stats.json")
+    if not os.path.exists(stats_file):
+        return {"success": True, "history": {}}
+        
+    try:
+        with open(stats_file, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+        return {"success": True, "history": history}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/marketing/performance")
+async def get_marketing_performance(request: Request, refresh: bool = False):
+    """전체 마케팅 방문/성과 분석 (쇼핑몰정보 시트 활용)"""
+    require_permission(request, "view")
+
+    try:
+        # gsheet 인스턴스의 캐시 기능 활용하여 '쇼핑몰정보' 시트 데이터 로드
+        all_values = gsheet.get_values_with_cache("쇼핑몰정보", sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+
+        if not all_values or len(all_values) < 2:
+            return {"success": True, "data": [], "total": 0, "message": "데이터가 없습니다."}
+
+        headers = all_values[0]
+        data = []
+
+        for row in all_values[1:]:
+            if not any(row):
+                continue
+
+            row_dict = {}
+            for i, header in enumerate(headers):
+                if i < len(row):
+                    row_dict[header] = row[i].strip() if isinstance(row[i], str) else row[i]
+                else:
+                    row_dict[header] = ""
+            data.append(row_dict)
+
+        return {"success": True, "data": data, "total": len(data)}
+
+    except Exception as e:
+        print(f"마케팅 성과 조회 오류: {e}")
         return {"success": False, "error": str(e)}
 
 
 # ========== 다운로드 API ==========
 @app.get("/api/downloads/client")
-async def download_client():
+async def download_client_api():
     """클라이언트 프로그램 다운로드 (exe)"""
-    import zipfile
-    from io import BytesIO
 
-    # exe 파일 경로
-    exe_path = APP_DIR / "pkonomy_client" / "dist" / "PkonomyClient.exe"
+    # dist 폴더 경로 (우선)
+    exe_path = APP_DIR / "dist" / "PkonomyClient.exe"
+
+    if not exe_path.exists():
+        # 기존 경로 fallback
+        exe_path = APP_DIR / "pkonomy_client" / "dist" / "PkonomyClient.exe"
 
     if not exe_path.exists():
         # exe가 없으면 py 파일 제공
@@ -9194,7 +10657,16 @@ async def download_extension():
     import zipfile
     from io import BytesIO
 
-    ext_dir = APP_DIR.parent / "chrome_extension"
+    # dist 폴더 내 chrome_extension 우선
+    ext_dir = APP_DIR / "dist" / "chrome_extension"
+
+    if not ext_dir.exists():
+        # chrome_ext 폴더 내 chrome_extension
+        ext_dir = APP_DIR / "chrome_ext" / "chrome_extension"
+
+    if not ext_dir.exists():
+        # 기존 경로 fallback
+        ext_dir = APP_DIR.parent / "chrome_extension"
 
     if not ext_dir.exists():
         return {"error": "크롬 익스텐션 폴더를 찾을 수 없습니다"}
@@ -9219,8 +10691,17 @@ async def download_extension():
 @app.get("/api/downloads/info")
 async def get_download_info():
     """다운로드 가능 파일 정보"""
-    exe_path = APP_DIR / "pkonomy_client" / "dist" / "PkonomyClient.exe"
-    ext_dir = APP_DIR.parent / "chrome_extension"
+    # 클라이언트 경로 (dist 폴더 우선)
+    exe_path = APP_DIR / "dist" / "PkonomyClient.exe"
+    if not exe_path.exists():
+        exe_path = APP_DIR / "pkonomy_client" / "dist" / "PkonomyClient.exe"
+
+    # 익스텐션 경로 (dist 폴더 우선)
+    ext_dir = APP_DIR / "dist" / "chrome_extension"
+    if not ext_dir.exists():
+        ext_dir = APP_DIR / "chrome_ext" / "chrome_extension"
+    if not ext_dir.exists():
+        ext_dir = APP_DIR.parent / "chrome_extension"
 
     info = {
         "client": {
@@ -9252,16 +10733,269 @@ async def get_download_info():
     return info
 
 
-# ========== 실행 ==========
-if __name__ == "__main__":
-    print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║  🏢 구매대행 통합관리 시스템                                   ║
-║  ──────────────────────────────────────────────────────────  ║
-║  서버 주소: http://localhost:{PORT}                            ║
-║  내부망 접속: http://<서버IP>:{PORT}                           ║
-║                                                              ║
-║  기본 계정: admin / admin (담당자 시트 없을 경우)              ║
-╚══════════════════════════════════════════════════════════════╝
-    """)
-    uvicorn.run(app, host=HOST, port=PORT)
+# ========== 불사자 대시보드 API ==========
+@app.post("/api/bulsaja/settings")
+async def update_bulsaja_settings(request: Request):
+    """불사자 대시보드 개별 설정 저장 (운영일 등)"""
+    get_current_user(request)
+    try:
+        data = await request.json()
+        store_name = data.get("store_name")
+        operation_days = data.get("operationDays")
+        
+        if not store_name:
+            return {"success": False, "message": "스토어명이 없습니다."}
+            
+        settings_path = os.path.join(APP_DIR, "bulsaja_settings.json")
+        settings = {}
+        if os.path.exists(settings_path):
+            with open(settings_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        
+        if store_name not in settings:
+            settings[store_name] = {}
+        
+        if operation_days is not None:
+            settings[store_name]["operationDays"] = int(operation_days)
+            
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=4, ensure_ascii=False)
+            
+        return {"success": True, "message": "설정이 저장되었습니다."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@app.get("/api/bulsaja/dashboard_data")
+async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
+    """불사자 대시보드 데이터 조회 (매출 + 마케팅 통합)"""
+    get_current_user(request)
+
+    try:
+        # 상품수 정보
+        ss_counts = {}
+        st_counts = {}
+        try:
+            ws_counts = gsheet.sheet.worksheet("등록갯수")
+            c_data = ws_counts.get_all_values()
+            if c_data and len(c_data) > 1:
+                h = c_data[0]
+                ni = next((i for i,x in enumerate(h) if x=="스토어명"), None)
+                ci = next((i for i,x in enumerate(h) if x=="판매중"), None)
+                if ni is not None and ci is not None:
+                    for r in c_data[1:]:
+                        if len(r) > max(ni, ci):
+                            ss_counts[r[ni].strip()] = int(r[ci]) if r[ci].isdigit() else 0
+        except: pass
+        
+        try:
+            ws_11 = gsheet.sheet.worksheet("11번가")
+            s_data = ws_11.get_all_values()
+            if s_data and len(s_data) > 1:
+                h = s_data[0]
+                ni = next((i for i,x in enumerate(h) if x in ["store_name", "쇼핑몰 별칭", "스토어명"]), None)
+                ci = next((i for i,x in enumerate(h) if x in ["on_sale", "판매중"]), None)
+                if ni is not None and ci is not None:
+                    for r in s_data[1:]:
+                        if len(r) > max(ni, ci):
+                            st_counts[r[ni].strip()] = int(r[ci]) if r[ci].isdigit() else 0
+        except: pass
+
+        accounts = gsheet.get_accounts(None, force_refresh=refresh)
+        sales_res = await get_sales_from_sheet_v2(request, force=refresh)
+        sales_map = sales_res.get("data", {}) if sales_res.get("success") else {}
+        marketing_res = await get_marketing_data(request, refresh=refresh)
+        marketing_map = marketing_res.get("data", {}) if marketing_res.get("success") else {}
+
+        for acc in accounts:
+            store_name = (acc.get("스토어명") or "").strip()
+            raw_platform = (acc.get("platform") or "").strip().lower()
+            
+            # 필수 필드 초기화
+            acc["name"] = store_name or acc.get("login_id") or "Unknown"
+            acc["revenue"] = 0
+            acc["month_sales"] = 0
+            acc["today_sales"] = 0
+            acc["month_orders"] = 0
+            acc["month_profit"] = 0
+            acc["orders_7d"] = 0
+            acc["operationDays"] = 30
+            acc["products"] = 0
+            acc["targetProducts"] = 10000
+            acc["targetRevenue"] = 2000000
+            acc["stage"] = "업로드"  # 기본값: 업로드 (문자열!)
+            acc["month_visitors"] = 0
+            acc["renewalReason"] = ""
+            # 용도 필드 (원본에서 가져오기, 기본값 "대량")
+            acc["usage"] = acc.get("용도") or acc.get("usage") or "대량"
+
+            # Platform Normalization
+            if raw_platform in ["naver", "smartstore", "스마트스토어", "n"]:
+                pk = "스마트스토어"
+                platform_display = "naver"  # HTML용
+            elif raw_platform in ["11st", "11번가", "11", "elevenst"]:
+                pk = "11번가"
+                platform_display = "11st"  # HTML용
+            elif raw_platform in ["coupang", "쿠팡", "cp", "c"]:
+                pk = "쿠팡"
+                platform_display = "coupang"  # HTML용
+            elif raw_platform in ["gmarket", "지마켓", "gm", "g"]:
+                pk = "지마켓"
+                platform_display = "gmarket"  # HTML용 (G마켓/옥션 필터에 포함)
+            elif raw_platform in ["auction", "옥션", "ac", "a"]:
+                pk = "옥션"
+                platform_display = "auction"  # HTML용 (A 아이콘 표시, G마켓/옥션 필터에서 함께 처리)
+            else:
+                pk = raw_platform
+                platform_display = raw_platform
+
+            # Alias 및 수동 설정값 로드
+            an = store_name
+            manual_op_days = None  # 수동 설정된 운영일수
+            s_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bulsaja_settings.json")
+            if os.path.exists(s_p):
+                try:
+                    with open(s_p, "r", encoding="utf-8") as sf:
+                        all_settings = json.load(sf)
+                        # sales_key_alias 처리
+                        al = all_settings.get("sales_key_alias", {})
+                        if store_name in al:
+                            an = al[store_name]
+                        # 스토어별 수동 설정값 (operationDays)
+                        store_settings = all_settings.get(store_name, {})
+                        if "operationDays" in store_settings:
+                            manual_op_days = int(store_settings["operationDays"])
+                except: pass
+
+            # HTML용 플랫폼 값 설정
+            acc["platform"] = platform_display
+
+            sk = f"{an}({pk})"
+            info = {}
+            matched = False
+            
+            # 매출 데이터 매칭
+            if sk in sales_map:
+                info = sales_map[sk]
+                matched = True
+            else:
+                for k, v in sales_map.items():
+                    if "(" in k:
+                        kn = k.split("(")[0]
+                        kp = k.split("(")[1].replace(")", "")
+                        if kp == pk and (an in kn or kn in an):
+                            info = v
+                            matched = True
+                            break
+            
+            if not matched:
+                ss = an.replace(" ", "")
+                for k, v in sales_map.items():
+                    if ss in k.replace(" ", "") and pk in k:
+                        info = v
+                        matched = True
+                        break
+            
+            if matched:
+                acc["revenue"] = info.get("month_sales", 0)
+                acc["month_sales"] = info.get("month_sales", 0)
+                acc["today_sales"] = info.get("today_sales", 0)
+                acc["month_orders"] = info.get("month_orders", 0)
+                acc["month_profit"] = info.get("month_profit", 0)
+                acc["operationDays"] = info.get("operation_days", 30)
+                acc["orders_7d"] = info.get("orders_7d", 0)
+
+            # 수동 설정된 운영일수가 있으면 덮어쓰기
+            if manual_op_days is not None:
+                acc["operationDays"] = manual_op_days
+
+            # Marketing
+            md = marketing_map.get(store_name, {})
+            visitors = 0
+            biz = md.get("biz_advisor", [])
+            if isinstance(biz, list):
+                for b in biz:
+                    try:
+                        v = str(b.get("유입수", "0")).replace(",", "")
+                        visitors += int(v) if v.isdigit() else 0
+                    except: pass
+            acc["month_visitors"] = visitors
+
+            # Products & Stage
+            pc = 0
+            if pk == "스마트스토어":
+                pc = ss_counts.get(store_name, 0)
+                if pc == 0 and "_" in store_name:
+                    pc = ss_counts.get(store_name.split("_", 1)[1], 0)
+            elif pk == "11번가":
+                pc = st_counts.get(store_name, 0) or st_counts.get(acc.get("login_id"), 0)
+            
+            tp = 10000
+            if pk == "11번가":
+                tp = 5000
+            elif pk in ["지마켓", "옥션"]:
+                tp = 2000
+            
+            acc["products"] = pc
+            acc["targetProducts"] = tp
+            
+            # 상품 등록률 계산
+            registration_rate = (pc / tp) if tp > 0 else 0
+            
+            # 운영일 가져오기 (매칭된 경우에만, 기본값 30일)
+            operation_days = acc.get("operationDays", 30)
+            
+            # 매출 데이터
+            month_revenue = acc.get("revenue", 0)
+            orders_7d = acc.get("orders_7d", 0)
+            
+            # 스토어 상태 판별
+            # 1단계: 업로드 vs 운영 구분
+            if registration_rate >= 0.9:
+                # 90% 이상 등록 -> 운영 상태
+                stage = "운영"  # 운영 (문자열!)
+                
+                # 2단계: 리뉴얼대상 판별
+                # 조건1: 운영일 60일 경과
+                if operation_days >= 60:
+                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
+                    acc["renewalReason"] = f"운영 {operation_days}일 경과"
+                
+                # 조건2: 운영일 30일 경과 + 최근 30일 매출 50만원 이하
+                elif operation_days >= 30 and month_revenue <= 500000:
+                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
+                    acc["renewalReason"] = f"매출부진 ({month_revenue:,}원)"
+                
+                # 조건3: 7일 주문 0건 (유입수 감소는 향후 추가)
+                elif orders_7d == 0 and operation_days >= 7:
+                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
+                    acc["renewalReason"] = "7일 주문 0건"
+            else:
+                # 90% 미만 등록 -> 업로드 상태
+                stage = "업로드"  # 업로드 (문자열!)
+                # 업로드 상태에서는 운영일 초기화 (향후 DB 업데이트 시 반영)
+            
+            acc["stage"] = stage
+
+        return {"success": True, "accounts": accounts}
+    except Exception as e:
+        print(f"[불사자 오류] {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": str(e), "accounts": []}
+
+
+# ========== 실행 제어 변수 ==========
+HOST = "0.0.0.0"
+PORT = 8000
+
+# ========== 실행부 제거 (run_server.py 사용) ==========
+
+# 전역 서버 인스턴스 생성 (run_server.py에서 server:app으로 실행 시 필요)
+# API 핸들러(sync_manual_marketing_data 등)에서 'server' 전역 변수를 참조하기 위함
+try:
+    server = Server()
+    app.state.server = server
+    print("[INIT] Server instance created globally in server.py")
+except Exception as e:
+    print(f"[ERROR] Failed to create global Server instance: {e}")
