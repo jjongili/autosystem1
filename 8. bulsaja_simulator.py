@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-불사자 시뮬레이터 v1.0
+불사자 시뮬레이터 v1.2
 
 상품 업로드 없이 분석만 수행하여 학습 데이터 수집:
 - 브랜드/위험상품 검사
@@ -787,9 +787,11 @@ class ExcelApplier:
             - tag_dangerous: 위험상품에 태그 추가
             - danger_tag_name: 위험상품 태그명
             - remove_danger_tag: 안전상품에서 위험태그 제거
+            - apply_category: 카테고리 자동 매핑
+            - market_type: 마켓 타입 (ss/cp/esm/est)
         """
         self.is_running = True
-        self.stats = {"total": 0, "updated": 0, "skipped": 0, "failed": 0, "danger_tagged": 0}
+        self.stats = {"total": 0, "updated": 0, "skipped": 0, "failed": 0, "danger_tagged": 0, "category_updated": 0}
 
         apply_main_option = options.get('apply_main_option', True)
         apply_product_name = options.get('apply_product_name', False)
@@ -797,6 +799,8 @@ class ExcelApplier:
         tag_dangerous = options.get('tag_dangerous', False)
         danger_tag_name = options.get('danger_tag_name', '위험상품')
         remove_danger_tag = options.get('remove_danger_tag', False)
+        apply_category = options.get('apply_category', True)
+        market_type = options.get('market_type', 'ss')
 
         self.log("")
         self.log("=" * 50)
@@ -804,6 +808,7 @@ class ExcelApplier:
         self.log(f"   총 {len(excel_data)}개 상품")
         self.log(f"   대표옵션 반영: {'O' if apply_main_option else 'X'}")
         self.log(f"   상품명 반영: {'O' if apply_product_name else 'X'}")
+        self.log(f"   카테고리 매핑: {'O' if apply_category else 'X'} ({market_type})")
         self.log(f"   위험상품 스킵: {'O' if skip_dangerous else 'X'}")
         self.log(f"   위험상품 태그: {'O' if tag_dangerous else 'X'}")
         self.log("=" * 50)
@@ -848,7 +853,7 @@ class ExcelApplier:
             # 업데이트할 데이터 준비
             update_data = {}
 
-            # 1. 대표옵션 변경
+            # 1. 대표옵션 변경 (uploadSkus[].main_product 수정)
             if apply_main_option:
                 select_value = row.get('선택', 'A')
                 options_text = row.get('최종옵션목록') or row.get('옵션명', '')
@@ -856,8 +861,14 @@ class ExcelApplier:
                 selected = self.parse_selected_option(select_value, options_text)
                 if selected and selected['label'] != 'A':
                     # A가 아닌 다른 옵션을 선택한 경우 → 대표옵션 변경 필요
-                    update_data['mainOptionIndex'] = selected['index']
-                    update_data['mainOptionName'] = selected['name']
+                    # 불사자 API는 mainOptionIndex를 지원하지 않음
+                    # uploadSkus 배열에서 main_product를 수정해야 함
+                    main_option_change = {
+                        'index': selected['index'],
+                        'name': selected['name'],
+                        'price': selected.get('price', 0)
+                    }
+                    update_data['_main_option_change'] = main_option_change
 
             # 2. 상품명 변경
             if apply_product_name:
@@ -867,20 +878,72 @@ class ExcelApplier:
                 if new_name and new_name != original_name:
                     update_data['uploadCommonProductName'] = new_name
 
+            # 3. 카테고리 자동 매핑
+            if apply_category:
+                product_name = row.get('상품명', '') or row.get('원본상품명', '')
+                if product_name:
+                    cat_success, cat_msg = self.api_client.update_category(product_id, product_name, market_type)
+                    if cat_success:
+                        self.stats['category_updated'] += 1
+                        self.log(f"🏷️ [{idx+1}] {product_id} → 카테고리: {cat_msg}")
+
             # 업데이트 실행
             if update_data:
-                success, msg = self.api_client.update_product_fields(product_id, update_data)
-                if success:
-                    self.stats['updated'] += 1
-                    changes = []
-                    if 'mainOptionIndex' in update_data:
-                        changes.append(f"대표옵션→{update_data.get('mainOptionName', '')[:15]}")
-                    if 'uploadCommonProductName' in update_data:
-                        changes.append("상품명변경")
-                    self.log(f"✅ [{idx+1}] {product_id} → {', '.join(changes)}")
+                # 대표옵션 변경이 있으면 uploadSkus 수정
+                main_option_change = update_data.pop('_main_option_change', None)
+
+                if main_option_change:
+                    # 상품 상세 조회 후 uploadSkus 수정
+                    try:
+                        detail = self.api_client.get_product_detail(product_id)
+                        upload_skus = detail.get('uploadSkus', [])
+
+                        if upload_skus:
+                            target_index = main_option_change['index']
+                            target_name = main_option_change['name']
+
+                            # 모든 옵션의 main_product를 false로
+                            for sku in upload_skus:
+                                sku['main_product'] = False
+
+                            # 선택된 옵션을 main_product = True로 설정
+                            # 인덱스로 찾거나, 옵션명으로 찾기
+                            found = False
+                            if target_index < len(upload_skus):
+                                upload_skus[target_index]['main_product'] = True
+                                found = True
+                            else:
+                                # 인덱스가 범위를 벗어나면 옵션명으로 검색
+                                for sku in upload_skus:
+                                    sku_name = sku.get('text', '') or sku.get('text_ko', '')
+                                    if target_name and target_name in sku_name:
+                                        sku['main_product'] = True
+                                        found = True
+                                        break
+
+                            if found:
+                                update_data['uploadSkus'] = upload_skus
+                            else:
+                                self.log(f"⚠️ [{idx+1}] {product_id} → 대표옵션 찾기 실패: {target_name[:20]}")
+                    except Exception as e:
+                        self.log(f"⚠️ [{idx+1}] {product_id} → SKU 조회 실패: {e}")
+
+                # API 업데이트 실행
+                if update_data:
+                    success, msg = self.api_client.update_product_fields(product_id, update_data)
+                    if success:
+                        self.stats['updated'] += 1
+                        changes = []
+                        if main_option_change:
+                            changes.append(f"대표옵션→{main_option_change.get('name', '')[:15]}")
+                        if 'uploadCommonProductName' in update_data:
+                            changes.append("상품명변경")
+                        self.log(f"✅ [{idx+1}] {product_id} → {', '.join(changes)}")
+                    else:
+                        self.stats['failed'] += 1
+                        self.log(f"❌ [{idx+1}] {product_id} → {msg[:50]}")
                 else:
-                    self.stats['failed'] += 1
-                    self.log(f"❌ [{idx+1}] {product_id} → {msg[:50]}")
+                    self.stats['skipped'] += 1
             else:
                 self.stats['skipped'] += 1
 
@@ -896,6 +959,8 @@ class ExcelApplier:
         self.log(f"   업데이트: {self.stats['updated']}개")
         self.log(f"   스킵: {self.stats['skipped']}개")
         self.log(f"   실패: {self.stats['failed']}개")
+        if apply_category:
+            self.log(f"   카테고리 매핑: {self.stats['category_updated']}개")
         if tag_dangerous:
             self.log(f"   위험태그: {self.stats['danger_tagged']}개")
         self.log("=" * 50)
@@ -942,7 +1007,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("불사자 시뮬레이터 v1.1 - 분석 및 반영")
+        self.title("불사자 시뮬레이터 v1.2 - 분석 및 반영")
         self.geometry("950x800")
         self.resizable(True, True)
 
@@ -976,6 +1041,14 @@ class App(tk.Tk):
         self.port_var = tk.StringVar(value="9222")
         ttk.Entry(row0, textvariable=self.port_var, width=6).pack(side=tk.RIGHT, padx=2)
 
+        # 토큰 정보 표시
+        row_token = ttk.Frame(conn_frame)
+        row_token.pack(fill=tk.X, pady=2)
+        ttk.Label(row_token, text="토큰:").pack(side=tk.LEFT)
+        self.token_info_var = tk.StringVar(value="(미추출)")
+        self.token_info_label = ttk.Label(row_token, textvariable=self.token_info_var, foreground="gray", font=('Consolas', 8))
+        self.token_info_label.pack(side=tk.LEFT, padx=5)
+
         # === 탭 노트북 ===
         self.notebook = ttk.Notebook(main_container)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -1000,7 +1073,7 @@ class App(tk.Tk):
         # Footer
         footer = ttk.Frame(main_container)
         footer.pack(fill=tk.X, pady=(5, 0))
-        ttk.Label(footer, text="v1.1 by 프코노미 | 시뮬레이션 + 엑셀 반영", foreground="gray").pack(side=tk.RIGHT)
+        ttk.Label(footer, text="v1.2 by 프코노미 | 시뮬레이션 + 엑셀 반영", foreground="gray").pack(side=tk.RIGHT)
 
     def create_simulation_tab(self):
         """시뮬레이션 탭 생성"""
@@ -1168,6 +1241,19 @@ class App(tk.Tk):
         self.remove_danger_tag_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(opt_row3, text="안전상품(O)에서 위험태그 제거", variable=self.remove_danger_tag_var).pack(side=tk.LEFT)
 
+        # 카테고리 매핑 옵션
+        opt_row4 = ttk.Frame(option_frame)
+        opt_row4.pack(fill=tk.X, pady=2)
+
+        self.apply_category_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt_row4, text="카테고리 자동 매핑", variable=self.apply_category_var).pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Label(opt_row4, text="마켓:").pack(side=tk.LEFT)
+        self.market_type_var = tk.StringVar(value="ss")
+        market_combo = ttk.Combobox(opt_row4, textvariable=self.market_type_var, width=12, state="readonly")
+        market_combo['values'] = ('ss (스마트스토어)', 'cp (쿠팡)', 'esm (G마켓/옥션)', 'est (11번가)')
+        market_combo.pack(side=tk.LEFT, padx=2)
+
         # 설명
         ttk.Label(option_frame, text="※ 엑셀의 '선택' 컬럼에서 A가 아닌 다른 값(B,C,D...)을 선택한 상품만 대표옵션이 변경됩니다",
                   foreground="gray").pack(anchor=tk.W, pady=(5, 0))
@@ -1318,6 +1404,9 @@ class App(tk.Tk):
         self.excel_applier = ExcelApplier(self.simulator.api_client, self.log)
 
         # 옵션 수집
+        market_type_raw = self.market_type_var.get()
+        market_type = market_type_raw.split(' ')[0] if market_type_raw else 'ss'
+
         options = {
             'apply_main_option': self.apply_main_option_var.get(),
             'apply_product_name': self.apply_product_name_var.get(),
@@ -1325,6 +1414,8 @@ class App(tk.Tk):
             'tag_dangerous': self.tag_dangerous_var.get(),
             'danger_tag_name': self.danger_tag_var.get(),
             'remove_danger_tag': self.remove_danger_tag_var.get(),
+            'apply_category': self.apply_category_var.get(),
+            'market_type': market_type,
         }
 
         self.btn_apply.config(state="disabled")
@@ -1366,6 +1457,12 @@ class App(tk.Tk):
         # 검수 설정
         if "check_level" in c: self.check_level_var.set(c["check_level"])
         if "risk_categories" in c: self.risk_categories_var.set(c["risk_categories"])
+        # 저장된 토큰이 있으면 표시
+        if "access_token" in c and c["access_token"]:
+            access = c["access_token"]
+            token_display = f"{access[:20]}...{access[-10:]}" if len(access) > 35 else access
+            self.token_info_var.set(token_display)
+            self.token_info_label.config(foreground="blue")
 
     def save_settings(self):
         self.config_data["port"] = self.port_var.get()
@@ -1430,9 +1527,15 @@ class App(tk.Tk):
                 self.config_data["access_token"] = access
                 self.config_data["refresh_token"] = refresh
                 self.log("✅ 토큰 추출 성공")
+                # 토큰 정보 표시 (앞 20자...뒤 10자)
+                token_display = f"{access[:20]}...{access[-10:]}" if len(access) > 35 else access
+                self.token_info_var.set(token_display)
+                self.token_info_label.config(foreground="blue")
                 self.after(500, self.connect_api)
             else:
                 self.log(f"❌ 토큰 추출 실패: {err}")
+                self.token_info_var.set("(추출 실패)")
+                self.token_info_label.config(foreground="red")
 
         threading.Thread(target=task, daemon=True).start()
 

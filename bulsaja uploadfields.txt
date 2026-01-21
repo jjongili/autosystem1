@@ -1,0 +1,1586 @@
+https://api.bulsaja.com/api/sourcing/uploadfields/U01KF9Z132BY8R4BP4DJWK61HCD
+
+payload
+
+{uploadBulsajaCode: "_AJ_nUPFQ0tivZezSGLgb", uploadTrackcopyCode: "mdYm6SsHSsO2aPrakAfMZ",…}
+uplaodSetting
+: 
+{is_tax_free: false, coupang_thumbnail_mode: "OPTION_IMAGE", maker: "",…}
+add_first_option_to_smartstore
+: 
+false
+brand
+: 
+""
+coupang_thumbnail_mode
+: 
+"OPTION_IMAGE"
+is_tax_free
+: 
+false
+maker
+: 
+""
+max_purchase_qty
+: 
+0
+minor_limit
+: 
+"AUTO"
+shipment_date
+: 
+10
+uploadBase_price
+: 
+{card_fee: 3.3, raise_digit: 100, percent_margin: 30, discount_rate: 37, plus_margin: 10000,…}
+card_fee
+: 
+3.3
+discount_rate
+: 
+37
+discount_unit
+: 
+"%"
+percent_margin
+: 
+30
+plus_margin
+: 
+10000
+raise_digit
+: 
+100
+uploadBrand
+: 
+"竹中生智"
+uploadBulsajaCode
+: 
+"_AJ_nUPFQ0tivZezSGLgb"
+uploadCategory
+: 
+{esm_category: {name: "생활용품>세탁용품>빨래건조대",…}, est_global_category: {name: "해외직구>리빙/생활>생활용품>세탁/청소용품",…},…}
+cp_category
+: 
+{name: "생활용품>건강용품>건강액세서리>기타건강액세서리",…}
+categoryList
+: 
+[{name: "생활용품>건강용품>건강액세서리>기타건강액세서리", code: "64086", id: "cp", needCert: false,…},…]
+0
+: 
+{name: "생활용품>건강용품>건강액세서리>기타건강액세서리", code: "64086", id: "cp", needCert: false,…}
+additional
+: 
+{mandatoryType: "NUMBER", addPrice: true, requiredOptions: 1, mandatoryOption: "수량"}
+addPrice
+: 
+true
+mandatoryOption
+: 
+"수량"
+mandatoryType
+: 
+"NUMBER"
+requiredOptions
+: 
+1
+code
+: 
+"64086"
+id
+: 
+"cp"
+name
+: 
+"생활용품>건강용품>건강액세서리>기타건강액세서리"
+needCert
+: 
+false
+1
+: 
+{name: "생활용품>세탁용품>빨래건조대", code: "64463", id: "cp", needCert: false,…}
+additional
+: 
+{mandatoryType: "NUMBER", addPrice: true, requiredOptions: 2, mandatoryOption: "수량"}
+addPrice
+: 
+true
+mandatoryOption
+: 
+"수량"
+mandatoryType
+: 
+"NUMBER"
+requiredOptions
+: 
+2
+code
+: 
+"64463"
+id
+: 
+"cp"
+name
+: 
+"생활용품>세탁용품>빨래건조대"
+needCert
+: 
+false
+code
+: 
+"64086"
+name
+: 
+"생활용품>건강용품>건강액세서리>기타건강액세서리"
+search
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+esm_category
+: 
+{name: "생활용품>세탁용품>빨래건조대",…}
+categoryList
+: 
+[{name: "생활용품>세탁용품>빨래건조대", code: "300028878", id: "esm", needCert: false,…}]
+0
+: 
+{name: "생활용품>세탁용품>빨래건조대", code: "300028878", id: "esm", needCert: false,…}
+additional
+: 
+{options: [{name: "발송일", code: 1021}], isBook: false, addPrice: true, addOption: true,…}
+addOption
+: 
+true
+addPrice
+: 
+true
+auction
+: 
+"28481500"
+gmarket
+: 
+"300028878"
+isBook
+: 
+false
+options
+: 
+[{name: "발송일", code: 1021}]
+0
+: 
+{name: "발송일", code: 1021}
+code
+: 
+1021
+name
+: 
+"발송일"
+code
+: 
+"300028878"
+id
+: 
+"esm"
+name
+: 
+"생활용품>세탁용품>빨래건조대"
+needCert
+: 
+false
+code
+: 
+"300028878"
+name
+: 
+"생활용품>세탁용품>빨래건조대"
+search
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+est_category
+: 
+{name: "세탁용품>빨래건조대>이동접이식>", categoryList: [,…], search: "원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식",…}
+categoryList
+: 
+[,…]
+0
+: 
+{name: "세탁용품>빨래건조대>이동접이식>", code: "1010153", id: "est", needCert: false, additional: {addPrice: true}}
+additional
+: 
+{addPrice: true}
+addPrice
+: 
+true
+code
+: 
+"1010153"
+id
+: 
+"est"
+name
+: 
+"세탁용품>빨래건조대>이동접이식>"
+needCert
+: 
+false
+code
+: 
+"1010153"
+name
+: 
+"세탁용품>빨래건조대>이동접이식>"
+search
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+est_global_category
+: 
+{name: "해외직구>리빙/생활>생활용품>세탁/청소용품",…}
+categoryList
+: 
+[{name: "해외직구>리빙/생활>생활용품>세탁/청소용품", code: "939964", id: "est_global", needCert: false,…}]
+0
+: 
+{name: "해외직구>리빙/생활>생활용품>세탁/청소용품", code: "939964", id: "est_global", needCert: false,…}
+additional
+: 
+{addPrice: true}
+addPrice
+: 
+true
+code
+: 
+"939964"
+id
+: 
+"est_global"
+name
+: 
+"해외직구>리빙/생활>생활용품>세탁/청소용품"
+needCert
+: 
+false
+code
+: 
+"939964"
+name
+: 
+"해외직구>리빙/생활>생활용품>세탁/청소용품"
+search
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+ss_category
+: 
+{name: "생활/건강>세탁용품>빨래건조대>이동접이식",…}
+categoryList
+: 
+[{name: "생활/건강>세탁용품>빨래건조대>이동접이식", code: "50002310", id: "ss", needCert: false,…}]
+0
+: 
+{name: "생활/건강>세탁용품>빨래건조대>이동접이식", code: "50002310", id: "ss", needCert: false,…}
+additional
+: 
+{addPrice: true}
+addPrice
+: 
+true
+code
+: 
+"50002310"
+id
+: 
+"ss"
+name
+: 
+"생활/건강>세탁용품>빨래건조대>이동접이식"
+needCert
+: 
+false
+code
+: 
+"50002310"
+name
+: 
+"생활/건강>세탁용품>빨래건조대>이동접이식"
+search
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadCommonProductName
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadCommonTags
+: 
+["간편한", "연지", "원목빨래건조대", "빨래건조대", "고급", "감성"]
+0
+: 
+"간편한"
+1
+: 
+"연지"
+2
+: 
+"원목빨래건조대"
+3
+: 
+"빨래건조대"
+4
+: 
+"고급"
+5
+: 
+"감성"
+uploadContact
+: 
+{refund_info: "", tel: "", as_info: ""}
+as_info
+: 
+""
+refund_info
+: 
+""
+tel
+: 
+""
+uploadCoupangOptionMode
+: 
+0
+uploadCoupangProductName
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadDelivery
+: 
+{delivery_fee: 5000, type: "FREE", mountain_fee: 8000, exchange_fee: 60000, return_fee: 30000}
+delivery_fee
+: 
+5000
+exchange_fee
+: 
+60000
+mountain_fee
+: 
+8000
+return_fee
+: 
+30000
+type
+: 
+"FREE"
+uploadDetailContents
+: 
+{,…}
+imageTranslated
+: 
+"0"
+renderContent
+: 
+"<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i1/2208786055313/O1CN0191Iy9z1p7PFYIl691_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i2/2208786055313/O1CN01weN98a1p7PFYItYNo_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i2/2208786055313/O1CN01homUqV1p7PFTYI4Cg_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i4/2208786055313/O1CN01p8c5vT1p7PFXf7uBL_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i4/2208786055313/O1CN011ZvWY01p7PFYInB4F_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i2/2208786055313/O1CN01ZJtxvp1p7PFUJ72B0_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i2/2208786055313/O1CN01HVBFqI1p7PFRbe4cO_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i3/2208786055313/O1CN01AfMFlH1p7PFUJ5tUw_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i1/2208786055313/O1CN01tEzFn71p7PFRbeTZY_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i4/2208786055313/O1CN010mT2tw1p7PFTYAHYi_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i4/2208786055313/O1CN01vHxX6L1p7PFRymPAF_!!2208786055313.jpg\" align=\"absmiddle\"></div>\n<div><img style=\"width: 100%; height: auto;\" src=\"https://img.alicdn.com/imgextra/i4/2208786055313/O1CN01pyZsCn1p7PFTYC1gM_!!2208786055313.jpg\" align=\"absmiddle\"></div>"
+uploadDetail_page
+: 
+{is_include_option_image: true,…}
+bottom_image
+: 
+"https://d2x50zupc34zqr.cloudfront.net/users/11669/marketGroups/11261/fixedImages/6QmgJMMCSP/bottom.png?t=1756113423739"
+is_include_fixed_image
+: 
+true
+is_include_option_image
+: 
+true
+is_include_product_name
+: 
+false
+is_include_video
+: 
+true
+option_image_position
+: 
+"TOP"
+option_place_method
+: 
+"DUAL"
+top_image
+: 
+"https://d2x50zupc34zqr.cloudfront.net/users/11669/marketGroups/11261/fixedImages/QuOBrlPF0n/top.png?t=1757605325639"
+uploadFake_pct
+: 
+{coupang: 15, gmarket: 15, smartstore: 8, st11: 12, auction: 15}
+auction
+: 
+15
+coupang
+: 
+15
+gmarket
+: 
+15
+smartstore
+: 
+8
+st11
+: 
+12
+uploadOverseaDeliveryFee
+: 
+9000
+uploadProductSearchText
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadRecentExchangeRate
+: 
+200
+uploadSearchCategory
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadSelectedMarketGroupId
+: 
+11261
+uploadSkuProps
+: 
+{subOption: [], mainOption: {prop_name: "색상 분류", _prop_name: "颜色分类", pid: 1,…}}
+mainOption
+: 
+{prop_name: "색상 분류", _prop_name: "颜色分类", pid: 1,…}
+pid
+: 
+1
+prop_name
+: 
+"색상 분류"
+values
+: 
+[{vid: 4, _name: "【X型矮款】50长原色⭐折叠收纳 加粗加厚⭐",…}, {vid: 5, _name: "⭐主图同款⭐70长原色⭐折叠收纳 加粗加厚⭐",…},…]
+0
+: 
+{vid: 4, _name: "【X型矮款】50长原色⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN0180JRrG1p7PFTppdTi_!!2208786055313.jpg"
+name
+: 
+"D. X형 50cm 원목 접이식"
+name_ko
+: 
+"X형 50cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+4
+_name
+: 
+"【X型矮款】50长原色⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+1
+: 
+{vid: 5, _name: "⭐主图同款⭐70长原色⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01d3VNPp1p7PFYIOCgQ_!!2208786055313.jpg"
+name
+: 
+"E. 주요 사진 70cm 원목 접이식"
+name_ko
+: 
+"주요 사진 70cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+5
+_name
+: 
+"⭐主图同款⭐70长原色⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+2
+: 
+{vid: 6, _name: "【X型矮款】50长黑色⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01glCkFf1p7PFUOrutK_!!2208786055313.jpg"
+name
+: 
+"F. X형 50cm 블랙 접이식"
+name_ko
+: 
+"X형 50cm 블랙 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+6
+_name
+: 
+"【X型矮款】50长黑色⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+3
+: 
+{vid: 7, _name: "【X型矮款】70长黑色⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01fATFIN1p7PFRyQFUR_!!2208786055313.jpg"
+name
+: 
+"G. X형 70cm 블랙 접이식"
+name_ko
+: 
+"X형 70cm 블랙 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+7
+_name
+: 
+"【X型矮款】70长黑色⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+4
+: 
+{vid: 8, _name: "【X型长款】50长原色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01g9mEUo1p7PFXflaB9_!!2208786055313.jpg"
+name
+: 
+"H. X형 50cm 원목 접이식"
+name_ko
+: 
+"X형 50cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+8
+_name
+: 
+"【X型长款】50长原色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+5
+: 
+{vid: 9, _name: "【X型长款】70长原色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01s66GLQ1p7PFTqmeHW_!!2208786055313.jpg"
+name
+: 
+"I. X형 70cm 원목 접이식"
+name_ko
+: 
+"X형 70cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+9
+_name
+: 
+"【X型长款】70长原色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+6
+: 
+{vid: 10, _name: "【X型长款】100长原色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01GhjEPm1p7PFWuwQ0A_!!2208786055313.jpg"
+name
+: 
+"J. X형 100cm 원목 접이식"
+name_ko
+: 
+"X형 100cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+10
+_name
+: 
+"【X型长款】100长原色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+7
+: 
+{vid: 11, _name: "【X型长款】50长茶色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01HysWYd1p7PFVDHdRg_!!2208786055313.jpg"
+name
+: 
+"K. X형 50cm 다색 접이식"
+name_ko
+: 
+"X형 50cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+11
+_name
+: 
+"【X型长款】50长茶色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+8
+: 
+{vid: 12, _name: "【X型长款】70长茶色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01G40ywE1p7PFVDLFxV_!!2208786055313.jpg"
+name
+: 
+"L. X형 70cm 다색 접이식"
+name_ko
+: 
+"X형 70cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+12
+_name
+: 
+"【X型长款】70长茶色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+9
+: 
+{vid: 13, _name: "【X型长款】100长茶色 ⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01cgLvjA1p7PFQg6kfh_!!2208786055313.jpg"
+name
+: 
+"M. X형 100cm 다색 접이식"
+name_ko
+: 
+"X형 100cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+13
+_name
+: 
+"【X型长款】100长茶色 ⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+10
+: 
+{vid: 14, _name: "【A型矮款】50长原色⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01faZv751p7PFX9Qktg_!!2208786055313.jpg"
+name
+: 
+"N. A형 50cm 원목 접이식"
+name_ko
+: 
+"A형 50cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+14
+_name
+: 
+"【A型矮款】50长原色⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+11
+: 
+{vid: 15, _name: "【A型矮款】70长原色 折叠⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN016QTH8o1p7PFU2weXw_!!2208786055313.jpg"
+name
+: 
+"O. A형 70cm 원목 접이식"
+name_ko
+: 
+"A형 70cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+15
+_name
+: 
+"【A型矮款】70长原色 折叠⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+12
+: 
+{vid: 16, _name: "【A型矮款】100长原色 折叠⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01tFCa7M1p7PFUddyyh_!!2208786055313.jpg"
+name
+: 
+"P. A형 100cm 원목 접이식"
+name_ko
+: 
+"A형 100cm 원목 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+16
+_name
+: 
+"【A型矮款】100长原色 折叠⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+13
+: 
+{vid: 17, _name: "【A型矮款】50长茶色 折叠⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01G28Z8D1p7PFSTElaj_!!2208786055313.jpg"
+name
+: 
+"Q. A형 50cm 다색 접이식"
+name_ko
+: 
+"A형 50cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+17
+_name
+: 
+"【A型矮款】50长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+14
+: 
+{vid: 18, _name: "【A型矮款】70长茶色 折叠⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN011qn3ia1p7PFPVl6HZ_!!2208786055313.jpg"
+name
+: 
+"R. A형 70cm 다색 접이식"
+name_ko
+: 
+"A형 70cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+18
+_name
+: 
+"【A型矮款】70长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+15
+: 
+{vid: 19, _name: "【A型矮款】100长茶色 折叠⭐折叠收纳 加粗加厚⭐",…}
+exclude
+: 
+false
+imageUrl
+: 
+"https://img.alicdn.com/bao/uploaded/i3/2208786055313/O1CN01QHGvil1p7PFKz4WW2_!!2208786055313.jpg"
+name
+: 
+"S. A형 100cm 다색 접이식"
+name_ko
+: 
+"A형 100cm 다색 접이식"
+origin_priceRef
+: 
+10139
+sale_priceRef
+: 
+5061
+vid
+: 
+19
+_name
+: 
+"【A型矮款】100长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+_origin_priceRef
+: 
+48.06
+_prop_name
+: 
+"颜色分类"
+subOption
+: 
+[]
+uploadSkus
+: 
+[{skuRef: "5380752133925", _origin_price: 33.69, main_product: false, exclude: false, id: "4",…},…]
+0
+: 
+{skuRef: "5380752133925", _origin_price: 33.69, main_product: false, exclude: false, id: "4",…}
+exclude
+: 
+false
+id
+: 
+"4"
+main_product
+: 
+false
+origin_price
+: 
+6738
+sale_price
+: 
+28000
+skuRef
+: 
+"5380752133925"
+stock
+: 
+200
+text
+: 
+"D. X형 50cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN0180JRrG1p7PFTppdTi_!!2208786055313.jpg"
+_origin_price
+: 
+33.69
+_text
+: 
+"【X型矮款】50长原色⭐折叠收纳 加粗加厚⭐"
+1
+: 
+{skuRef: "5380752133926", _origin_price: 46.59, main_product: false, exclude: false, id: "5",…}
+exclude
+: 
+false
+id
+: 
+"5"
+main_product
+: 
+false
+origin_price
+: 
+9318
+sale_price
+: 
+31400
+skuRef
+: 
+"5380752133926"
+stock
+: 
+200
+text
+: 
+"E. 주요 사진 70cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01d3VNPp1p7PFYIOCgQ_!!2208786055313.jpg"
+_origin_price
+: 
+46.59
+_text
+: 
+"⭐主图同款⭐70长原色⭐折叠收纳 加粗加厚⭐"
+2
+: 
+{skuRef: "5380752133927", _origin_price: 42.89, main_product: false, exclude: false, id: "6",…}
+exclude
+: 
+false
+id
+: 
+"6"
+main_product
+: 
+false
+origin_price
+: 
+8578
+sale_price
+: 
+30400
+skuRef
+: 
+"5380752133927"
+stock
+: 
+200
+text
+: 
+"F. X형 50cm 블랙 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01glCkFf1p7PFUOrutK_!!2208786055313.jpg"
+_origin_price
+: 
+42.89
+_text
+: 
+"【X型矮款】50长黑色⭐折叠收纳 加粗加厚⭐"
+3
+: 
+{skuRef: "5380752133928", _origin_price: 53.16, main_product: false, exclude: false, id: "7",…}
+exclude
+: 
+false
+id
+: 
+"7"
+main_product
+: 
+false
+origin_price
+: 
+10632
+sale_price
+: 
+33200
+skuRef
+: 
+"5380752133928"
+stock
+: 
+200
+text
+: 
+"G. X형 70cm 블랙 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01fATFIN1p7PFRyQFUR_!!2208786055313.jpg"
+_origin_price
+: 
+53.16
+_text
+: 
+"【X型矮款】70长黑色⭐折叠收纳 加粗加厚⭐"
+4
+: 
+{skuRef: "5380752133929", _origin_price: 44.85, main_product: false, exclude: false, id: "8",…}
+exclude
+: 
+false
+id
+: 
+"8"
+main_product
+: 
+false
+origin_price
+: 
+8970
+sale_price
+: 
+31000
+skuRef
+: 
+"5380752133929"
+stock
+: 
+200
+text
+: 
+"H. X형 50cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01g9mEUo1p7PFXflaB9_!!2208786055313.jpg"
+_origin_price
+: 
+44.85
+_text
+: 
+"【X型长款】50长原色 ⭐折叠收纳 加粗加厚⭐"
+5
+: 
+{skuRef: "5380752133930", _origin_price: 53.74, main_product: false, exclude: false, id: "9",…}
+exclude
+: 
+false
+id
+: 
+"9"
+main_product
+: 
+false
+origin_price
+: 
+10748
+sale_price
+: 
+33300
+skuRef
+: 
+"5380752133930"
+stock
+: 
+200
+text
+: 
+"I. X형 70cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01s66GLQ1p7PFTqmeHW_!!2208786055313.jpg"
+_origin_price
+: 
+53.74
+_text
+: 
+"【X型长款】70长原色 ⭐折叠收纳 加粗加厚⭐"
+6
+: 
+{skuRef: "5380752133931", _origin_price: 64.11, main_product: false, exclude: false, id: "10",…}
+exclude
+: 
+false
+id
+: 
+"10"
+main_product
+: 
+false
+origin_price
+: 
+12822
+sale_price
+: 
+36100
+skuRef
+: 
+"5380752133931"
+stock
+: 
+200
+text
+: 
+"J. X형 100cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01GhjEPm1p7PFWuwQ0A_!!2208786055313.jpg"
+_origin_price
+: 
+64.11
+_text
+: 
+"【X型长款】100长原色 ⭐折叠收纳 加粗加厚⭐"
+7
+: 
+{skuRef: "5380752133932", _origin_price: 45.87, main_product: false, exclude: false, id: "11",…}
+exclude
+: 
+false
+id
+: 
+"11"
+main_product
+: 
+false
+origin_price
+: 
+9174
+sale_price
+: 
+31200
+skuRef
+: 
+"5380752133932"
+stock
+: 
+200
+text
+: 
+"K. X형 50cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01HysWYd1p7PFVDHdRg_!!2208786055313.jpg"
+_origin_price
+: 
+45.87
+_text
+: 
+"【X型长款】50长茶色 ⭐折叠收纳 加粗加厚⭐"
+8
+: 
+{skuRef: "5380752133933", _origin_price: 54.96, main_product: false, exclude: false, id: "12",…}
+exclude
+: 
+false
+id
+: 
+"12"
+main_product
+: 
+false
+origin_price
+: 
+10992
+sale_price
+: 
+33700
+skuRef
+: 
+"5380752133933"
+stock
+: 
+200
+text
+: 
+"L. X형 70cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01G40ywE1p7PFVDLFxV_!!2208786055313.jpg"
+_origin_price
+: 
+54.96
+_text
+: 
+"【X型长款】70长茶色 ⭐折叠收纳 加粗加厚⭐"
+9
+: 
+{skuRef: "5380752133934", _origin_price: 65.57, main_product: false, exclude: false, id: "13",…}
+exclude
+: 
+false
+id
+: 
+"13"
+main_product
+: 
+false
+origin_price
+: 
+13114
+sale_price
+: 
+36500
+skuRef
+: 
+"5380752133934"
+stock
+: 
+200
+text
+: 
+"M. X형 100cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01cgLvjA1p7PFQg6kfh_!!2208786055313.jpg"
+_origin_price
+: 
+65.57
+_text
+: 
+"【X型长款】100长茶色 ⭐折叠收纳 加粗加厚⭐"
+10
+: 
+{skuRef: "5380752133935", _origin_price: 23.99, main_product: false, exclude: false, id: "14",…}
+exclude
+: 
+false
+id
+: 
+"14"
+main_product
+: 
+false
+origin_price
+: 
+4798
+sale_price
+: 
+25400
+skuRef
+: 
+"5380752133935"
+stock
+: 
+200
+text
+: 
+"N. A형 50cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i4/2208786055313/O1CN01faZv751p7PFX9Qktg_!!2208786055313.jpg"
+_origin_price
+: 
+23.99
+_text
+: 
+"【A型矮款】50长原色⭐折叠收纳 加粗加厚⭐"
+11
+: 
+{skuRef: "5380752133936", _origin_price: 33.05, main_product: false, exclude: false, id: "15",…}
+exclude
+: 
+false
+id
+: 
+"15"
+main_product
+: 
+false
+origin_price
+: 
+6610
+sale_price
+: 
+27800
+skuRef
+: 
+"5380752133936"
+stock
+: 
+200
+text
+: 
+"O. A형 70cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN016QTH8o1p7PFU2weXw_!!2208786055313.jpg"
+_origin_price
+: 
+33.05
+_text
+: 
+"【A型矮款】70长原色 折叠⭐折叠收纳 加粗加厚⭐"
+12
+: 
+{skuRef: "5380752133937", _origin_price: 40.61, main_product: true, exclude: false, id: "16",…}
+exclude
+: 
+false
+id
+: 
+"16"
+main_product
+: 
+true
+origin_price
+: 
+8122
+sale_price
+: 
+29800
+skuRef
+: 
+"5380752133937"
+stock
+: 
+200
+text
+: 
+"P. A형 100cm 원목 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01tFCa7M1p7PFUddyyh_!!2208786055313.jpg"
+_origin_price
+: 
+40.61
+_text
+: 
+"【A型矮款】100长原色 折叠⭐折叠收纳 加粗加厚⭐"
+13
+: 
+{skuRef: "5380752133938", _origin_price: 23.99, main_product: false, exclude: false, id: "17",…}
+exclude
+: 
+false
+id
+: 
+"17"
+main_product
+: 
+false
+origin_price
+: 
+4798
+sale_price
+: 
+25400
+skuRef
+: 
+"5380752133938"
+stock
+: 
+200
+text
+: 
+"Q. A형 50cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i1/2208786055313/O1CN01G28Z8D1p7PFSTElaj_!!2208786055313.jpg"
+_origin_price
+: 
+23.99
+_text
+: 
+"【A型矮款】50长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+14
+: 
+{skuRef: "5380752133939", _origin_price: 33.05, main_product: false, exclude: false, id: "18",…}
+exclude
+: 
+false
+id
+: 
+"18"
+main_product
+: 
+false
+origin_price
+: 
+6610
+sale_price
+: 
+27800
+skuRef
+: 
+"5380752133939"
+stock
+: 
+200
+text
+: 
+"R. A형 70cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN011qn3ia1p7PFPVl6HZ_!!2208786055313.jpg"
+_origin_price
+: 
+33.05
+_text
+: 
+"【A型矮款】70长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+15
+: 
+{skuRef: "5380752133940", _origin_price: 40.61, main_product: false, exclude: false, id: "19",…}
+exclude
+: 
+false
+id
+: 
+"19"
+main_product
+: 
+false
+origin_price
+: 
+8122
+sale_price
+: 
+29800
+skuRef
+: 
+"5380752133940"
+stock
+: 
+200
+text
+: 
+"S. A형 100cm 다색 접이식"
+urlRef
+: 
+"https://img.alicdn.com/bao/uploaded/i3/2208786055313/O1CN01QHGvil1p7PFKz4WW2_!!2208786055313.jpg"
+_origin_price
+: 
+40.61
+_text
+: 
+"【A型矮款】100长茶色 折叠⭐折叠收纳 加粗加厚⭐"
+uploadSmartStoreProductName
+: 
+"원목 빨래 건조대 행거 이불 수건 우드 옷걸이 접이식"
+uploadSmartStoreTags
+: 
+["간편한", "연지", "원목빨래건조대", "빨래건조대", "고급", "감성"]
+0
+: 
+"간편한"
+1
+: 
+"연지"
+2
+: 
+"원목빨래건조대"
+3
+: 
+"빨래건조대"
+4
+: 
+"고급"
+5
+: 
+"감성"
+uploadThumbnails
+: 
+[,…]
+0
+: 
+"https://shop-phinf.pstatic.net/20240123_247/1705979277928zcR8f_JPEG/42026153742492331_1883976306.jpg"
+1
+: 
+"https://img.alicdn.com/bao/uploaded/i3/2208786055313/O1CN01lNAwMP1p7PFVEL5Tw_!!0-item_pic.jpg"
+2
+: 
+"https://img.alicdn.com/bao/uploaded/i3/2208786055313/O1CN019m0JTI1p7PFWtzTfV_!!2208786055313.jpg"
+3
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01j9vvPT1p7PFM881CR_!!2208786055313.jpg"
+4
+: 
+"https://img.alicdn.com/bao/uploaded/i3/2208786055313/O1CN01F1goC01p7PFUInUta_!!2208786055313.jpg"
+5
+: 
+"https://img.alicdn.com/bao/uploaded/i2/2208786055313/O1CN01FhhMmv1p7PFXelt93_!!2208786055313.jpg"
+uploadTrackcopyCode
+: 
+"mdYm6SsHSsO2aPrakAfMZ"
+uploadVideoUrls
+: 
+["https://cloud.video.taobao.com/play/u/2208786055313/p/2/e/6/t/1/460526974626.mp4?appKey=38829"]
+0
+: 
+"https://cloud.video.taobao.com/play/u/2208786055313/p/2/e/6/t/1/460526974626.mp4?appKey=38829"
+uploadedSuccessUrl
+: 
+{coupang: null, gmarket: null, smartstore: null, st11: null, auction: null}
+auction
+: 
+null
+coupang
+: 
+null
+gmarket
+: 
+null
+smartstore
+: 
+null
+st11
+: 
+null

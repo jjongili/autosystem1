@@ -12,6 +12,7 @@ env/
 # Chrome profiles (캐시, 세션 데이터)
 chrome_profile*/
 chrome_profiles/
+web_system/chrome_ali_profile/
 web_system/pw_sessions/
 auto_sms/
 gmsg_profile/

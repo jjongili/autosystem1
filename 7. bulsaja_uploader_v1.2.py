@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-불사자 상품 업로더 v1.2
+불사자 상품 업로더 v1.3
 - 구글시트 설정 화면과 동일한 GUI
 - 마켓 그룹 선택 (다중 선택)
 - 동시 세션 설정
 - 옵션 설정 (개수, 정렬, 필터링)
 - 그룹별 마켓 ID 동적 매핑 (v1.2)
+- 카테고리 오류 시 ESM 카테고리로 재시도 (v1.3)
 
 by 프코노미
 """
@@ -26,7 +27,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 # 공통 모듈 (미끼 옵션 필터링, 대표옵션 선택, API 클라이언트)
-from bulsaja_common import filter_bait_options, DEFAULT_BAIT_KEYWORDS, select_main_option, BulsajaAPIClient as CommonAPIClient
+from bulsaja_common import filter_bait_options, DEFAULT_BAIT_KEYWORDS, select_main_option, BulsajaAPIClient as CommonAPIClient, load_bait_keywords
 
 # ==================== 설정 ====================
 CONFIG_FILE = "bulsaja_uploader_config.json"
@@ -77,53 +78,8 @@ UPLOAD_CONDITIONS = {
 THUMBNAIL_MATCH_ENABLED = True  # 썸네일 매칭 기반 대표상품 선택 활성화
 
 # 제외 키워드 (옵션 필터링용 - 미끼상품 필터)
-EXCLUDE_KEYWORDS = [
-    # 맞춤/주문제작 관련
-    '맞춤', '맞춤형', '맞춤제작', '커스텀', 'custom', 'DIY',
-    '주문제작', '주문 제작', '제작문의', '별도제작', '특별제작',
-
-    # 계약/예약금 관련
-    '계약', '계약금', '선금', '예약금', '보증금', '착수금',
-    '정금', '잔금', '추가금', '차액',
-
-    # 문의/상담 관련
-    '고객센터', '상담', '연락주세요', '전화주세요',
-    '채팅문의', '문의요망', '문의필수', '먼저문의',
-
-    # 비고/안내 관련
-    '비고', '참고', '안내', '공지', '필독', '주의', '확인필수',
-
-    # 부품/액세서리 미끼
-    '부품', '부속', '액세서리', '소모품', '교체품', '리필',
-    '충전기', '어댑터', '케이블', '선만', '젠더',
-
-    # 샘플/테스트
-    '샘플', 'sample', '테스트', 'test', '무료체험', '체험판',
-
-    # 옵션 선택 유도
-    '옵션선택', '옵션필수', '필수선택', '선택필수', '색상선택', '사이즈선택',
-    '옵션확인', '옵션문의', '선택안함', '해당없음',
-
-    # 배송/추가비용 관련
-    '배송비', '추가배송', '도서산간', '제주', '택배비',
-    '설치비', '조립비', '출장비',
-
-    # 가격 미끼
-    '1원', '10원', '100원', '0원', '무료', 'free',
-    '할인쿠폰', '쿠폰', '적립금',
-
-    # 중국어 미끼 (타오바오)
-    '定制', '定做', '订制', '订做',  # 맞춤제작
-    '联系', '咨询', '客服',  # 문의/상담
-    '配件', '零件', '附件',  # 부품/액세서리
-    '邮费', '运费',  # 배송비
-    '样品', '试用',  # 샘플
-
-    # 중국어 버전/등급 구분선 (저가 미끼 표시)
-    '以下是轻盈款', '以下是轻便款', '以下是简易款', '以下是基础款',  # 가벼운/간이/기초
-    '以下是入门款', '以下是经济款', '以下是简约款', '以下是普通款',  # 입문/경제/심플/보통
-    '轻盈款', '轻便款',  # 가벼운 버전 (구분선 없이도)
-]
+# bulsaja_common.py의 load_bait_keywords() 사용
+EXCLUDE_KEYWORDS = load_bait_keywords()
 
 
 # ==================== 설정 파일 관리 ====================
@@ -341,21 +297,37 @@ def shuffle_product_name(name: str, mode: str) -> str:
     return name
 
 
-def calculate_price(origin_price_cny: float, settings: PriceSettings) -> Tuple[int, int, float, float]:
+def calculate_price(origin_price_cny: float, settings: PriceSettings, delivery_fee: int = 0) -> Tuple[int, int, int, float, float]:
     """
-    가격 계산 (마진, 할인율 랜덤 적용)
-    Returns: (원가(원), 판매가(원), 적용된 마진율, 적용된 할인율)
+    가격 계산 (불사자 공식 기준)
+    Args:
+        origin_price_cny: 위안 원가
+        settings: 가격 설정
+        delivery_fee: 해외배송비 (원화, uploadOverseaDeliveryFee)
+    Returns: (원화원가, 정상가, 판매가, 적용된 마진율, 적용된 할인율)
+
+    불사자 공식:
+    - 원화 원가 = 환율 × 상품원가(CNY)  ← 배송비 미포함!
+    - 정상가(origin_price) = 원화원가 + 원화원가 × (카드수수료% + 마진율%) + 정액마진 + 해외배송비
+    - 판매가(sale_price) = 정상가 × (1 - 할인율%)
     """
     # 랜덤 마진율
     margin_rate = random.uniform(settings.margin_rate_min, settings.margin_rate_max)
     # 랜덤 할인율
     discount_rate = random.uniform(settings.discount_rate_min, settings.discount_rate_max)
 
+    # 원화 원가 = 환율 × 위안원가 (배송비 미포함!)
     origin_price_krw = origin_price_cny * settings.exchange_rate
-    price_with_fee = origin_price_krw * (1 + settings.card_fee_rate / 100)
-    price_with_margin = price_with_fee * (1 + margin_rate / 100) + settings.margin_fixed
-    sale_price = math.ceil(price_with_margin / settings.round_unit) * settings.round_unit
-    return int(origin_price_krw), int(sale_price), margin_rate, discount_rate
+
+    # 정상가 = 원화원가 + 원화원가 × (카드수수료 + 마진율) + 정액마진 + 배송비
+    base_price = origin_price_krw + origin_price_krw * (settings.card_fee_rate + margin_rate) / 100 + settings.margin_fixed + delivery_fee
+    origin_price = math.ceil(base_price / settings.round_unit) * settings.round_unit
+
+    # 판매가 = 정상가 × (1 - 할인율)
+    sale_price = origin_price * (1 - discount_rate / 100)
+    sale_price = math.ceil(sale_price / settings.round_unit) * settings.round_unit
+
+    return int(origin_price_krw), int(origin_price), int(sale_price), margin_rate, discount_rate
 
 
 # ==================== 불사자 API 클라이언트 (CommonAPIClient 상속) ====================
@@ -476,7 +448,7 @@ class BulsajaAPIClient(CommonAPIClient):
         payload = {
             "productId": product_id,
             "notices": None,
-            "preventDuplicateUpload": True,
+            "preventDuplicateUpload": False,  # 테스트용: 중복 업로드 허용
             "removeDuplicateWords": True,
             "targetMarket": market_type,
         }
@@ -712,9 +684,13 @@ class BulsajaUploader:
                 if price_fields:
                     self.log(f"   💲 가격필드: {price_fields}")
 
+            # 해외배송비 가져오기
+            delivery_fee = detail.get('uploadOverseaDeliveryFee', 0) or 0
+
             # 로그 시작
             self.log(f"📤 상품 ID: {product_id}")
             self.log(f"   💱 적용 환율: {self.price_settings.exchange_rate}")
+            self.log(f"   🚚 해외배송비: {delivery_fee:,}원")
             self.log(f"   💳 적용 카드수수료: {self.price_settings.card_fee_rate}%")
             self.log(f"   📈 적용 올림단위: {self.price_settings.round_unit}원")
             margin_rate = random.uniform(self.price_settings.margin_rate_min, self.price_settings.margin_rate_max)
@@ -723,35 +699,69 @@ class BulsajaUploader:
             discount_rate = random.uniform(self.price_settings.discount_rate_min, self.price_settings.discount_rate_max)
             self.log(f"   🏷️ 적용 할인율: {discount_rate:.0f}%")
 
-            # 1. 미끼 옵션 필터링 + 가격 범위 필터링
+            # 1. 미끼 옵션 필터링 + 가격 범위 필터링 + 불사자제외 필터링
             valid_skus = []
-            excluded_by_keyword = 0
-            excluded_by_price = 0
+            excluded_by_keyword = []  # (id, text, price, 매칭키워드)
+            excluded_by_price = []    # (id, text, price, 이유)
+            excluded_by_bulsaja = []  # (id, text, price) - 불사자에서 제외 처리된 옵션
+
             for sku in upload_skus:
-                # 미끼 키워드 체크
+                sku_id = sku.get('id', '?')
                 text = sku.get('text', '') or sku.get('_text', '')
-                if any(kw in text for kw in self.exclude_keywords):
-                    excluded_by_keyword += 1
+                origin_cny = sku.get('_origin_price', 0)
+
+                # 불사자에서 제외 처리된 옵션 (마켓에 안 올라감)
+                if sku.get('exclude', False):
+                    excluded_by_bulsaja.append((sku_id, text[:20], origin_cny))
                     continue
+
+                # 미끼 키워드 체크
+                matched_kw = None
+                for kw in self.exclude_keywords:
+                    if kw in text:
+                        matched_kw = kw
+                        break
+                if matched_kw:
+                    excluded_by_keyword.append((sku_id, text[:20], origin_cny, matched_kw))
+                    continue
+
                 # 가격 범위 체크
-                origin_price = sku.get('_origin_price', 0)
-                if origin_price <= 0:
-                    excluded_by_price += 1
+                if origin_cny <= 0:
+                    excluded_by_price.append((sku_id, text[:20], origin_cny, "가격0"))
                     continue
-                origin_krw = origin_price * self.price_settings.exchange_rate
-                price_with_fee = origin_krw * (1 + self.price_settings.card_fee_rate / 100)
-                sale_price = price_with_fee * (1 + self.price_settings.margin_rate_min / 100) + self.price_settings.margin_fixed
+
+                # 불사자 공식: 원화원가 = 환율 × 위안원가 (배송비 미포함)
+                origin_krw = origin_cny * self.price_settings.exchange_rate
+                # 판매가 = 원화원가 + 원화원가 × (카드수수료 + 마진율) + 정액마진 + 배송비
+                sale_price = origin_krw + origin_krw * (self.price_settings.card_fee_rate + self.price_settings.margin_rate_min) / 100 + self.price_settings.margin_fixed + delivery_fee
                 sale_price = math.ceil(sale_price / self.price_settings.round_unit) * self.price_settings.round_unit
-                if sale_price < self.price_settings.min_price or sale_price > self.price_settings.max_price:
-                    excluded_by_price += 1
+
+                if sale_price < self.price_settings.min_price:
+                    excluded_by_price.append((sku_id, text[:20], origin_cny, f"최소가미만({sale_price:,.0f}원)"))
                     continue
+                if sale_price > self.price_settings.max_price:
+                    excluded_by_price.append((sku_id, text[:20], origin_cny, f"최대가초과({sale_price:,.0f}원)"))
+                    continue
+
                 valid_skus.append(sku)
 
+            # 상세 필터링 로그
             self.log(f"   📦 전체 SKU: {len(upload_skus)}개")
-            if excluded_by_keyword > 0:
-                self.log(f"   🔍 키워드 필터링: {excluded_by_keyword}개 제외")
-            if excluded_by_price > 0:
-                self.log(f"   💰 가격범위 필터링: {excluded_by_price}개 제외 (범위: {self.price_settings.min_price:,}~{self.price_settings.max_price:,}원)")
+
+            if excluded_by_bulsaja:
+                self.log(f"   🚫 불사자제외: {len(excluded_by_bulsaja)}개")
+                for sku_id, text, price in excluded_by_bulsaja:
+                    self.log(f"      └ id={sku_id}, {price}위안, {text}")
+
+            if excluded_by_keyword:
+                self.log(f"   🔍 키워드제외: {len(excluded_by_keyword)}개")
+                for sku_id, text, price, kw in excluded_by_keyword:
+                    self.log(f"      └ id={sku_id}, {price}위안, '{kw}' 매칭, {text}")
+
+            if excluded_by_price:
+                self.log(f"   💰 가격제외: {len(excluded_by_price)}개 (범위: {self.price_settings.min_price:,}~{self.price_settings.max_price:,}원)")
+                for sku_id, text, price, reason in excluded_by_price:
+                    self.log(f"      └ id={sku_id}, {price}위안, {reason}, {text}")
 
             if not valid_skus:
                 result['status'] = 'skipped'
@@ -759,25 +769,33 @@ class BulsajaUploader:
                 self.log(f"   ⏭️ 유효 옵션 없음 (스킵)")
                 return result
 
-            # 2. 가격 클러스터링으로 미끼 탐지
+            # 2. 가격 클러스터링으로 미끼 탐지 (가격대별 그룹 분리)
             bait_ids, cluster_info = detect_bait_by_price_cluster(valid_skus)
-            excluded_by_cluster = 0
+            excluded_by_cluster = []  # (id, text, price)
 
             if bait_ids:
-                # 미끼로 판단된 SKU 제거
-                before_count = len(valid_skus)
+                # 미끼로 판단된 SKU 상세 정보 저장
+                for sku in valid_skus:
+                    if sku.get('id') in bait_ids:
+                        excluded_by_cluster.append((
+                            sku.get('id', '?'),
+                            (sku.get('text', '') or sku.get('_text', ''))[:20],
+                            sku.get('_origin_price', 0)
+                        ))
+                # 미끼 제거
                 valid_skus = [sku for sku in valid_skus if sku.get('id') not in bait_ids]
-                excluded_by_cluster = before_count - len(valid_skus)
 
                 # 클러스터 정보 로그
                 if cluster_info and len(cluster_info) >= 2:
                     low_cluster = cluster_info[0]
                     main_cluster = cluster_info[1]
-                    self.log(f"   📊 가격 클러스터 분석:")
-                    self.log(f"      └ 저가그룹: {low_cluster['count']}개 ({low_cluster['min_price']:.0f}~{low_cluster['max_price']:.0f}위안) → 미끼 제거")
-                    self.log(f"      └ 주가격대: {main_cluster['count']}개 ({main_cluster['min_price']:.0f}~{main_cluster['max_price']:.0f}위안)")
                     gap = main_cluster['min_price'] / low_cluster['max_price'] if low_cluster['max_price'] > 0 else 0
-                    self.log(f"      └ 가격갭: {gap:.1f}배 (저가그룹 비율: {low_cluster['ratio']*100:.0f}%)")
+                    self.log(f"   📊 가격클러스터 미끼제거: {len(excluded_by_cluster)}개")
+                    self.log(f"      └ 저가그룹: {low_cluster['count']}개 ({low_cluster['min_price']:.0f}~{low_cluster['max_price']:.0f}위안)")
+                    self.log(f"      └ 주가격대: {main_cluster['count']}개 ({main_cluster['min_price']:.0f}~{main_cluster['max_price']:.0f}위안)")
+                    self.log(f"      └ 가격갭: {gap:.1f}배 (저가비율: {low_cluster['ratio']*100:.0f}% → 30%미만이면 미끼)")
+                    for sku_id, text, price in excluded_by_cluster:
+                        self.log(f"      └ id={sku_id}, {price}위안, {text}")
 
             self.log(f"   🎯 필터링 후 남은 옵션: {len(valid_skus)}개")
 
@@ -805,52 +823,57 @@ class BulsajaUploader:
             # 6. 선택된 SKU ID 목록
             selected_ids = {sku.get('id') for sku in selected_skus}
 
-            # 7. 가격 계산 및 exclude/main_product 설정
-            min_price = float('inf')
-            max_price = 0
-            min_price_idx = -1
-            included_count = 0
-            excluded_count = 0
-            for idx, sku in enumerate(upload_skus):
-                if sku.get('id') in selected_ids:
-                    sku['exclude'] = False
-                    included_count += 1
+            # 7. uploadBase_price 설정 (우리 마진 설정으로 덮어쓰기)
+            # 불사자가 이 설정값으로 가격 계산해서 마켓에 올림
+            # 주의: discount_rate, percent_margin은 1% 단위 정수여야 함
+            detail['uploadBase_price'] = {
+                "card_fee": self.price_settings.card_fee_rate,
+                "discount_rate": int(random.uniform(self.price_settings.discount_rate_min, self.price_settings.discount_rate_max)),
+                "discount_unit": "%",
+                "percent_margin": int(random.uniform(self.price_settings.margin_rate_min, self.price_settings.margin_rate_max)),
+                "plus_margin": self.price_settings.margin_fixed,
+                "raise_digit": self.price_settings.round_unit
+            }
+            self.log(f"   💹 마진설정: 마진율 {detail['uploadBase_price']['percent_margin']:.0f}%, 정액 {self.price_settings.margin_fixed:,}원, 할인율 {detail['uploadBase_price']['discount_rate']:.0f}%")
 
-                    if skip_price_update:
-                        # 가격 수정 안함 - 기존 sale_price 사용
-                        sale_price = sku.get('sale_price', 0)
-                    else:
-                        # 가격 계산
-                        origin_cny = sku.get('_origin_price', 0)
-                        origin_krw, sale_price, _, _ = calculate_price(origin_cny, self.price_settings)
-                        sku['origin_price'] = origin_krw
-                        sku['sale_price'] = sale_price
+            # 8. main_product 설정 (전체 옵션 중 위안 원가 최저가)
+            # 불사자 exclude는 무시하고, 우리 필터링(키워드/가격/클러스터)만 적용해서 대표상품 선택
+            # (불사자 exclude된 옵션도 대표상품이 될 수 있음 - 타이어 주입기처럼 정상옵션이 exclude된 경우)
 
-                    if sale_price < min_price:
-                        min_price = sale_price
-                        min_price_idx = idx
-                    if sale_price > max_price:
-                        max_price = sale_price
-                else:
-                    sku['exclude'] = True
-                    excluded_count += 1
+            # 우리가 제외한 옵션 ID (키워드/가격/클러스터 제외)
+            our_excluded_ids = set()
+            for sku_id, _, _, _ in excluded_by_keyword:
+                our_excluded_ids.add(sku_id)
+            for sku_id, _, _, _ in excluded_by_price:
+                our_excluded_ids.add(sku_id)
+            for sku_id, _, _ in excluded_by_cluster:
+                our_excluded_ids.add(sku_id)
+
+            # 모든 SKU의 main_product 초기화
+            for sku in upload_skus:
                 sku['main_product'] = False
 
-            # 8. main_product 설정 (최저가)
-            if min_price_idx >= 0:
-                upload_skus[min_price_idx]['main_product'] = True
+            # 우리가 제외하지 않은 옵션 중 최저가 찾기 (불사자 exclude 무시)
+            min_price_cny = float('inf')
+            min_price_sku = None
+            for sku in upload_skus:
+                if sku.get('id') in our_excluded_ids:
+                    continue
+                origin_cny = sku.get('_origin_price', 0)
+                if origin_cny > 0 and origin_cny < min_price_cny:
+                    min_price_cny = origin_cny
+                    min_price_sku = sku
 
-            self.log(f"   💵 선택된 {len(selected_skus)}개 옵션: {min_price:,}~{max_price:,}원")
-            self.log(f"   👑 대표상품: 최저가 {min_price:,}원")
+            if min_price_sku:
+                min_price_sku['main_product'] = True
+                is_excluded = min_price_sku.get('exclude', False)
+                exclude_mark = " (불사자제외옵션)" if is_excluded else ""
+                self.log(f"   👑 대표상품: id={min_price_sku.get('id')}, 위안원가 {min_price_cny}위안{exclude_mark}")
+            else:
+                self.log(f"   ⚠️ 경고: 유효한 옵션 없음 - 업로드 실패 가능")
 
             # 9. 변경사항 저장
             detail['uploadSkus'] = upload_skus
-
-            # 디버그: 수정 후 대표옵션 SKU 확인
-            if min_price_idx >= 0:
-                main_sku = upload_skus[min_price_idx]
-                price_fields = {k: main_sku.get(k) for k in main_sku.keys() if 'price' in k.lower() or 'sale' in k.lower() or 'origin' in k.lower() or k in ['exclude', 'main_product']}
-                self.log(f"   🔧 대표SKU 수정값: {price_fields}")
 
             # 10. 상품명 셔플 처리
             original_name = detail.get('uploadCommonProductName', '')
@@ -872,6 +895,24 @@ class BulsajaUploader:
             # 12. 업로드 (그룹명으로 그룹ID 조회하여 업로드)
             upload_success, upload_msg = self.api_client.upload_product(product_id, group_name, market_name)
             if not upload_success:
+                # 카테고리 오류 시 ESM 카테고리로 재시도
+                if "카테고리" in upload_msg and market_name == "스마트스토어":
+                    self.log(f"   ⚠️ 카테고리 오류 - ESM 카테고리로 재시도...")
+                    # ESM 카테고리 복사
+                    esm_category = detail.get('uploadESMCategory')
+                    if esm_category:
+                        detail['uploadSmartstoreCategory'] = esm_category
+                        # 카테고리 수정 후 다시 업데이트
+                        update_success, _ = self.api_client.update_product_fields(product_id, detail)
+                        if update_success:
+                            # 재업로드
+                            upload_success, upload_msg = self.api_client.upload_product(product_id, group_name, market_name)
+                            if upload_success:
+                                self.log(f"   ✅ ESM 카테고리로 업로드 성공!")
+                                result['message'] = f'SKU {len(selected_skus)}개 (ESM카테고리)'
+                                return result
+                    self.log(f"   ❌ ESM 카테고리 재시도 실패")
+
                 result['status'] = 'failed'
                 result['message'] = upload_msg
                 self.log(f"   ❌ 업로드 실패: {upload_msg[:50]}")
@@ -880,7 +921,7 @@ class BulsajaUploader:
             self.log(f"   ✅ 업로드 성공!")
 
             # 결과 메시지
-            result['message'] = f'SKU {len(selected_skus)}개, 최저가 {min_price:,}원'
+            result['message'] = f'SKU {len(selected_skus)}개'
 
         except Exception as e:
             result['status'] = 'failed'
@@ -1027,7 +1068,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("불사자 상품 업로더 v1.1")
+        self.title("불사자 상품 업로더 v1.3")
         self.geometry("900x900")
         self.resizable(True, True)
 
@@ -1240,14 +1281,29 @@ class App(tk.Tk):
         log_frame = ttk.LabelFrame(main_frame, text="📋 로그", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, state='disabled',
-                                                   font=('Consolas', 9))
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        # tk.Text + Scrollbar (색상 태그 지원)
+        log_container = ttk.Frame(log_frame)
+        log_container.pack(fill=tk.BOTH, expand=True)
+
+        self.log_text = tk.Text(log_container, height=12, state='disabled',
+                                font=('Consolas', 9), wrap=tk.WORD)
+        log_scrollbar = ttk.Scrollbar(log_container, orient=tk.VERTICAL, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
+
+        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # 로그 색상 태그 설정
+        self.log_text.tag_configure("error", foreground="red")
+        self.log_text.tag_configure("success", foreground="green")
+        self.log_text.tag_configure("warning", foreground="orange")
+        self.log_text.tag_configure("info", foreground="blue")
+        self.log_text.tag_configure("skip", foreground="gray")
 
         # Footer
         footer = ttk.Frame(main_frame)
         footer.pack(fill=tk.X, pady=(5, 0))
-        ttk.Label(footer, text="v1.1 by 프코노미", foreground="gray").pack(side=tk.RIGHT)
+        ttk.Label(footer, text="v1.3 by 프코노미", foreground="gray").pack(side=tk.RIGHT)
 
     def load_saved_settings(self):
         c = self.config_data
@@ -1303,7 +1359,25 @@ class App(tk.Tk):
         def _log():
             self.log_text.config(state='normal')
             timestamp = datetime.now().strftime("%H:%M:%S")
-            self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+            log_line = f"[{timestamp}] {message}\n"
+
+            # 메시지 내용에 따라 색상 태그 결정
+            tag = None
+            if "❌" in message or "실패" in message or "에러" in message or "오류" in message:
+                tag = "error"
+            elif "✅" in message or "성공" in message:
+                tag = "success"
+            elif "⚠️" in message or "경고" in message or "주의" in message:
+                tag = "warning"
+            elif "🚀" in message or "📤" in message or "🔍" in message or "🔗" in message:
+                tag = "info"
+            elif "스킵" in message or "건너뜀" in message or "제외" in message:
+                tag = "skip"
+
+            if tag:
+                self.log_text.insert(tk.END, log_line, tag)
+            else:
+                self.log_text.insert(tk.END, log_line)
             self.log_text.see(tk.END)
             self.log_text.config(state='disabled')
         self.after(0, _log)
@@ -1390,16 +1464,17 @@ class App(tk.Tk):
         return group_names
 
     def reset_keywords(self):
-        """미끼 키워드를 기본값으로 초기화"""
+        """미끼 키워드를 기본값으로 초기화 (bulsaja_common에서 로드)"""
         self.keyword_text.delete("1.0", tk.END)
-        self.keyword_text.insert("1.0", ','.join(EXCLUDE_KEYWORDS))
+        keywords = load_bait_keywords()  # 최신 키워드 다시 로드
+        self.keyword_text.insert("1.0", ','.join(keywords))
         self.log("🔄 미끼 키워드 기본값으로 초기화")
 
     def get_exclude_keywords(self) -> List[str]:
         """현재 설정된 제외 키워드 목록 반환"""
         text = self.keyword_text.get("1.0", tk.END).strip()
         if not text:
-            return EXCLUDE_KEYWORDS[:]
+            return load_bait_keywords()  # common에서 로드
         return [k.strip() for k in text.split(',') if k.strip()]
 
     def open_debug_chrome(self):
