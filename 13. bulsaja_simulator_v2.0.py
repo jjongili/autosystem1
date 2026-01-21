@@ -296,12 +296,14 @@ class BulsajaSimulatorV2:
         self.groups_var = tk.StringVar(value=self.config.get("last_groups", ""))
         ttk.Entry(f_opt, textvariable=self.groups_var, width=50).grid(row=0, column=1, padx=5, sticky='w')
         
-        ttk.Label(f_opt, text="그룹당 상품 수:").grid(row=0, column=2, sticky='w', padx=10)
-        self.limit_var = tk.IntVar(value=self.config.get("limit_per_group", 50))
-        ttk.Entry(f_opt, textvariable=self.limit_var, width=10).grid(row=0, column=3, sticky='w')
+        ttk.Button(f_opt, text="📥 그룹목록 조회", command=self._load_groups).grid(row=0, column=2, padx=5)
         
-        ttk.Button(f_opt, text="▶ 시뮬레이션 시작", command=self._start_simulation, width=20).grid(row=0, column=4, padx=20)
-        ttk.Button(f_opt, text="⏹ 중지", command=self._stop_simulation).grid(row=0, column=5)
+        ttk.Label(f_opt, text="그룹당 상품 수:").grid(row=0, column=3, sticky='w', padx=10)
+        self.limit_var = tk.IntVar(value=self.config.get("limit_per_group", 50))
+        ttk.Entry(f_opt, textvariable=self.limit_var, width=10).grid(row=0, column=4, sticky='w')
+        
+        ttk.Button(f_opt, text="▶ 시뮬레이션 시작", command=self._start_simulation, width=20).grid(row=0, column=5, padx=20)
+        ttk.Button(f_opt, text="⏹ 중지", command=self._stop_simulation).grid(row=0, column=6)
         
         # 하단: 로그
         f_log = ttk.Frame(self.tab_sim, padding=10)
@@ -378,6 +380,23 @@ class BulsajaSimulatorV2:
             self.api_client = client
         else:
             messagebox.showerror("실패", f"연결 실패: {msg}")
+
+    def _load_groups(self):
+        """API에서 그룹 목록 조회하여 입력창에 표시"""
+        if not self.api_client:
+            if not self._test_connection(): return
+            if not self.api_client: return
+        
+        self.log_sim("📥 그룹 목록 조회 중...")
+        try:
+            groups = self.api_client.get_market_groups()
+            if groups:
+                self.groups_var.set(', '.join(groups))
+                self.log_sim(f"✅ {len(groups)}개 그룹 로드됨: {', '.join(groups)}")
+            else:
+                self.log_sim("⚠️ 그룹 없음 또는 조회 실패")
+        except Exception as e:
+            self.log_sim(f"❌ 그룹 로드 실패: {e}")
 
     def _stop_simulation(self):
         self.stop_event.set()
