@@ -36,12 +36,33 @@ except ImportError:
     CV2_AVAILABLE = False
     print("⚠️ opencv-python이 설치되지 않았습니다. 누끼 정밀 분석이 제한됩니다.")
 
+# OCR: EasyOCR (SOTA) - pytesseract 대체
+try:
+    import easyocr
+    EASYOCR_AVAILABLE = True
+    EASYOCR_READER = None # Lazy Loading
+except ImportError:
+    EASYOCR_AVAILABLE = False
+    print("⚠️ easyocr이 설치되지 않았습니다. 텍스트 감지가 제한됩니다.")
+
+# Nukki: rembg (SOTA)
+try:
+    import importlib.util
+    if importlib.util.find_spec("onnxruntime") is None and importlib.util.find_spec("onnxruntime_gpu") is None:
+        raise ImportError("onnxruntime not installed")
+        
+    from rembg import remove as rembg_remove
+    REMBG_AVAILABLE = True
+except Exception as e:
+    REMBG_AVAILABLE = False
+    # print(f"⚠️ rembg/onnx 로드 실패: {e}") # 너무 시끄러울 수 있으므로 주석 처리권장, 혹은 짧게 표시
+    print("⚠️ rembg 기능을 사용할 수 없습니다. (onnxruntime 미설치)")
+
 try:
     import pytesseract
     OCR_AVAILABLE = True
 except ImportError:
-    OCR_AVAILABLE = False
-    print("⚠️ pytesseract가 설치되지 않았습니다. 텍스트 감지가 제한됩니다.")
+    OCR_AVAILABLE = False # EasyOCR 있으면 굳이 필요 없으나 예비용
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -74,8 +95,19 @@ TRANSLATION_DICT_FILE = "option_translation_dict.json"
 
 # ==================== 유틸리티 클래스 ====================
 class ThumbnailAnalyzer:
-    """썸네일 분석기 (누끼/텍스트 감지)"""
+    """썸네일 분석기 (누끼/텍스트 감지 - SOTA 적용)"""
+    def make_nukki(self, image_data: bytes) -> bytes:
+        """rembg를 사용해 배경 제거 (투명 PNG 반환)"""
+        if not REMBG_AVAILABLE:
+            return image_data
+        try:
+            return rembg_remove(image_data)
+        except Exception as e:
+            print(f"누끼 생성 실패: {e}")
+            return image_data
+
     def analyzed_score(self, image_url: str) -> Dict[str, Any]:
+        global EASYOCR_READER
         result = {
             "score": 0, "is_nukki": False, "has_text": False, "recommendation": "normal"
         }
@@ -85,13 +117,13 @@ class ThumbnailAnalyzer:
         try:
             # 이미지 다운로드 (메모리)
             resp = requests.get(image_url, timeout=5)
-            arr = np.asarray(bytearray(resp.content), dtype=np.uint8)
-            img = cv2.imdecode(arr, -1) # -1 to load alpha channel if exists
+            img_bytes = bytearray(resp.content)
+            arr = np.asarray(img_bytes, dtype=np.uint8)
+            img = cv2.imdecode(arr, -1)
 
             if img is None: return result
 
             # 1. 배경 분석 (가장자리가 흰색/투명이면 누끼 가능성 높음)
-            # 단순화: 네 귀퉁이 색상 확인
             h, w = img.shape[:2]
             corners = [img[0,0], img[0, w-1], img[h-1, 0], img[h-1, w-1]]
             
@@ -106,23 +138,40 @@ class ThumbnailAnalyzer:
             
             result["is_nukki"] = is_white_bg
             
-            # 2. 텍스트 감지 (OCR)
-            if OCR_AVAILABLE:
-                # 그레이스케일 변환
+            # 2. 텍스트 감지 (SOTA: EasyOCR)
+            has_text = False
+            if EASYOCR_AVAILABLE:
+                if EASYOCR_READER is None:
+                    # 한국어, 영어 로드 (GPU 있으면 자동 사용)
+                    print("🚀 EasyOCR 모델 로딩 중... (최초 1회)")
+                    EASYOCR_READER = easyocr.Reader(['ko', 'en'], gpu=True, verbose=False)
+                
+                # EasyOCR은 이미지 경로, numpy array, bytes 모두 지원
+                # detail=0: 텍스트만 리스트로 반환
+                texts = EASYOCR_READER.readtext(img, detail=0)
+                # 노이즈 필터링 (너무 짧은 텍스트 무시)
+                valid_texts = [t for t in texts if len(t.strip()) > 1]
+                if valid_texts:
+                    has_text = True
+                    # print(f"감지된 텍스트: {valid_texts}")
+
+            elif OCR_AVAILABLE: # Fallback
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape)==3 else img
                 text = pytesseract.image_to_string(gray, lang='eng+kor')
-                if len(text.strip()) > 2: # 노이즈 제외
-                    result["has_text"] = True
+                if len(text.strip()) > 2:
+                    has_text = True
+            
+            result["has_text"] = has_text
 
             # 점수 산정
             score = 50
             if result["is_nukki"]: score += 40
-            if result["has_text"]: score -= 30
+            if result["has_text"]: score -= 40 # 텍스트 있으면 감점 크게
             
             result["score"] = max(0, min(100, score))
             
             if score >= 80: result["recommendation"] = "best"
-            elif score <= 30: result["recommendation"] = "trash"
+            elif score <= 20: result["recommendation"] = "trash"
             
         except Exception as e:
             print(f"이미지 분석 실패: {e}")
@@ -606,6 +655,7 @@ class BulsajaSimulatorV2:
         
         ttk.Button(toolbar, text="📂 엑셀 열기", command=self._insp_load_excel).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="💾 저장", command=self._insp_save_excel).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="✨ 누끼생성 (rembg)", command=self._make_selected_nukki).pack(side=tk.LEFT, padx=5)
         
         self.lbl_insp_status = ttk.Label(toolbar, text="파일 없음")
         self.lbl_insp_status.pack(side=tk.LEFT, padx=20)
@@ -848,6 +898,59 @@ class BulsajaSimulatorV2:
             messagebox.showinfo("저장 완료", "엑셀 파일이 저장되었습니다.")
         except Exception as e:
             messagebox.showerror("실패", f"저장 중 오류: {e}")
+
+    def _make_selected_nukki(self):
+        """현재 선택된 대표 이미지의 배경을 제거 (rembg)"""
+        if self.current_insp_idx < 0: return
+        if not REMBG_AVAILABLE:
+            messagebox.showwarning("불가", "rembg 라이브러리가 설치되지 않았습니다.\npip install rembg")
+            return
+            
+        data = self.insp_data[self.current_insp_idx]
+        current_url = data.get("대표썸네일", "")
+        if not current_url:
+            messagebox.showwarning("알림", "선택된 대표 이미지가 없습니다.")
+            return
+            
+        try:
+            # 1. 이미지 로드
+            if current_url.startswith("http"):
+                resp = requests.get(current_url, timeout=10)
+                img_bytes = resp.content
+            else:
+                # 로컬 파일
+                with open(current_url, "rb") as f:
+                    img_bytes = f.read()
+            
+            # 2. 누끼 생성 (알림)
+            messagebox.showinfo("진행 중", "배경 제거 작업 중입니다... 잠시만 기다려주세요.")
+            
+            # 메인 스레드에서 실행 (GUI 멈춤 감수 - rembg는 무거움)
+            # 개선: 별도 스레드에서 실행하고 완료 시 콜백 호출이 좋으나, 구조상 일단 동기 실행
+            nukki_bytes = self.thumb_analyzer.make_nukki(img_bytes)
+            
+            if not nukki_bytes:
+                messagebox.showerror("실패", "배경 제거에 실패했습니다.")
+                return
+
+            # 3. 저장
+            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nukki_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            pid = data.get("불사자ID", "unknown")
+            fname = f"{pid}_{int(time.time())}_nukki.png"
+            save_path = os.path.join(cache_dir, fname)
+            
+            with open(save_path, "wb") as f:
+                f.write(nukki_bytes)
+                
+            # 4. 데이터 업데이트 (대표 이미지를 로컬 경로로 변경)
+            self._set_main_thumbnail(save_path)
+            
+            messagebox.showinfo("완료", "배경 제거 완료!\n대표 이미지가 누끼 이미지로 변경되었습니다.")
+            
+        except Exception as e:
+            messagebox.showerror("오류", f"작업 중 오류 발생: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()

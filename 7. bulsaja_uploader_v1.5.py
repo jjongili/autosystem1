@@ -2415,7 +2415,7 @@ class App(tk.Tk):
         ttk.Checkbutton(market_opt_row, text="해당마켓 미업로드만", variable=self.skip_already_uploaded_var).pack(side=tk.LEFT, padx=5)
 
         # 불사자 중복 업로드 방지 (preventDuplicateUpload)
-        self.prevent_duplicate_upload_var = tk.BooleanVar(value=True)
+        self.prevent_duplicate_upload_var = tk.BooleanVar(value=Fasle)
         ttk.Checkbutton(market_opt_row, text="불사자중복방지", variable=self.prevent_duplicate_upload_var).pack(side=tk.LEFT, padx=5)
 
         # === 4. 마켓그룹 설정 ===
