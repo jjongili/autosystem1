@@ -279,6 +279,7 @@ class BulsajaSimulatorV2:
         self.refresh_var = tk.StringVar(value=self.config.get("refresh_token", ""))
         ttk.Entry(f_cfg, textvariable=self.refresh_var, width=30).pack(side=tk.LEFT, padx=5)
         
+        ttk.Button(f_cfg, text="크롬 디버그 실행", command=self._open_debug_chrome).pack(side=tk.LEFT, padx=5)
         ttk.Button(f_cfg, text="포트9222 토큰추출", command=self._extract_tokens).pack(side=tk.LEFT, padx=5)
         ttk.Button(f_cfg, text="연결 확인", command=self._test_connection).pack(side=tk.LEFT, padx=10)
         
@@ -310,6 +311,34 @@ class BulsajaSimulatorV2:
     def log_sim(self, msg):
         self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
         self.log_area.see(tk.END)
+
+    def _open_debug_chrome(self):
+        import subprocess
+        port = 9222 # 고정 포트
+        profile_dir = f"C:\\chrome_debug_profile_{port}"
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        chrome_path = None
+        for path in chrome_paths:
+            if os.path.exists(path):
+                chrome_path = path
+                break
+        if not chrome_path:
+            messagebox.showerror("오류", "Chrome을 찾을 수 없습니다")
+            return
+        
+        # 불사자 URL로 바로 이동
+        url = "https://www.bulsaja.com/products/manage/list/"
+        cmd = f'"{chrome_path}" --remote-debugging-port={port} --user-data-dir="{profile_dir}" --remote-allow-origins=* "{url}"'
+        try:
+            subprocess.Popen(cmd, shell=True)
+            self.log_sim(f"🌐 크롬 실행 (포트: {port})")
+            messagebox.showinfo("안내", "크롬이 실행되었습니다.\n로그인 후 '토큰추출' 버튼을 누르세요.")
+        except Exception as e:
+            self.log_sim(f"❌ 크롬 실행 실패: {e}")
 
     def _extract_tokens(self):
         if not COMMON_AVAILABLE: return
