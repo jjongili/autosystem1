@@ -1134,7 +1134,6 @@
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px 8px 0 0;
-            margin-right: 8px; /* 스크롤바 공간 보정 */
         }
 
         .dashboard-bulsaja .table-header-cell-bulsaja {
@@ -1157,7 +1156,8 @@
             border-top: none;
             border-radius: 0 0 8px 8px;
             max-height: calc(100vh - 350px);
-            overflow-y: auto;
+            overflow-y: overlay;
+            scrollbar-gutter: stable;
         }
 
         .dashboard-bulsaja .table-row-bulsaja {
