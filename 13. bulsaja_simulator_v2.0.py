@@ -77,8 +77,7 @@ except ImportError:
 try:
     from bulsaja_common import (
         BulsajaAPIClient, load_banned_words, load_excluded_words, load_bait_keywords,
-        check_product_safety, filter_bait_options, select_main_option,
-        DEFAULT_CATEGORY_RISK_SETTINGS
+        check_product_safety, filter_bait_options, select_main_option, extract_tokens_from_browser
     )
     COMMON_AVAILABLE = True
 except ImportError:
@@ -280,6 +279,7 @@ class BulsajaSimulatorV2:
         self.refresh_var = tk.StringVar(value=self.config.get("refresh_token", ""))
         ttk.Entry(f_cfg, textvariable=self.refresh_var, width=30).pack(side=tk.LEFT, padx=5)
         
+        ttk.Button(f_cfg, text="포트9222 토큰추출", command=self._extract_tokens).pack(side=tk.LEFT, padx=5)
         ttk.Button(f_cfg, text="연결 확인", command=self._test_connection).pack(side=tk.LEFT, padx=10)
         
         # 중단: 실행 옵션
@@ -311,9 +311,30 @@ class BulsajaSimulatorV2:
         self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
         self.log_area.see(tk.END)
 
+    def _extract_tokens(self):
+        if not COMMON_AVAILABLE: return
+        self.log_sim("🔍 크롬 디버그 포트(9222)에서 토큰 추출 시도...")
+        ok, access, refresh, msg = extract_tokens_from_browser(9222)
+        if ok:
+            self.token_var.set(access)
+            self.refresh_var.set(refresh)
+            self.log_sim("✅ 토큰 추출 및 적용 완료")
+            # 자동 연결 테스트
+            self.root.after(500, self._test_connection)
+        else:
+            messagebox.showwarning("실패", f"토큰 추출 실패: {msg}\n크롬이 9222 포트로 실행 중인지 확인하세요.")
+
     def _test_connection(self):
         if not COMMON_AVAILABLE: return
-        client = BulsajaAPIClient(self.token_var.get(), self.refresh_var.get())
+        # [Fix] 토큰 공백 제거 (500 에러 방지)
+        access = self.token_var.get().strip()
+        refresh = self.refresh_var.get().strip()
+        
+        if not access:
+            messagebox.showwarning("경고", "Access Token을 입력하세요")
+            return
+            
+        client = BulsajaAPIClient(access, refresh)
         ok, msg, days = client.test_connection()
         if ok:
             messagebox.showinfo("성공", f"연결 성공! (남은기간: {days}일)")
