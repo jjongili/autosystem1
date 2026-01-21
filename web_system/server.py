@@ -140,6 +140,7 @@ SHEET_COLUMNS = [
     "아이디",
     "패스워드",
     "스토어명",
+    "쇼핑몰 별칭",
     "사업자번호",
     "스마트스토어 API 연동용 판매자ID",
     "스마트스토어 애플리케이션 ID",
@@ -7701,10 +7702,6 @@ async def get_sales_from_sheet_v2(request: Request, force: bool = False):
                 if order_date >= days_7_ago:
                     market_sales[store_key]["orders_7d"] = market_sales[store_key].get("orders_7d", 0) + 1
                 
-                # 7일 이내 주문
-                if order_date >= days_7_ago:
-                    market_sales[store_key]["orders_7d"] = market_sales[store_key].get("orders_7d", 0) + 1
-                
                 # 일자별 집계
                 daily_sales[date_key]["sales"] += payment
                 daily_sales[date_key]["settlement"] += settlement
@@ -10146,6 +10143,49 @@ async def create_marketing_sheets(request: Request):
         return {"success": False, "error": str(e)}
 
 
+@app.get("/api/marketing/accounts-status")
+async def get_marketing_accounts_status(request: Request):
+    """마케팅 계정별 수집 상태 조회 (최근 수집일, 미수집/수집 상태)"""
+    require_permission(request, "view")
+
+    try:
+        # 마케팅 스프레드시트의 모든 워크시트 이름 조회
+        store_names = gsheet.get_worksheet_names_with_cache(sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=False)
+        store_names = [name for name in store_names if name not in ["템플릿", "설정", "전체데이터", "쇼핑몰정보", "스토어유입수"]]
+
+        # 각 스토어의 최근 수집일 확인
+        status_data = {}
+        for store_name in store_names:
+            try:
+                all_values = gsheet.get_values_with_cache(store_name, sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=False)
+
+                # 첫 번째 데이터 행에서 날짜 추출 (A열 = 날짜)
+                last_date = None
+                if all_values and len(all_values) > 1:
+                    for row in all_values[1:]:  # 헤더 제외
+                        if row and len(row) > 0 and row[0]:
+                            date_str = str(row[0]).strip()
+                            if date_str and len(date_str) >= 8:  # YYYY-MM-DD 또는 YYYYMMDD
+                                last_date = date_str
+                                break
+
+                status_data[store_name] = {
+                    "collected": last_date is not None,
+                    "last_date": last_date
+                }
+            except Exception as e:
+                status_data[store_name] = {
+                    "collected": False,
+                    "last_date": None,
+                    "error": str(e)[:50]
+                }
+
+        return {"success": True, "status": status_data}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/api/marketing/data")
 async def get_marketing_data(request: Request, store: str = None, refresh: bool = False):
     """마케팅 수집 데이터 조회
@@ -10941,6 +10981,7 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
             
             # 상품 등록률 계산
             registration_rate = (pc / tp) if tp > 0 else 0
+            acc["progress"] = int(registration_rate * 100)
             
             # 운영일 가져오기 (매칭된 경우에만, 기본값 30일)
             operation_days = acc.get("operationDays", 30)
@@ -10953,28 +10994,40 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
             # 1단계: 업로드 vs 운영 구분
             if registration_rate >= 0.9:
                 # 90% 이상 등록 -> 운영 상태
-                stage = "운영"  # 운영 (문자열!)
+                stage = "운영"
                 
-                # 2단계: 리뉴얼대상 판별
+                # 운영 상태인 경우 기본 30일 설정 (DB나 수동 설정이 없을 때)
+                if acc.get("operationDays") is None or acc.get("operationDays") == 0:
+                    acc["operationDays"] = 30
+                    operation_days = 30
+                
+                # 2단계: 리뉴얼대상 판별 (강력한 조건들)
                 # 조건1: 운영일 60일 경과
                 if operation_days >= 60:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
+                    stage = "리뉴얼대상"
                     acc["renewalReason"] = f"운영 {operation_days}일 경과"
                 
                 # 조건2: 운영일 30일 경과 + 최근 30일 매출 50만원 이하
                 elif operation_days >= 30 and month_revenue <= 500000:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
-                    acc["renewalReason"] = f"매출부진 ({month_revenue:,}원)"
+                    stage = "리뉴얼대상"
+                    acc["renewalReason"] = f"매출부진 ({format_krw(month_revenue)})"
                 
-                # 조건3: 7일 주문 0건 (유입수 감소는 향후 추가)
+                # 조건3: 7일 주문 0건
                 elif orders_7d == 0 and operation_days >= 7:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
+                    stage = "리뉴얼대상"
                     acc["renewalReason"] = "7일 주문 0건"
             else:
                 # 90% 미만 등록 -> 업로드 상태
-                stage = "업로드"  # 업로드 (문자열!)
-                # 업로드 상태에서는 운영일 초기화 (향후 DB 업데이트 시 반영)
+                stage = "업로드"
+                # 업로드가 90% 이상 되지 않은 계정은 0일로 표시 (사용자 요청)
+                acc["operationDays"] = 0
+                operation_days = 0
+                # 업로드 상태에서도 목표매출은 표시하고 싶을 수 있으나, 일단 0으로 초기화하지 않고 상단 default(2M) 유지
             
+            # 모든 스토어에 대해 목표매출(200만) 보장
+            if not acc.get("targetRevenue"):
+                acc["targetRevenue"] = 2000000
+
             acc["stage"] = stage
 
         return {"success": True, "accounts": accounts}
@@ -10983,6 +11036,11 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
         import traceback
         traceback.print_exc()
         return {"success": False, "message": str(e), "accounts": []}
+
+def format_krw(val):
+    if val >= 10000:
+        return f"{val//10000}만{val%10000//1000}천원" if val%10000 >= 1000 else f"{val//10000}만원"
+    return f"{val:,}원"
 
 
 # ========== 실행 제어 변수 ==========

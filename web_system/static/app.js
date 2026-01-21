@@ -8,6 +8,41 @@ let top40Data = [];  // TOP 40 상품 데이터
 let top40SortColumn = 'order_count';  // 정렬 기준 (order_count 또는 total_sales)
 let top40SortDesc = true;  // 내림차순
 
+// 다크모드/라이트모드 토글
+function toggleTheme() {
+    const body = document.body;
+    const btn = document.querySelector('.theme-toggle-btn');
+
+    if (body.classList.contains('dark-mode')) {
+        // 라이트모드로 전환
+        body.classList.remove('dark-mode');
+        if (btn) btn.textContent = '🌙';
+        localStorage.setItem('theme', 'light');
+    } else {
+        // 다크모드로 전환
+        body.classList.add('dark-mode');
+        if (btn) btn.textContent = '☀️';
+        localStorage.setItem('theme', 'dark');
+    }
+}
+
+// 페이지 로드시 저장된 테마 적용
+function applyStoredTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const btn = document.querySelector('.theme-toggle-btn');
+
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        if (btn) btn.textContent = '☀️';
+    } else {
+        document.body.classList.remove('dark-mode');
+        if (btn) btn.textContent = '🌙';
+    }
+}
+
+// DOM 로드 시 테마 적용
+document.addEventListener('DOMContentLoaded', applyStoredTheme);
+
 // 한글 우선 + 영어 fallback 헬퍼 함수
 function get플랫폼(acc) { return acc['플랫폼'] || acc.platform || ''; }
 function get아이디(acc) { return acc['아이디'] || acc.login_id || ''; }
@@ -199,6 +234,11 @@ function activateTab(tabName) {
     // 마케팅분석 탭 활성화 시 계정 목록 로드
     if (tabName === 'marketing') {
         loadMarketingAccounts();
+    }
+
+    // 자동화 대시보드 탭 활성화 시 초기화
+    if (tabName === 'bulsaja-dashboard') {
+        initBulsajaDashboard();
     }
 }
 
@@ -2276,9 +2316,577 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tab.dataset.tab === 'bulsaja') {
                 initBulsajaTab();
             }
+            // 자동화 대시보드 탭
+            if (tab.dataset.tab === 'bulsaja-dashboard') {
+                initBulsajaDashboard();
+            }
         });
     });
 });
+
+// ========== 자동화 대시보드 기능 ==========
+let bulsajaDashboardAccounts = [];
+let bulsajaDashboardStageFilter = 'all';
+let bulsajaDashboardPlatformFilters = ['all'];  // 복수 선택 지원 (배열)
+let bulsajaDashboardUsageFilters = ['all'];     // 복수 선택 지원 (배열)
+let bulsajaDashboardSearchQuery = '';
+// 구버전 호환용 getter
+Object.defineProperty(window, 'bulsajaDashboardPlatformFilter', {
+    get: () => bulsajaDashboardPlatformFilters.includes('all') ? 'all' : bulsajaDashboardPlatformFilters[0],
+    set: (v) => { bulsajaDashboardPlatformFilters = [v]; }
+});
+Object.defineProperty(window, 'bulsajaDashboardUsageFilter', {
+    get: () => bulsajaDashboardUsageFilters.includes('all') ? 'all' : bulsajaDashboardUsageFilters[0],
+    set: (v) => { bulsajaDashboardUsageFilters = [v]; }
+});
+
+const bulsajaDashboardStageIcons = ['📤', '🏪', '🔨', '🗑️', '✏️', '📋'];
+const bulsajaDashboardStageNames = ['업로드', '운영', '리뉴얼대상', '삭제', '변경', '복사'];
+const bulsajaDashboardPlatformLogos = {
+    naver: { letter: 'N', class: 'naver' },
+    coupang: { letter: 'C', class: 'coupang' },
+    '11st': { letter: '11', class: 'st11' },
+    gmarket: { letter: 'G', class: 'gmarket' },
+    auction: { letter: 'A', class: 'auction' }
+};
+
+// 자동화 대시보드 초기화
+function initBulsajaDashboard() {
+    // 시간 업데이트
+    updateBulsajaDashboardTime();
+    setInterval(updateBulsajaDashboardTime, 1000);
+
+    // 데이터 로드
+    loadBulsajaDashboardData();
+
+    // 이벤트 리스너 설정
+    setupBulsajaDashboardEvents();
+}
+
+// 시간 업데이트
+function updateBulsajaDashboardTime() {
+    const timeEl = document.getElementById('currentTimeBulsaja');
+    if (timeEl) {
+        const now = new Date();
+        timeEl.textContent = now.toTimeString().slice(0, 8);
+    }
+}
+
+// 데이터 로드
+async function loadBulsajaDashboardData(refresh = false) {
+    try {
+        const url = refresh ? '/api/bulsaja/dashboard_data?refresh=true' : '/api/bulsaja/dashboard_data';
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.accounts) {
+            bulsajaDashboardAccounts = data.accounts;
+            renderBulsajaDashboard();
+        }
+    } catch (e) {
+        console.error('대시보드 데이터 로드 실패:', e);
+    }
+}
+
+// 매출 포맷팅
+function formatBulsajaRevenue(num) {
+    if (!num) return '0';
+    if (num >= 100000000) return (num / 100000000).toFixed(1) + '억';
+    if (num >= 10000000) return (num / 10000000).toFixed(0) + '천만';
+    if (num >= 10000) return (num / 10000).toFixed(0) + '만';
+    return num.toLocaleString();
+}
+
+// 매출 상태
+function getBulsajaRevenueStatus(revenue, target) {
+    const percent = (revenue / target) * 100;
+    if (percent >= 100) return 'achieved';
+    if (percent >= 50) return 'warning';
+    return 'danger';
+}
+
+// 운영일 클래스
+function getBulsajaDaysClass(days) {
+    if (days >= 60) return 'danger';
+    if (days >= 30) return 'warning';
+    return '';
+}
+
+// 매출 상태 텍스트 결정 함수
+function getRevenueStatusText(revenue, targetRevenue) {
+    const percent = (revenue / targetRevenue) * 100;
+    if (percent >= 100) return '목표달성';
+    if (percent >= 70) return '양호';
+    if (percent >= 40) return '주의';
+    return '매출부진';
+}
+
+// 운영일 클릭시 인라인 수정 가능하게 변환
+function makeOpDaysEditable(el, storeName, currentDays) {
+    // 이미 input이면 무시
+    if (el.querySelector('input')) return;
+
+    const originalHTML = el.innerHTML;
+    const daysClass = el.className.replace('operation-days', '').trim();
+
+    el.innerHTML = `<input type="number" class="op-days-inline-input" value="${currentDays}" min="0" max="9999">일`;
+    const input = el.querySelector('input');
+    input.focus();
+    input.select();
+
+    // Enter 또는 포커스 아웃 시 저장
+    const save = async () => {
+        const newDays = parseInt(input.value) || 0;
+        el.innerHTML = `${newDays}일`;
+        if (newDays !== currentDays) {
+            await updateBulsajaOperationDaysSilent(storeName, newDays);
+        }
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            input.blur();
+        } else if (e.key === 'Escape') {
+            el.innerHTML = originalHTML;
+        }
+    });
+}
+
+// 운영일 업데이트 함수 (실제 반영) - 팝업 없이 조용히 업데이트 (이름 변경하여 캐시 회피)
+async function updateBulsajaOperationDaysSilent(storeName, days) {
+    try {
+        const response = await fetch('/api/bulsaja/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_name: storeName,
+                operationDays: parseInt(days)
+            })
+        });
+        const res = await response.json();
+        if (res.success) {
+            // 조용히 데이터 새로고침
+            loadBulsajaDashboardData();
+        } else {
+            console.error('불사자 업데이트 실패:', res.message);
+            // 실패 시에도 alert 띄우지 않음
+        }
+    } catch (e) {
+        console.error('운영일 수정 오류:', e);
+    }
+}
+
+// 대시보드 전체 렌더링
+function renderBulsajaDashboard() {
+    const stageMapReverse = {
+        '업로드': 1, '운영': 2, '리뉴얼대상': 3, '삭제': 4, '변경': 5, '복사': 6
+    };
+    const stageIcons = ['📤', '🏪', '🔨', '🗑️', '✏️', '📋'];
+
+    // 필터 적용
+    const filtered = bulsajaDashboardAccounts.filter(acc => {
+        // 스테이지 필터
+        let matchStage = bulsajaDashboardStageFilter === 'all';
+        if (!matchStage) {
+            const stageMap = { '1': '업로드', '2': '운영', '3': '리뉴얼대상', '4': '삭제', '5': '변경', '6': '복사' };
+            matchStage = acc.stage === stageMap[bulsajaDashboardStageFilter];
+        }
+        // 플랫폼 필터 (복수 선택 지원)
+        let matchPlatform = bulsajaDashboardPlatformFilters.includes('all');
+        if (!matchPlatform) {
+            const platform = (acc.platform || '').toLowerCase();
+            matchPlatform = bulsajaDashboardPlatformFilters.some(f => {
+                if (f === 'gmarket') return platform === 'gmarket' || platform === 'auction';
+                return platform === f;
+            });
+        }
+        // 용도 필터 (복수 선택 지원)
+        let matchUsage = bulsajaDashboardUsageFilters.includes('all');
+        if (!matchUsage) {
+            const usage = acc.usage || '대량';
+            matchUsage = bulsajaDashboardUsageFilters.includes(usage);
+        }
+        const matchSearch = (acc.name || '').toLowerCase().includes(bulsajaDashboardSearchQuery.toLowerCase());
+        return matchStage && matchPlatform && matchUsage && matchSearch;
+    });
+
+    // 카운트 업데이트
+    const stageCounts = { '업로드': 0, '운영': 0, '리뉴얼대상': 0, '삭제': 0, '변경': 0, '복사': 0 };
+    bulsajaDashboardAccounts.forEach(a => {
+        if (stageCounts[a.stage] !== undefined) stageCounts[a.stage]++;
+    });
+
+    const countAllEl = document.getElementById('countAllBulsaja');
+    if (countAllEl) countAllEl.textContent = bulsajaDashboardAccounts.length;
+    const count1El = document.getElementById('count1Bulsaja');
+    if (count1El) count1El.textContent = stageCounts['업로드'];
+    const count2El = document.getElementById('count2Bulsaja');
+    if (count2El) count2El.textContent = stageCounts['운영'];
+    const count3El = document.getElementById('count3Bulsaja');
+    if (count3El) count3El.textContent = stageCounts['리뉴얼대상'];
+    const count4El = document.getElementById('count4Bulsaja');
+    if (count4El) count4El.textContent = stageCounts['삭제'];
+    const count5El = document.getElementById('count5Bulsaja');
+    if (count5El) count5El.textContent = stageCounts['변경'];
+    const count6El = document.getElementById('count6Bulsaja');
+    if (count6El) count6El.textContent = stageCounts['복사'];
+
+    // 테이블 렌더링
+    const tableBody = document.getElementById('tableBodyBulsaja');
+    if (tableBody) {
+        tableBody.innerHTML = filtered.map(acc => {
+            const platform = (acc.platform || 'naver').toLowerCase();
+            const logo = bulsajaDashboardPlatformLogos[platform] || { letter: platform.charAt(0).toUpperCase(), class: '' };
+            const currentStageIdx = stageMapReverse[acc.stage] || 0;
+            const targetRevenue = acc.targetRevenue || 2000000;
+            const revenuePercent = Math.min((acc.revenue / targetRevenue) * 100, 100);
+            const revenueStatus = getBulsajaRevenueStatus(acc.revenue, targetRevenue);
+            const operationDays = acc.operationDays || 0;
+            const daysClass = getBulsajaDaysClass(operationDays);
+
+            // 공통 데이터 계산
+            const maxProducts = acc.targetProducts || 10000;
+            const currentProducts = acc.products || 0;
+            const uploadPercent = Math.min((currentProducts / maxProducts) * 100, 100);
+
+            // 스테이지 셀 생성
+            let stageCells = '';
+            for (let i = 1; i <= 6; i++) {
+                const isActive = i === currentStageIdx;
+                const isCompleted = i < currentStageIdx;
+
+                // active 셀에만 테두리: 리뉴얼=빨강, 그 외=오렌지
+                let cellClass = isActive ? (i === 3 ? 'blink-active-red' : 'blink-active') : '';
+                let content = '';
+
+                if (i === 1) {
+                    // 업로드 열: 항상 업로드 정보 표시 (핵심 요구사항)
+                    const indicatorClass = isActive ? 'active' : (isCompleted ? 'completed' : '');
+                    content = `
+                        <div class="stage-indicator-bulsaja ${indicatorClass}">
+                            <div class="value">${currentProducts.toLocaleString()} / ${maxProducts.toLocaleString()}</div>
+                            <div class="progress-bar"><div class="progress-bar-fill" style="width:${uploadPercent}%"></div></div>
+                            <div class="value">${uploadPercent.toFixed(0)}%</div>
+                        </div>`;
+                } else if (i === 2) {
+                    // 운영 열: 항상 운영일 표시 (핵심 요구사항) - 클릭시 인라인 수정
+                    const indicatorClass = isActive ? 'active' : (isCompleted ? 'completed' : '');
+                    const safeStoreName = acc.name.replace(/'/g, "\\'");
+                    content = `
+                        <div class="stage-indicator-bulsaja ${indicatorClass}">
+                            <div class="operation-days ${daysClass}" onclick="makeOpDaysEditable(this, '${safeStoreName}', ${operationDays})" style="cursor:pointer;">${operationDays}일</div>
+                        </div>`;
+                } else if (i === 3) {
+                    // 리뉴얼 열
+                    if (isActive) {
+                        // 리뉴얼 활성: 빨간 강조 + 사유 표시
+                        content = `
+                            <div class="stage-indicator-bulsaja active renewal-active">
+                                <div class="icon">🔨</div>
+                                <div class="value renewal-reason">${acc.renewalReason || '매출부진 (0원)'}</div>
+                            </div>`;
+                    } else if (isCompleted) {
+                        content = `<div class="stage-indicator-bulsaja completed"><div class="icon">✓</div></div>`;
+                    } else {
+                        content = `<div class="stage-indicator-bulsaja inactive"><div class="icon">🔨</div></div>`;
+                    }
+                } else {
+                    // 삭제/변경/복사 열
+                    if (isActive) {
+                        content = `
+                            <div class="stage-indicator-bulsaja active">
+                                <div class="icon">${stageIcons[i - 1]}</div>
+                            </div>`;
+                    } else if (isCompleted) {
+                        content = `<div class="stage-indicator-bulsaja completed"><div class="icon">✓</div></div>`;
+                    } else {
+                        content = `<div class="stage-indicator-bulsaja inactive"><div class="icon">${stageIcons[i - 1]}</div></div>`;
+                    }
+                }
+
+                stageCells += `<div class="stage-cell-bulsaja ${cellClass}">${content}</div>`;
+            }
+
+            // 목표매출 셀: 모든 행에 항상 표시 (핵심 요구사항)
+            let revenueCell = `
+                <div class="revenue-cell-bulsaja">
+                    <div class="revenue-header-row-bulsaja">
+                        <span class="revenue-current-bulsaja">${formatBulsajaRevenue(acc.revenue)}</span>
+                        <span class="revenue-target-text-bulsaja">${formatBulsajaRevenue(targetRevenue)}</span>
+                    </div>
+                    <div class="revenue-bar-bulsaja"><div class="revenue-bar-fill-bulsaja ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                    <div class="revenue-percent-bulsaja ${revenueStatus}">${revenuePercent.toFixed(0)}%</div>
+                </div>`;
+
+            return `
+                <div class="table-row-bulsaja">
+                    <div class="account-cell-bulsaja sticky-account-col">
+                        <div class="account-logo-bulsaja ${logo.class}">${logo.letter}</div>
+                        <div class="account-info">
+                            <span class="name">${acc.name || 'Unknown'}</span>
+                        </div>
+                    </div>
+                    ${stageCells}
+                    ${revenueCell}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 모바일 카드뷰 렌더링
+    const cardView = document.getElementById('cardViewBulsaja');
+    if (cardView) {
+        cardView.innerHTML = filtered.map(acc => {
+            const platform = (acc.platform || 'naver').toLowerCase();
+            const logo = bulsajaDashboardPlatformLogos[platform] || { letter: platform.charAt(0).toUpperCase(), class: '' };
+            const currentStageIdx = stageMapReverse[acc.stage] || 0;
+            const targetRevenue = acc.targetRevenue || 2000000;
+            const revenuePercent = Math.min((acc.revenue / targetRevenue) * 100, 100);
+            const revenueStatus = getBulsajaRevenueStatus(acc.revenue, targetRevenue);
+            const operationDays = acc.operationDays || 0;
+            const daysClass = getBulsajaDaysClass(operationDays);
+
+            // 미니 스테이지 표시
+            let miniStages = '';
+            for (let i = 1; i <= 6; i++) {
+                let cls = '';
+                if (i < currentStageIdx) cls = 'completed';
+                else if (i === currentStageIdx) cls = 'active';
+                miniStages += `<div class="mini-stage ${cls}"></div>`;
+            }
+
+            // 스테이지 내용
+            let stageContent = '';
+            if (acc.stage === '업로드') {
+                const maxProducts = acc.targetProducts || 10000;
+                const currentProducts = acc.products || 0;
+                stageContent = `
+                    <div class="card-stage-icon active">📤</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">업로드</div>
+                        <div class="card-stage-value">${currentProducts.toLocaleString()}/${maxProducts.toLocaleString()}</div>
+                    </div>
+                    <div class="card-progress">
+                        <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress || 0}%"></div></div>
+                    </div>`;
+            } else if (acc.stage === '운영') {
+                stageContent = `
+                    <div class="card-stage-icon active">🏪</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">운영중</div>
+                        <div class="card-stage-value days ${daysClass}">${operationDays}일</div>
+                    </div>`;
+            } else if (acc.stage === '리뉴얼대상') {
+                stageContent = `
+                    <div class="card-stage-icon active">🔨</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">리뉴얼대상</div>
+                        <div class="card-stage-value" style="color:var(--accent-red);font-size:12px;">${acc.renewalReason || '매출부진'}</div>
+                    </div>`;
+            } else {
+                stageContent = `
+                    <div class="card-stage-icon active">${stageIcons[currentStageIdx - 1] || '📤'}</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">${acc.stage}</div>
+                        <div class="card-stage-value">${acc.products?.toLocaleString() || 0}/${(acc.targetProducts || 10000).toLocaleString()}</div>
+                    </div>
+                    <div class="card-progress">
+                        <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress || 0}%"></div></div>
+                    </div>`;
+            }
+
+            // 매출 섹션 (운영/리뉴얼만)
+            let revenueSection = '';
+            if (acc.stage === '운영' || acc.stage === '리뉴얼대상') {
+                revenueSection = `
+                    <div class="card-revenue">
+                        <div class="card-revenue-header">
+                            <span class="card-revenue-title">💰 목표매출</span>
+                            <span class="card-revenue-value ${revenueStatus}">${revenuePercent.toFixed(0)}%</span>
+                        </div>
+                        <div class="card-revenue-bar"><div class="card-revenue-bar-fill ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                        <div class="card-revenue-footer">
+                            <span>${formatBulsajaRevenue(acc.revenue)}</span>
+                            <span class="card-revenue-target">/ ${formatBulsajaRevenue(targetRevenue)}</span>
+                        </div>
+                    </div>`;
+            }
+
+            return `
+                <div class="account-card-bulsaja">
+                    <div class="card-header-bulsaja">
+                        <div class="account-logo-bulsaja ${logo.class}">${logo.letter}</div>
+                        <div class="account-info">
+                            <h4>${acc.name || 'Unknown'}</h4>
+                        </div>
+                    </div>
+                    <div class="card-stage-bulsaja">${stageContent}</div>
+                    ${revenueSection}
+                    <div class="card-stages-mini">${miniStages}</div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// 운영일 수정
+async function updateBulsajaOperationDays(storeName, currentDays) {
+    const newDays = prompt(`${storeName}의 운영일을 입력하세요:`, currentDays);
+    if (newDays === null) return;
+
+    const days = parseInt(newDays);
+    if (isNaN(days)) {
+        alert('숫자만 입력 가능합니다.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/bulsaja/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_name: storeName,
+                operationDays: days
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            const acc = bulsajaDashboardAccounts.find(a => a.name === storeName);
+            if (acc) {
+                acc.operationDays = days;
+                renderBulsajaDashboard();
+            }
+        } else {
+            alert('저장 실패: ' + data.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('통신 오류가 발생했습니다.');
+    }
+}
+
+// 이벤트 리스너 설정
+function setupBulsajaDashboardEvents() {
+    // 새로고침 버튼
+    const refreshBtn = document.getElementById('refreshBulsaja');
+    if (refreshBtn && !refreshBtn._bound) {
+        refreshBtn._bound = true;
+        refreshBtn.addEventListener('click', () => loadBulsajaDashboardData(true));
+    }
+
+    // 검색 입력
+    const searchInput = document.getElementById('searchInputBulsaja');
+    if (searchInput && !searchInput._bound) {
+        searchInput._bound = true;
+        searchInput.addEventListener('input', (e) => {
+            bulsajaDashboardSearchQuery = e.target.value;
+            renderBulsajaDashboard();
+        });
+    }
+
+    // 스테이지 탭
+    document.querySelectorAll('.stage-tab-bulsaja').forEach(tab => {
+        if (!tab._bound) {
+            tab._bound = true;
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.stage-tab-bulsaja').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                bulsajaDashboardStageFilter = tab.dataset.stage;
+                renderBulsajaDashboard();
+            });
+        }
+    });
+
+    // 플랫폼 필터 (Ctrl 복수 선택 지원)
+    document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(pill => {
+        if (!pill._bound) {
+            pill._bound = true;
+            pill.addEventListener('click', (e) => {
+                const platform = pill.dataset.platform;
+
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+클릭: 복수 선택
+                    if (platform === 'all') {
+                        // 전체 클릭시 다른거 해제
+                        bulsajaDashboardPlatformFilters = ['all'];
+                        document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                        pill.classList.add('active');
+                    } else {
+                        // 개별 필터 토글
+                        const allPill = document.querySelector('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja[data-platform="all"]');
+                        if (allPill) allPill.classList.remove('active');
+                        bulsajaDashboardPlatformFilters = bulsajaDashboardPlatformFilters.filter(f => f !== 'all');
+
+                        if (bulsajaDashboardPlatformFilters.includes(platform)) {
+                            // 이미 선택됨 -> 해제
+                            bulsajaDashboardPlatformFilters = bulsajaDashboardPlatformFilters.filter(f => f !== platform);
+                            pill.classList.remove('active');
+                        } else {
+                            // 선택
+                            bulsajaDashboardPlatformFilters.push(platform);
+                            pill.classList.add('active');
+                        }
+
+                        // 아무것도 선택 안된 경우 전체로
+                        if (bulsajaDashboardPlatformFilters.length === 0) {
+                            bulsajaDashboardPlatformFilters = ['all'];
+                            if (allPill) allPill.classList.add('active');
+                        }
+                    }
+                } else {
+                    // 일반 클릭: 단일 선택
+                    document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    bulsajaDashboardPlatformFilters = [platform];
+                }
+                renderBulsajaDashboard();
+            });
+        }
+    });
+
+    // 용도 필터 (Ctrl 복수 선택 지원)
+    document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(pill => {
+        if (!pill._bound) {
+            pill._bound = true;
+            pill.addEventListener('click', (e) => {
+                const usage = pill.dataset.usage;
+
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+클릭: 복수 선택
+                    if (usage === 'all') {
+                        bulsajaDashboardUsageFilters = ['all'];
+                        document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                        pill.classList.add('active');
+                    } else {
+                        const allPill = document.querySelector('.usage-filter-bulsaja .filter-pill-bulsaja[data-usage="all"]');
+                        if (allPill) allPill.classList.remove('active');
+                        bulsajaDashboardUsageFilters = bulsajaDashboardUsageFilters.filter(f => f !== 'all');
+
+                        if (bulsajaDashboardUsageFilters.includes(usage)) {
+                            bulsajaDashboardUsageFilters = bulsajaDashboardUsageFilters.filter(f => f !== usage);
+                            pill.classList.remove('active');
+                        } else {
+                            bulsajaDashboardUsageFilters.push(usage);
+                            pill.classList.add('active');
+                        }
+
+                        if (bulsajaDashboardUsageFilters.length === 0) {
+                            bulsajaDashboardUsageFilters = ['all'];
+                            if (allPill) allPill.classList.add('active');
+                        }
+                    }
+                } else {
+                    // 일반 클릭: 단일 선택
+                    document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    bulsajaDashboardUsageFilters = [usage];
+                }
+                renderBulsajaDashboard();
+            });
+        }
+    });
+}
 
 // ========== 검색 기능 ==========
 
@@ -7915,6 +8523,23 @@ function renderSalesCharts() {
     const salesValues = salesData.daily.map(d => d.sales);
     const profitValues = salesData.daily.map(d => d.profit);
 
+    // 평균/최고/최저 일매출 계산
+    const validSales = salesValues.filter(v => v > 0);
+    const avgSales = validSales.length > 0 ? Math.round(validSales.reduce((a, b) => a + b, 0) / validSales.length) : 0;
+    const maxSales = validSales.length > 0 ? Math.max(...validSales) : 0;
+    const minSales = validSales.length > 0 ? Math.min(...validSales) : 0;
+
+    // 평균 라인 데이터 (모든 날짜에 동일한 값)
+    const avgLineData = salesValues.map(() => avgSales);
+
+    // 통계 표시 업데이트
+    const avgEl = document.getElementById('avgDailySales');
+    const maxEl = document.getElementById('maxDailySales');
+    const minEl = document.getElementById('minDailySales');
+    if (avgEl) avgEl.textContent = formatMoney(avgSales);
+    if (maxEl) maxEl.textContent = formatMoney(maxSales);
+    if (minEl) minEl.textContent = formatMoney(minSales);
+
     // 매출 + 수익 합친 차트
     const ctx1 = document.getElementById('dailySalesChart');
     if (ctx1) {
@@ -7930,7 +8555,19 @@ function renderSalesCharts() {
                         backgroundColor: 'rgba(102, 126, 234, 0.6)',
                         borderColor: 'rgba(102, 126, 234, 1)',
                         borderWidth: 1,
-                        order: 2
+                        order: 3
+                    },
+                    {
+                        label: '평균 일매출',
+                        data: avgLineData,
+                        type: 'line',
+                        borderColor: 'rgba(255, 152, 0, 1)',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [10, 5],  // 점선
+                        pointRadius: 0,
+                        tension: 0,
+                        order: 1
                     },
                     {
                         label: '순익',
@@ -7943,7 +8580,7 @@ function renderSalesCharts() {
                         pointRadius: 3,
                         pointBackgroundColor: 'rgba(46, 125, 50, 1)',
                         tension: 0.3,
-                        order: 1,
+                        order: 2,
                         yAxisID: 'y1'
                     }
                 ]
@@ -9478,6 +10115,9 @@ async function initializeMarketingSheets() {
 // 계정 목록 로드 (기존 API 활용)
 let marketingAccountsData = []; // 원본 데이터 저장
 
+// 마케팅 수집 상태 저장
+let marketingCollectionStatus = {};
+
 async function loadMarketingAccounts() {
     try {
         // 기존 계정 목록 API 활용 - 플랫폼명은 한글!
@@ -9495,6 +10135,9 @@ async function loadMarketingAccounts() {
         // 원본 데이터 저장
         marketingAccountsData = accounts;
 
+        // 수집 상태 로드
+        await loadMarketingCollectionStatus();
+
         // 필터 UI 생성
         createMarketingFilters();
 
@@ -9504,6 +10147,19 @@ async function loadMarketingAccounts() {
     } catch (e) {
         console.error('계정 목록 로드 오류:', e);
         showToast('계정 목록 로드 실패', 'error');
+    }
+}
+
+// 마케팅 수집 상태 로드
+async function loadMarketingCollectionStatus() {
+    try {
+        const resp = await fetch('/api/marketing/accounts-status');
+        const data = await resp.json();
+        if (data.success && data.status) {
+            marketingCollectionStatus = data.status;
+        }
+    } catch (e) {
+        console.error('마케팅 수집 상태 로드 오류:', e);
     }
 }
 
@@ -9582,7 +10238,7 @@ function renderMarketingAccounts(accounts = null) {
     // 테이블 형식으로 표시
     let html = `
         <div style="margin-bottom: 10px;">
-            <input type="text" id="marketingSearchInput" placeholder="🔍 스토어명, 소유자, 용도 검색..." 
+            <input type="text" id="marketingSearchInput" placeholder="🔍 스토어명, 소유자, 용도 검색..."
                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;"
                    onkeyup="searchMarketingAccounts()">
         </div>
@@ -9599,6 +10255,7 @@ function renderMarketingAccounts(accounts = null) {
                     <th onclick="sortMarketingAccounts('용도')" style="cursor: pointer;">
                         용도 <span class="sort-arrow">↕</span>
                     </th>
+                    <th>수집상태</th>
                     <th>로그인ID</th>
                 </tr>
             </thead>
@@ -9606,12 +10263,25 @@ function renderMarketingAccounts(accounts = null) {
     `;
 
     data.forEach(acc => {
+        const storeName = acc.스토어명 || '';
+        const status = marketingCollectionStatus[storeName] || {};
+        const isCollected = status.collected;
+        const lastDate = status.last_date;
+
+        let statusHtml = '';
+        if (isCollected && lastDate) {
+            statusHtml = `<span style="color: #4caf50;">✅ ${lastDate}</span>`;
+        } else {
+            statusHtml = `<span style="color: #f44336;">❌ 미수집</span>`;
+        }
+
         html += `
             <tr>
                 <td><input type="checkbox" value="${acc.login_id}" class="marketing-account-cb"></td>
                 <td>${acc.스토어명 || '-'}</td>
                 <td>${acc.소유자 || '-'}</td>
                 <td>${acc.용도 || '-'}</td>
+                <td>${statusHtml}</td>
                 <td><small>${acc.login_id}</small></td>
             </tr>
         `;
