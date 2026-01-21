@@ -1079,7 +1079,7 @@
                 const cycleClass = acc.cycleCount >= 4 ? 'many' : '';
                 const revenuePercent = Math.min((acc.revenue / acc.targetRevenue) * 100, 100);
                 const revenueStatus = getRevenueStatus(acc.revenue, acc.targetRevenue);
-                const isGaliTarget = acc.stage === '운영' && revenuePercent < 60 && acc.operationDays >= 30;
+                const isGaliTarget = acc.stage === '리뉴얼대상';
 
                 const stageMapReverse = {
                     '업로드': 1, '운영': 2, '리뉴얼대상': 3, '삭제': 4, '변경': 5, '복사': 6
@@ -1143,7 +1143,7 @@
                 const cycleClass = acc.cycleCount >= 4 ? 'many' : '';
                 const revenuePercent = Math.min((acc.revenue / acc.targetRevenue) * 100, 100);
                 const revenueStatus = getRevenueStatus(acc.revenue, acc.targetRevenue);
-                const isGaliTarget = acc.stage === '운영' && revenuePercent < 60 && acc.operationDays >= 30;
+                const isGaliTarget = acc.stage === '리뉴얼대상';
                 const daysClass = getDaysClass(acc.operationDays);
 
                 let stageContent = '';

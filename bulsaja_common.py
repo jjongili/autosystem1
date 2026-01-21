@@ -735,6 +735,7 @@ DEFAULT_BAIT_KEYWORDS = [
     # 맞춤/주문제작 관련 (확실한 미끼)
     '맞춤제작', '주문제작', '주문 제작', '제작문의', '별도제작', '특별제작',
     '커스텀주문', '맞춤주문',
+    '사용자정의', '사용자 정의', '커스터마이징',
 
     # 계약/예약금 관련 (확실한 미끼)
     '계약금', '선금', '예약금', '보증금', '착수금',
@@ -767,6 +768,7 @@ DEFAULT_BAIT_KEYWORDS = [
     # 배송/추가비용 관련
     '배송비별도', '추가배송비', '도서산간추가', '제주추가',
     '설치비별도', '조립비별도', '출장비별도',
+    '공장직송', '공장 직송', '스팟배송', '스팟 배송', '송장가능',
 
     # 가격 미끼 (확실한 미끼)
     '1원', '10원', '100원', '0원',
@@ -1614,6 +1616,36 @@ def filter_bait_options(skus: List[Dict], bait_keywords: List[str],
     valid_skus = []
     bait_skus = []
 
+    # [v1.4] 미끼 키워드 빈도+가격 분석 - 다수 옵션에 공통으로 포함되고 정상가격이면 상품 특성으로 간주
+    keyword_skus = {}  # 키워드별 매칭된 SKU 리스트
+    for kw in bait_keywords:
+        kw_lower = kw.lower()
+        matching = []
+        for sku in skus:
+            text = sku.get('text', '') or sku.get('_text', '')
+            text_ko = sku.get('text_ko', '')
+            combined = f"{text} {text_ko}".lower()
+            if kw_lower in combined:
+                matching.append(sku)
+        if matching:
+            keyword_skus[kw] = matching
+
+    # 전체 옵션 평균 가격
+    all_prices = [sku.get('_origin_price', 0) or sku.get('price', 0) for sku in skus]
+    all_prices = [p for p in all_prices if p > 0]
+    avg_price = sum(all_prices) / len(all_prices) if all_prices else 0
+
+    # 2개 이상 옵션에 포함된 키워드는 가격 검증
+    excluded_common_keywords = set()
+    for kw, matching_skus in keyword_skus.items():
+        if len(matching_skus) >= 2:  # 최소 2개 이상 옵션에 포함
+            kw_prices = [sku.get('_origin_price', 0) or sku.get('price', 0) for sku in matching_skus]
+            kw_prices = [p for p in kw_prices if p > 0]
+            kw_avg = sum(kw_prices) / len(kw_prices) if kw_prices else 0
+            # 전체 평균의 50% 이상이면 미끼 가격 아님 → 키워드 필터링 제외
+            if avg_price > 0 and kw_avg >= avg_price * 0.5:
+                excluded_common_keywords.add(kw.lower())
+
     # 1. 가격 기반 미끼 판단을 위한 중간값(median) 계산
     prices = []
     for sku in skus:
@@ -1664,6 +1696,10 @@ def filter_bait_options(skus: List[Dict], bait_keywords: List[str],
             for keyword in bait_keywords:
                 keyword_lower = keyword.lower()
                 if keyword_lower in combined_text:
+                    # [v1.4] 공통 키워드는 건너뛰기 (2개+ 옵션에 포함 + 정상가격)
+                    if keyword_lower in excluded_common_keywords:
+                        continue
+
                     # 3-0. 강력 미끼 키워드 (예외 체크 없이 바로 미끼)
                     if keyword in STRONG_BAIT_KEYWORDS:
                         is_bait = True
@@ -1780,24 +1816,44 @@ class BulsajaAPIClient:
         status_filters: 상품 상태 필터 (예: ["0", "1", "2"])
             - API에서 그룹 필터만 적용하고, 상태 필터는 결과에서 직접 필터링
         """
-        filter_model = {}
+        # 기본 필터 모델 구성
+        base_filter = {}
         if group_name:
-            filter_model["marketGroupName"] = {
+            base_filter["marketGroupName"] = {
                 "filterType": "text",
                 "type": "equals",
                 "filter": group_name
             }
 
-        # 상태 필터가 있으면 더 많이 가져와서 필터링
-        fetch_limit = limit * 3 if status_filters else limit
-        products, total = self.get_products(start, start + fetch_limit, filter_model)
+        # 상태 필터 OR 조건 적용 (bulsaja_api_structure.md 참조)
+        if status_filters:
+            # 숫자 상태값만 필터링 (API는 숫자만 지원: 0,1,2,3)
+            numeric_statuses = [s for s in status_filters if s.isdigit()]
+            if numeric_statuses:
+                if len(numeric_statuses) == 1:
+                    # 단일 상태: 기본 형식
+                    base_filter["status"] = {
+                        "filterType": "text",
+                        "type": "equals",
+                        "filter": numeric_statuses[0]
+                    }
+                else:
+                    # 다중 상태: OR 조건 사용
+                    conditions = []
+                    for status in numeric_statuses:
+                        conditions.append({
+                            "filterType": "text",
+                            "type": "equals",
+                            "filter": status
+                        })
+                    base_filter["status"] = {
+                        "filterType": "text",
+                        "operator": "OR",
+                        "conditions": conditions
+                    }
 
-        # 상태 필터 적용 (API에서 다중 상태 OR 조건 미지원)
-        if status_filters and products:
-            filtered = [p for p in products if str(p.get('status', '')) in status_filters]
-            return filtered[:limit], len(filtered)
-
-        return products[:limit], total
+        products, total = self.get_products(start, start + limit, base_filter)
+        return products, total
 
     def get_product_detail(self, product_id: str) -> Dict:
         """상품 상세 정보 조회"""
@@ -1808,6 +1864,21 @@ class BulsajaAPIClient:
         if 'data' in result:
             return result['data']
         return result
+
+    def get_upload_fields(self, product_id: str) -> Dict:
+        """업로드 필드 정보 조회 (고시정보 등 포함)"""
+        url = f"{self.BASE_URL}/sourcing/uploadfields/{product_id}"
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            result = response.json()
+            # payload 안에 실제 데이터가 있는 경우
+            if 'payload' in result:
+                return result['payload']
+            return result
+        except Exception as e:
+            print(f"[WARNING] uploadfields 조회 실패: {e}")
+            return {}
 
     def update_product_fields(self, product_id: str, product_data: Dict) -> Tuple[bool, str]:
         """상품 정보 업데이트"""
