@@ -24,7 +24,12 @@ from io import BytesIO
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple, Any
 import re
-import pandas as pd
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    print("⚠️ pandas가 필요합니다.")
 from PIL import Image, ImageTk
 
 # ===== 외부 의존성 처리 =====
@@ -698,113 +703,238 @@ class BulsajaSimulatorV2:
         wb.save(filename)
 
     # ==================== 탭 2: 검수 (Inspector) 로직 ====================
+    # ==================== 탭 2: 검수 (Inspector) 로직 ====================
     def _init_inspector_tab(self):
-        # 상단 툴바
+        # 1. 상단 툴바 (파일/저장/ AI분석)
         toolbar = ttk.Frame(self.tab_insp, padding=5)
         toolbar.pack(fill=tk.X)
         
         ttk.Button(toolbar, text="📂 엑셀 열기", command=self._insp_load_excel).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="💾 저장", command=self._insp_save_excel).pack(side=tk.LEFT, padx=5)
-        ttk.Button(toolbar, text="✨ 누끼생성 (rembg)", command=self._make_selected_nukki).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="✨ 전체 AI 분석", command=self._run_full_analysis).pack(side=tk.LEFT, padx=5)
         
-        self.lbl_insp_status = ttk.Label(toolbar, text="파일 없음")
-        self.lbl_insp_status.pack(side=tk.LEFT, padx=20)
+        self.lbl_insp_file = ttk.Label(toolbar, text="(파일 없음)", foreground="gray")
+        self.lbl_insp_file.pack(side=tk.LEFT, padx=10)
         
-        # 메인 컨텐츠 영역 (좌: 리스트, 우: 상세)
-        paned = ttk.PanedWindow(self.tab_insp, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
+        self.lbl_insp_count = ttk.Label(toolbar, text="상품: 0개")
+        self.lbl_insp_count.pack(side=tk.RIGHT, padx=20)
+
+        # 2. 필터 영역
+        filter_frame = ttk.Frame(self.tab_insp, padding=5)
+        filter_frame.pack(fill=tk.X)
         
-        # 좌측: 상품 리스트
-        f_list = ttk.Frame(paned, width=400)
-        paned.add(f_list, weight=1)
+        ttk.Label(filter_frame, text="필터:").pack(side=tk.LEFT)
         
-        # 리스트뷰
-        cols = ("ID", "상품명", "상태")
-        self.tree = ttk.Treeview(f_list, columns=cols, show='headings', selectmode='browse')
-        for c in cols: self.tree.heading(c, text=c)
-        self.tree.column("ID", width=80); self.tree.column("상품명", width=200); self.tree.column("상태", width=50)
+        self.filter_safe_var = tk.BooleanVar(value=True)
+        self.filter_unsafe_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(filter_frame, text="안전", variable=self.filter_safe_var, command=self._render_inspector_data).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(filter_frame, text="위험", variable=self.filter_unsafe_var, command=self._render_inspector_data).pack(side=tk.LEFT, padx=5)
         
-        scrolly = ttk.Scrollbar(f_list, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrolly.set)
+        ttk.Separator(filter_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrolly.pack(side=tk.RIGHT, fill=tk.Y)
+        ttk.Label(filter_frame, text="그룹:").pack(side=tk.LEFT, padx=5)
+        self.insp_group_combo = ttk.Combobox(filter_frame, width=20, state="readonly")
+        self.insp_group_combo.pack(side=tk.LEFT, padx=5)
+        self.insp_group_combo.bind("<<ComboboxSelected>>", lambda e: self._render_inspector_data())
+
+        # 3. 메인 영역 (스크롤 Canvas)
+        main_frame = ttk.Frame(self.tab_insp)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.tree.bind("<<TreeviewSelect>>", self._on_select_product)
+        self.canvas = tk.Canvas(main_frame, bg="white")
+        scrollbar_y = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.canvas.yview)
+        scrollbar_x = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
         
-        # 우측: 상세 검수 (썸네일 + 옵션)
-        f_detail = ttk.Frame(paned)
-        paned.add(f_detail, weight=3)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
         
-        # 1. 썸네일 영역
-        f_thumb = ttk.LabelFrame(f_detail, text=" 썸네일 선택 (클릭하여 대표 이미지 지정) ", padding=5)
-        f_thumb.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
         
-        # 캔버스 + 스크롤바 (가로 스크롤)
-        self.cv_thumb = tk.Canvas(f_thumb, height=220, bg="#f0f0f0")
-        sb_thumb = ttk.Scrollbar(f_thumb, orient=tk.HORIZONTAL, command=self.cv_thumb.xview)
-        self.cv_thumb.configure(xscrollcommand=sb_thumb.set)
+        scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        sb_thumb.pack(side=tk.BOTTOM, fill=tk.X)
-        self.cv_thumb.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        # 마우스 휠 스크롤
+        self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
         
-        self.frame_thumbs_inner = tk.Frame(self.cv_thumb, bg="#f0f0f0")
-        self.cv_thumb.create_window((0,0), window=self.frame_thumbs_inner, anchor='nw')
-        
-        self.frame_thumbs_inner.bind("<Configure>", lambda e: self.cv_thumb.configure(scrollregion=self.cv_thumb.bbox("all")))
-        
-        # 2. 옵션 영역
-        f_opts = ttk.LabelFrame(f_detail, text=" 옵션 검수 및 표준화 ", padding=5)
-        f_opts.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        btn_std = ttk.Button(f_opts, text="🇨🇳→🇰🇷 옵션명 표준화 (사전기반)", command=self._standardize_current_options)
-        btn_std.pack(anchor='ne')
-        
-        # 옵션 리스트
-        self.txt_options = scrolledtext.ScrolledText(f_opts, height=10, font=("Consolas", 10))
-        self.txt_options.pack(fill=tk.BOTH, expand=True)
-        
-        # 데이터 관리 변수
-        self.insp_data = [] # List[Dict]
-        self.current_insp_idx = -1
-        self.thumb_images = {} # tk images cache
-        self.current_file = None
+        # 4. 하단 상태바
+        self.lbl_insp_status = ttk.Label(self.tab_insp, text="대기 중...", relief=tk.SUNKEN, anchor='w')
+        self.lbl_insp_status.pack(fill=tk.X, side=tk.BOTTOM)
+
+        # 데이터 저장소
+        self.inspector_data = [] # List[Dict]
+        self.current_excel_path = None
+        self.option_frames = {}
+        self.image_cache = {}
+        self.thumb_images = {} 
         
         self.trans_manager = TranslationManager()
         self.thumb_analyzer = ThumbnailAnalyzer()
 
+    # ==================== 탭 2: 검수 (Inspector) 이벤트 및 렌더링 ====================
     def _insp_load_excel(self):
-        filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+        """엑셀 파일 로드 (검수용)"""
+        if not PANDAS_AVAILABLE:
+             messagebox.showerror("오류", "pandas 모듈이 필요합니다.")
+             return
+
+        filepath = filedialog.askopenfilename(title="시뮬레이션 결과 파일 선택", filetypes=[("Excel files", "*.xlsx")])
         if not filepath: return
         
         try:
-            df = pd.read_excel(filepath)
-            # 필수 컬럼 확인 (핵심 컬럼만 체크)
-            required = ["불사자ID", "옵션명"]
-            if not all(col in df.columns for col in required):
-                messagebox.showerror("오류", "지원되지 않는 엑셀 형식입니다. (필수 컬럼 누락)")
-                return
+            self.lbl_insp_status.config(text=f"로딩 중: {os.path.basename(filepath)}...", foreground="blue")
+            self.root.update()
             
-            # NaN 처리 (GUI 오류 방지)
-            df = df.fillna("")
-            self.insp_data = df.to_dict('records')
-            self.current_file = filepath
+            # pandas 로드
+            try:
+                xls = pd.ExcelFile(filepath, engine='openpyxl')
+                if "상세정보" in xls.sheet_names:
+                    df = pd.read_excel(filepath, sheet_name="상세정보", engine='openpyxl')
+                else:
+                    df = pd.read_excel(filepath, engine='openpyxl')
+            except Exception as e:
+                df = pd.read_excel(filepath)
             
-            # 리스트뷰 갱신
-            for item in self.tree.get_children(): self.tree.delete(item)
-            for i, row in enumerate(self.insp_data):
-                # 안전여부나 썸네일매칭 상태도 표시하면 좋음
-                safety = row.get("안전여부", "O")
-                match = "O" if "O" in str(row.get("썸네일매칭", "")) else "X"
-                
-                status_disp = f"{safety}/{match}"
-                self.tree.insert("", "end", iid=i, values=(row["불사자ID"], row["상품명"], row.get("선택", "A")))
-                
-            self.lbl_insp_status.config(text=f"로드됨: {os.path.basename(filepath)} ({len(self.insp_data)}개)")
+            self._parse_excel_data_for_inspector(df)
+            self.current_excel_path = filepath
+            self.lbl_insp_file.config(text=os.path.basename(filepath), foreground="black")
+            
+            # 그룹 필터 업데이트
+            groups = sorted(set(item.get("group_name", "") for item in self.inspector_data if item.get("group_name")))
+            self.insp_group_combo['values'] = ["(전체)"] + groups
+            self.insp_group_combo.current(0)
+            
+            self._render_inspector_data()
+            self.lbl_insp_status.config(text=f"로드 완료: {len(self.inspector_data)}개 파싱됨", foreground="green")
             
         except Exception as e:
-            messagebox.showerror("오류", f"엑셀 로드 실패: {e}")
+            messagebox.showerror("오류", f"파일 로드 실패: {e}")
+            self.lbl_insp_status.config(text="로드 실패", foreground="red")
 
+    def _parse_excel_data_for_inspector(self, df):
+        """엑셀 데이터를 검수 UI용 구조로 파싱"""
+        self.inspector_data = []
+        for idx, row in df.iterrows():
+            try:
+                # 안전 문자열 변환
+                def safe_str(val): return str(val).strip() if pd.notna(val) else ""
+                
+                # 이미지 URL 추출
+                thumb_raw = safe_str(row.get("썸네일\n이미지", "") or row.get("메인썸네일URL", ""))
+                thumb_url = thumb_raw
+                if thumb_raw.startswith('=IMAGE("') and thumb_raw.endswith('")'):
+                    thumb_url = thumb_raw[8:-2]
+                elif thumb_raw.startswith('http'):
+                    thumb_url = thumb_raw
+                else:
+                    thumb_url = ""
+
+                # 안전 여부 판단
+                is_safe_val = safe_str(row.get("안전여부", "O")).upper()
+                is_safe = is_safe_val in ["O", "안전", "TRUE", "1", "OK"]
+                
+                item = {
+                    "row_idx": idx,
+                    "product_name": safe_str(row.get("상품명", ""))[:40],
+                    "product_id": safe_str(row.get("불사자ID", "") or row.get("상품ID", "")),
+                    "is_safe": is_safe,
+                    "unsafe_reason": safe_str(row.get("위험사유", ""))[:30],
+                    "group_name": safe_str(row.get("그룹", "") or row.get("그룹명", "")),
+                    "thumbnail_url": thumb_url,
+                    "total_options": int(row.get("전체옵션", 0)) if pd.notna(row.get("전체옵션")) else 0,
+                    "final_options": int(row.get("최종옵션", 0)) if pd.notna(row.get("최종옵션")) else 0,
+                    "bait_options": int(row.get("미끼옵션", 0)) if pd.notna(row.get("미끼옵션")) else 0,
+                    "main_option": safe_str(row.get("대표옵션", "")),
+                    "selected": safe_str(row.get("선택", "A")).upper() or "A",
+                    "option_raw": safe_str(row.get("옵션명", "") or row.get("최종옵션목록", "")),
+                    
+                    # [NEW] SOTA 결과 저장용
+                    "sota_score": 0,
+                    "sota_text": "",
+                    "nukki_status": "none" # none, done
+                }
+                
+                # 옵션 목록 파싱
+                options = []
+                if item["option_raw"]:
+                    lines = item["option_raw"].split('\n')
+                    for i, line in enumerate(lines):
+                        if not line.strip(): continue
+                        label = chr(ord('A') + i) if i < 26 else str(i+1)
+                        if '. ' in line:
+                            parts = line.split('. ', 1)
+                            label = parts[0].strip()
+                            name = parts[1].strip() if len(parts) > 1 else ""
+                        else:
+                            name = line.strip()
+                        options.append({"label": label, "name": name})
+                item["options"] = options
+                item["option_count_str"] = f"{item['final_options']}/{item['total_options']}"
+                
+                self.inspector_data.append(item)
+                
+            except Exception as e:
+                print(f"Row {idx} parsing error: {e}")
+
+    def _render_inspector_data(self):
+        """스크롤 프레임에 데이터 렌더링"""
+        # 기존 위젯 제거
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        self.option_frames = {}
+        
+        if not self.inspector_data:
+            ttk.Label(self.scrollable_frame, text="데이터가 없습니다.", font=("맑은 고딕", 14)).pack(pady=50)
+            self.lbl_insp_count.config(text="상품: 0개")
+            return
+
+        # 필터링
+        filtered = []
+        target_group = self.insp_group_combo.get()
+        show_safe = self.filter_safe_var.get()
+        show_unsafe = self.filter_unsafe_var.get()
+        
+        for item in self.inspector_data:
+            if item["is_safe"] and not show_safe: continue
+            if not item["is_safe"] and not show_unsafe: continue
+            if target_group and target_group != "(전체)" and item["group_name"] != target_group: continue
+            filtered.append(item)
+            
+        self.lbl_insp_count.config(text=f"상품: {len(filtered)} / {len(self.inspector_data)}개")
+        
+        if not filtered:
+            ttk.Label(self.scrollable_frame, text="표시할 상품이 없습니다 (필터 확인).", font=("맑은 고딕", 12)).pack(pady=50)
+            return
+
+        # 헤더 생성
+        self._insp_create_header()
+        
+        # 행 생성 (최대 100개까지만 렌더링 권장? 아니면 페이지네이션? 일단 스크롤)
+        # 성능 이슈 방지를 위해 처음 200개만 렌더링하고 '더보기' 버튼을 두는게 좋을 수도 있음.
+        # 하지만 v3.1은 다 뿌림. 사용자가 수천개라고 했으니... Canvas window는 많아지면 느려짐.
+        # 페이지네이션 없이 일단 300개 제한 혹은 전체 렌더링 시도.
+        # "수천개 검수" -> tkinter widget 수천개는 매우 느림. 
+        # 페이징 도입이 필수적이나, 일단 v3.1 로직(전부 렌더링) 따름.
+        for item in filtered:
+            self._insp_create_row(item)
+
+    def _insp_create_header(self):
+        h_frame = tk.Frame(self.scrollable_frame, bg="#4472C4")
+        h_frame.pack(fill=tk.X, pady=(0, 2))
+        
+        headers = [
+            ("이미지/누끼", 120), ("옵션 선택 (A,B,C...)", 450), 
+            ("상품정보", 300), ("상태", 60), ("통계", 80)
+        ]
+        
+        for text, w in headers:
+            tk.Label(h_frame, text=text, width=w//8, bg="#4472C4", fg="white", font=("맑은 고딕", 9, "bold"), pady=5).pack(side=tk.LEFT, padx=1)
+            
     def _on_select_product(self, event):
         sel = self.tree.selection()
         if not sel: return
@@ -838,50 +968,6 @@ class BulsajaSimulatorV2:
         f_item.pack(side=tk.LEFT, padx=5, pady=5)
         
         # 플레이스홀더
-        lbl_img = tk.Label(f_item, text="Loading...", width=20, height=10, bg="#ddd")
-        lbl_img.pack()
-        
-        # 메인 선택 버튼
-        btn_sel = tk.Button(f_item, text="대표 지정", command=lambda u=url: self._set_main_thumbnail(u), bg="#4caf50" if is_main else "#f0f0f0")
-        btn_sel.pack(fill=tk.X)
-        
-        # 이미지 로드 스레드
-        threading.Thread(target=self._load_image_async, args=(url, lbl_img, f_item), daemon=True).start()
-
-    def _load_image_async(self, url, label, frame):
-        try:
-            resp = requests.get(url, timeout=5)
-            pil_img = Image.open(BytesIO(resp.content))
-            pil_img.thumbnail((150, 150))
-            tk_img = ImageTk.PhotoImage(pil_img)
-            
-            # 누끼 분석 (선택 사항)
-            score_res = self.thumb_analyzer.analyzed_score(url)
-            score = score_res["score"]
-            bg_color = "white"
-            if score_res["is_nukki"]: bg_color = "#e3f2fd" # 푸른빛 배경 (누끼추천)
-            
-            def update_ui():
-                if not label.winfo_exists(): return
-                self.thumb_images[url] = tk_img # keep ref
-                label.config(image=tk_img, text="", bg=bg_color)
-                
-                # 누끼 점수 표시
-                if score >= 80:
-                    lbl_score = tk.Label(frame, text="추천(누끼)", bg="red", fg="white", font=("bold", 8))
-                    lbl_score.place(x=0, y=0)
-            
-            self.frame_thumbs_inner.after(0, update_ui)
-        except:
-            pass
-
-    def _set_main_thumbnail(self, url):
-        if self.current_insp_idx < 0: return
-        
-        # 데이터 업데이트
-        self.insp_data[self.current_insp_idx]["대표썸네일"] = url
-        
-        # UI 리프레시 (테두리 변경)
         self._on_select_product(None)
         
         # 트리뷰 업데이트 (변경됨 표시)
@@ -1001,6 +1087,111 @@ class BulsajaSimulatorV2:
             
         except Exception as e:
             messagebox.showerror("오류", f"작업 중 오류 발생: {e}")
+
+    def _run_full_analysis(self):
+        """전체 항목에 대해 AI 분석(OCR/누끼) 실행"""
+        if not self.inspector_data:
+            messagebox.showwarning("경고", "데이터가 없습니다.")
+            return
+            
+        if not messagebox.askyesno("확인", f"총 {len(self.inspector_data)}개 상품에 대해 AI 정밀 분석을 시작합니까?\n(시간이 다소 소요될 수 있습니다)"):
+            return
+
+        def _task():
+            total = len(self.inspector_data)
+            success = 0
+            
+            for i, item in enumerate(self.inspector_data):
+                url = item["thumbnail_url"]
+                if not url: continue
+                
+                try:
+                    # 이미지 다운로드
+                    res = requests.get(url, timeout=5)
+                    img_bytes = res.content
+                    
+                    # CV2 변환
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    
+                    if img is None: continue
+                    
+                    # 분석 실행
+                    # ThumbnailAnalyzer.analyzed_score 는 cv2 이미지를 받음
+                    result = self.thumb_analyzer.analyzed_score(img)
+                    
+                    # 결과 저장
+                    score = result["score"]
+                    rec = result["recommendation"]
+                    
+                    sota_msg = []
+                    if result["is_nukki"]: sota_msg.append("✨누끼됨")
+                    if result["has_text"]: sota_msg.append("📝텍스트")
+                    sota_msg.append(f"점수:{score}")
+                    
+                    item["sota_score"] = score
+                    item["sota_text"] = " ".join(sota_msg)
+                    item["nukki_status"] = "done" if result["is_nukki"] else "none"
+                    
+                    success += 1
+                    
+                    # UI 업데이트 (10개마다)
+                    if i % 10 == 0:
+                        self.lbl_insp_status.config(text=f"AI 분석 중... {i+1}/{total} (성공: {success})")
+                        
+                except Exception as e:
+                    print(f"Item {i} analyze failed: {e}")
+                    
+            self.lbl_insp_status.config(text=f"AI 분석 완료. (총 {success}개 처리)", foreground="blue")
+            
+            # UI 리프레시 (메인스레드에서)
+            self.root.after(0, self._render_inspector_data)
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _insp_save_excel(self):
+        """변경된 선택 옵션을 엑셀에 저장"""
+        if not self.current_excel_path:
+             messagebox.showwarning("경고", "열린 파일이 없습니다.")
+             return
+             
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(self.current_excel_path)
+            if "상세정보" in wb.sheetnames:
+                ws = wb["상세정보"]
+            else:
+                ws = wb.active
+                
+            # '선택' 컬럼 찾기
+            header_row = 1
+            sel_col = None
+            for col in range(1, ws.max_column+2):
+                h = ws.cell(row=header_row, column=col).value
+                if str(h).strip() == "선택":
+                    sel_col = col
+                    break
+            
+            if not sel_col:
+                messagebox.showerror("오류", "'선택' 컬럼을 엑셀에서 찾을 수 없습니다.")
+                return
+            
+            count = 0
+            for item in self.inspector_data:
+                # item["row_idx"]는 DataFrame index (0부터 시작)
+                # 엑셀 헤더가 1행이면 데이터는 2행부터. pd.read_excel이 0-index면 엑셀 행은 idx + 2
+                r = item["row_idx"] + 2
+                val = item["selected"]
+                
+                # 기존 값과 다르면 업데이트 (여기선 그냥 덮어쓰기)
+                ws.cell(row=r, column=sel_col, value=val)
+                count += 1
+                
+            wb.save(self.current_excel_path)
+            messagebox.showinfo("저장 완료", f"총 {len(self.inspector_data)}개 상품의 선택값을 저장했습니다.")
+            
+        except Exception as e:
+            messagebox.showerror("저장 실패", f"오류 발생: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
