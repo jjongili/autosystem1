@@ -8,9 +8,10 @@ delete_exceptions_sync.py
 메인 autosystem 스프레드시트의 "삭제금지상품" 탭으로 동기화한다.
 
 이번 버전 변경점:
-- 마지막 주문일자 기준은 오직 `삭제금지상품!B1`만 사용
-- B1 값이 없으면 전체 기간 대상으로 동기화
-- B1 값이 있으면, 해당 '월' 시트만 스캔(예: B1=2025-11-03 → 11월 시트만)
+- 마지막 주문일자 기준은 오직 `삭제금지상품!C1`만 사용
+- C1 값이 없으면 전체 기간 대상으로 동기화
+- C1 값이 있으면, 해당 '월' 시트만 스캔(예: C1=2025-11-03 → 11월 시트만)
+- B열: 매칭수 (삭제 시 매칭된 횟수 기록)
 - 월 시트(1~12월, jan~dec 등 영문 월명 포함)만 처리
 - 기존 '삭제금지상품_설정' 탭은 더 이상 사용하지 않음
 """
@@ -125,27 +126,30 @@ class SheetClient:
         return self.sh.worksheets()
 
 
-# -------------------- 삭제금지상품!B1: 마지막 주문일자 읽기 --------------------
+# -------------------- 삭제금지상품 시트 구조 --------------------
+# A열: 판매자상품코드
+# B열: 매칭수 (삭제 시 매칭된 횟수)
+# C1: 마지막 주문일자 (기준일)
 
 DELETE_SHEET_NAME = "삭제금지상품"
 
-def get_last_order_date_from_b1(main_client: SheetClient) -> Optional[datetime]:
+def get_last_order_date_from_c1(main_client: SheetClient) -> Optional[datetime]:
     """
-    '삭제금지상품' 시트의 B1 셀을 마지막 주문일자로 사용.
+    '삭제금지상품' 시트의 C1 셀을 마지막 주문일자로 사용.
     없으면 None 반환.
     """
     try:
         ws = main_client.sh.worksheet(DELETE_SHEET_NAME)
     except gspread.WorksheetNotFound:
-        # 시트가 없다면 만들어 두고(헤더만) B1 기준일은 없는 것으로 처리
-        ws = main_client.sh.add_worksheet(title=DELETE_SHEET_NAME, rows=5000, cols=2)
-        ws.update("A1", [["판매자상품코드"]], value_input_option="RAW")
+        # 시트가 없다면 만들어 두고(헤더만) C1 기준일은 없는 것으로 처리
+        ws = main_client.sh.add_worksheet(title=DELETE_SHEET_NAME, rows=5000, cols=3)
+        ws.update("A1:C1", [["판매자상품코드", "매칭수", ""]], value_input_option="RAW")
         return None
 
     try:
-        val = S(ws.acell("B1").value)
+        val = S(ws.acell("C1").value)
     except Exception as e:
-        log(f"[WARN] 삭제금지상품!B1 읽기 실패: {e}")
+        log(f"[WARN] 삭제금지상품!C1 읽기 실패: {e}")
         return None
 
     if not val:
@@ -270,8 +274,7 @@ def collect_codes_from_source(
 
     반환:
       (코드 집합, 이번 스캔 중 발견한 주문일자의 최댓값)
-    * 이 버전에서는 B1 자동 갱신을 수행하지 않는다.
-    * B1(기준일)이 존재하면 해당 '월' 시트만 스캔한다.
+    * C1(기준일)이 존재하면 해당 '월' 시트만 스캔한다.
     """
     all_codes: set = set()
     max_order_date: Optional[datetime] = last_date
@@ -289,7 +292,7 @@ def collect_codes_from_source(
         log("[WARN] 처리할 월 시트를 찾지 못함 (1~12월 명명 규칙 확인 필요)")
         return all_codes, max_order_date
 
-    # ★ B1 기준일이 있으면 해당 월 ~ 현재 월까지 스캔
+    # ★ C1 기준일이 있으면 해당 월 ~ 현재 월까지 스캔
     if last_date is not None:
         start_month = last_date.month
         current_month = datetime.now().month
@@ -386,16 +389,16 @@ def sync_delete_exceptions() -> None:
     main_client = SheetClient(main_key, service_json)
     source_client = SheetClient(source_key, service_json)
 
-    # 1) 기존 삭제금지상품 + B1(last_order_date) 읽기
+    # 1) 기존 삭제금지상품 + C1(last_order_date) 읽기
     ws_delete, existing_codes = get_existing_delete_codes(main_client)
-    last_date = get_last_order_date_from_b1(main_client)
+    last_date = get_last_order_date_from_c1(main_client)
 
     if last_date:
-        log(f"[INFO] 마지막 주문일자 기준(B1): {last_date.strftime('%Y-%m-%d')}")
+        log(f"[INFO] 마지막 주문일자 기준(C1): {last_date.strftime('%Y-%m-%d')}")
     else:
-        log("[INFO] 삭제금지상품!B1 값이 없어, 전체 기간 대상 동기화 수행")
+        log("[INFO] 삭제금지상품!C1 값이 없어, 전체 기간 대상 동기화 수행")
 
-    # 2) 매출 시트에서 신규 코드 수집 (월 시트만; B1이 있으면 해당 월만)
+    # 2) 매출 시트에서 신규 코드 수집 (월 시트만; C1이 있으면 해당 월만)
     src_codes, max_order_date = collect_codes_from_source(source_client, last_date)
     log(f"[INFO] 소스에서 가져온 전체 코드 수: {len(src_codes)}")
 
@@ -410,9 +413,10 @@ def sync_delete_exceptions() -> None:
     else:
         log("[WRITE] 추가할 신규 코드 없음")
 
-    # ※ 요청사항에 따라 B1은 자동 갱신하지 않습니다.
-    # if max_order_date:
-    #     ws_delete.update("B1", [[max_order_date.strftime("%Y-%m-%d")]], value_input_option="RAW")
+    # C1 자동 갱신 (마지막 주문일자)
+    if max_order_date:
+        ws_delete.update("C1", [[max_order_date.strftime("%Y-%m-%d")]], value_input_option="RAW")
+        log(f"[WRITE] 삭제금지상품!C1 갱신: {max_order_date.strftime('%Y-%m-%d')}")
 
     log("[DONE] delete_exceptions_sync 완료")
 

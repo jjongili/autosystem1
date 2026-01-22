@@ -2385,8 +2385,8 @@
                         <textarea id="conversationInput" placeholder="메시지 입력..." rows="2"
                             oninput="autoResizeTextarea(this)"
                             style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; resize:none; font-family:inherit; min-height:44px; max-height:120px;"></textarea>
-                        <button class="modal-btn primary" onclick="sendFromConversationModal()"
-                            style="padding:10px 20px;">전송</button>
+                        <button class="modal-btn primary" id="conversationSendBtn" onclick="sendFromConversationModal()"
+                            style="padding:10px 20px;">📤 전송</button>
                     </div>
                     <div style="display:flex; gap:8px; width:100%;">
                         <button class="modal-btn template-toggle" id="templateToggleBtn"
@@ -2467,7 +2467,7 @@
             <div class="card">
                 <div class="card-title">
                     📊 마켓별 현황표
-                    <button class="refresh-btn" onclick="loadMarketTable()">🔄 새로고침</button>
+                    <button class="refresh-btn" onclick="loadMarketTable(true)">🔄 새로고침</button>
                     <button class="refresh-btn" onclick="refresh11stCounts()" style="margin-left:10px;">📦 11번가
                         등록갯수</button>
                     <button class="refresh-btn" onclick="sendSelectedToAio()"
@@ -3120,6 +3120,33 @@
                             </div>
                         </div>
                     </div>
+                    <!-- 작업 대상 계정 선택 (듀얼 리스트) -->
+                    <div class="form-row">
+                        <div class="form-group" style="width: 100%;">
+                            <label>작업 대상 계정 선택</label>
+                            <div class="dual-list-container" style="display:flex; gap:10px; align-items:stretch;">
+                                <!-- 왼쪽: 선택 가능한 계정 -->
+                                <div style="flex:1; display:flex; flex-direction:column;">
+                                    <div style="font-size:12px; color:#666; margin-bottom:5px;">선택 가능한 계정</div>
+                                    <select id="schedAccountsAvailable" multiple style="flex:1; min-height:120px; border:1px solid #ddd; border-radius:6px; padding:5px;">
+                                    </select>
+                                </div>
+                                <!-- 중앙: 이동 버튼 -->
+                                <div style="display:flex; flex-direction:column; justify-content:center; gap:5px;">
+                                    <button type="button" class="btn secondary" onclick="schedMoveAccountRight()" style="padding:5px 10px;">➡️</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAllRight()" style="padding:5px 10px;">⏩</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAccountLeft()" style="padding:5px 10px;">⬅️</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAllLeft()" style="padding:5px 10px;">⏪</button>
+                                </div>
+                                <!-- 오른쪽: 선택된 계정 -->
+                                <div style="flex:1; display:flex; flex-direction:column;">
+                                    <div style="font-size:12px; color:#666; margin-bottom:5px;">선택된 계정 (<span id="schedSelectedCount">0</span>개)</div>
+                                    <select id="schedAccountsSelected" multiple style="flex:1; min-height:120px; border:1px solid #ddd; border-radius:6px; padding:5px;">
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>스케줄 타입</label>
@@ -3454,8 +3481,8 @@
 
                     <div class="filter-bar-bulsaja">
                         <div class="search-actions-bulsaja" style="display: flex; gap: 10px; align-items: center;">
-                            <button class="btn-refresh-bulsaja" id="refreshBulsaja" title="새로고침">
-                                <span class="icon">🔄</span> 데이터 수동취합
+                            <button class="btn-refresh-bulsaja" id="refreshBulsaja" title="시트에서 최신 데이터 가져오기">
+                                <span class="icon">🔄</span> 새로고침
                             </button>
                             <div class="search-box-bulsaja">
                                 <input type="text" placeholder="계정명 검색..." id="searchInputBulsaja">
@@ -4572,12 +4599,8 @@
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <h3 style="margin: 0; color: #667eea;">📊 스토어별 통합 성과 요약 (스토어별 유입수 현황)</h3>
                             <div style="display: flex; gap: 10px; align-items: center;">
-                                <button id="btnMktSyncTotal" onclick="syncMarketingTotalData()" class="primary-btn"
-                                    style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-                                    📥 데이터 수동 취합
-                                </button>
                                 <button onclick="loadMarketingIntegratedData(true)" class="refresh-btn"
-                                    style="padding: 8px 16px;">🔄 전체 새로고침</button>
+                                    style="padding: 8px 16px;">🔄 새로고침</button>
                             </div>
                         </div>
                         <div style="overflow-x: auto;">
@@ -4889,8 +4912,8 @@
             tableBody.innerHTML = '<tr><td colspan="15" class="loading">데이터 로딩 중...</td></tr>';
 
             try {
-                // 1. API 호출
-                const resp = await fetch(`/api/marketing/summary?refresh=${refresh}`);
+                // 1. API 호출 (캐시 기반 - 스토어유입수 시트)
+                const resp = await fetch(`/api/marketing/store-traffic?refresh=${refresh}`);
                 const res = await resp.json();
 
                 if (!res.success) {
@@ -4902,7 +4925,7 @@
                 const data = res.data || [];
 
                 if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="15" class="empty">데이터가 없습니다. [데이터 수동 취합]을 실행해보세요.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="15" class="empty">데이터가 없습니다. [새로고침]을 실행해보세요.</td></tr>';
                     return;
                 }
 

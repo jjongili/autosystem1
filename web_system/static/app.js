@@ -435,18 +435,26 @@ async function refreshMessages(force = false) {
             const displayMessages = messages.slice(0, DISPLAY_LIMIT);
             const hasMore = messages.length > DISPLAY_LIMIT;
 
-            let html = displayMessages.map(m => `
-                <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${m.sender.replace(/'/g, "\\'")}'); setReplyTarget('${phone}', '${m.sender.replace(/'/g, "\\'")}')">
-                    <div class="msg-sender">${m.sender}</div>
-                    <div class="msg-preview">${m.content}</div>
-                    <div class="msg-time">${m.timestamp || ''}</div>
+            let html = displayMessages.map(m => {
+                // HTML 이스케이프 처리
+                const safeContent = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safeSender = (m.sender || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const senderForJs = m.sender.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                return `
+                <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${senderForJs}'); setReplyTarget('${phone}', '${senderForJs}')">
+                    <div class="msg-sender">${safeSender}</div>
+                    <div class="msg-preview">${safeContent}</div>
+                    <div class="msg-time-row" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="msg-time">${m.timestamp || ''}</span>
+                        ${m.unread ? '<span style="background:#4caf50;color:white;font-size:10px;padding:2px 6px;border-radius:3px;">안읽음</span>' : ''}
+                    </div>
                     ${m.auth_code ? `<span class="message-code" style="background:#4caf50;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">${m.auth_code}</span>` : ''}
                 </div>
-            `).join('');
+            `}).join('');
 
             // 더보기 버튼 (20개 초과 시)
             if (hasMore) {
-                html += `<button class="load-more-panel-btn" onclick="loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
+                html += `<button class="load-more-panel-btn" onclick="event.stopPropagation(); loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
                     ⬇️ 더보기 (${messages.length - DISPLAY_LIMIT}개 남음)
                 </button>`;
             }
@@ -481,17 +489,25 @@ function loadMorePanelMessages(phone) {
     const displayMessages = messages.slice(0, displayCount);
     const hasMore = messages.length > displayCount;
 
-    let html = displayMessages.map(m => `
-        <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${m.sender.replace(/'/g, "\\'")}'); setReplyTarget('${phone}', '${m.sender.replace(/'/g, "\\'")}')">
-            <div class="msg-sender">${m.sender}</div>
-            <div class="msg-preview">${m.content}</div>
-            <div class="msg-time">${m.timestamp || ''}</div>
+    let html = displayMessages.map(m => {
+        // HTML 이스케이프 처리
+        const safeContent = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const safeSender = (m.sender || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const senderForJs = m.sender.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        return `
+        <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${senderForJs}'); setReplyTarget('${phone}', '${senderForJs}')">
+            <div class="msg-sender">${safeSender}</div>
+            <div class="msg-preview">${safeContent}</div>
+            <div class="msg-time-row" style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="msg-time">${m.timestamp || ''}</span>
+                ${m.unread ? '<span style="background:#4caf50;color:white;font-size:10px;padding:2px 6px;border-radius:3px;">안읽음</span>' : ''}
+            </div>
             ${m.auth_code ? `<span class="message-code" style="background:#4caf50;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">${m.auth_code}</span>` : ''}
         </div>
-    `).join('');
+    `}).join('');
 
     if (hasMore) {
-        html += `<button class="load-more-panel-btn" onclick="loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
+        html += `<button class="load-more-panel-btn" onclick="event.stopPropagation(); loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
             ⬇️ 더보기 (${messages.length - displayCount}개 남음)
         </button>`;
     }
@@ -668,8 +684,29 @@ function openSearchModalForPhone(phone) {
     window.currentSearchPhone = phone;
 }
 
-// 대화 캐시 저장소 (누적 - 지우지 않음)
+// 대화 캐시 저장소 (최대 20개 대화 유지)
 const conversationCache = {};
+const MAX_CONVERSATION_CACHE = 20;
+
+// 캐시 정리 (오래된 것부터 삭제)
+function cleanConversationCache() {
+    const keys = Object.keys(conversationCache);
+    if (keys.length <= MAX_CONVERSATION_CACHE) return;
+
+    // cachedAt 기준 정렬 (오래된 것 먼저)
+    keys.sort((a, b) => {
+        const aTime = conversationCache[a].cachedAt || 0;
+        const bTime = conversationCache[b].cachedAt || 0;
+        return aTime - bTime;
+    });
+
+    // 초과분 삭제
+    const toDelete = keys.length - MAX_CONVERSATION_CACHE;
+    for (let i = 0; i < toDelete; i++) {
+        delete conversationCache[keys[i]];
+        console.log(`[캐시] 삭제: ${keys[i]} (오래된 캐시 정리)`);
+    }
+}
 
 // 캐시 통계
 function getCacheStats() {
@@ -678,7 +715,7 @@ function getCacheStats() {
     keys.forEach(k => {
         totalMessages += conversationCache[k].messages?.length || 0;
     });
-    return { conversations: keys.length, messages: totalMessages };
+    return { conversations: keys.length, messages: totalMessages, maxConversations: MAX_CONVERSATION_CACHE };
 }
 
 // 최근 대화 미리 로드 (캐시 누적)
@@ -839,11 +876,27 @@ async function openConversation(profileId, sender) {
     // 템플릿 버튼 초기화 (최초 1회)
     initTemplateButton();
 
-    // 항상 서버에서 로드 (캐시 비활성화)
+    // 캐시 키
+    const cacheKey = `${profileId}_${sender}`;
+
+    // 캐시에 있으면 즉시 표시
+    if (conversationCache[cacheKey] && conversationCache[cacheKey].messages?.length > 0) {
+        console.log(`[대화] 캐시에서 로드: ${cacheKey}`);
+        document.getElementById('conversationLoading').style.display = 'none';
+        window._conversationLoading = false;
+
+        hasMoreMessages = conversationCache[cacheKey].hasMore !== false;
+        updateLoadMoreButton();
+
+        renderConversationMessages(conversationCache[cacheKey].messages, true);
+        return;
+    }
+
+    // 캐시 없으면 서버에서 로드
     document.getElementById('conversationLoading').style.display = 'block';
     document.getElementById('conversationMessages').innerHTML = '';
 
-    console.log(`[대화] 요청: profile=${profileId}, sender=${sender}`);
+    console.log(`[대화] 서버 요청: profile=${profileId}, sender=${sender}`);
 
     try {
         const r = await fetch('/api/sms/conversation', {
@@ -872,6 +925,16 @@ async function openConversation(profileId, sender) {
             return;
         }
 
+        // 캐시에 저장
+        conversationCache[cacheKey] = {
+            messages: d.messages,
+            hasMore: d.has_more,
+            cachedAt: Date.now()
+        };
+
+        // 캐시 정리 (최대 20개 유지)
+        cleanConversationCache();
+
         hasMoreMessages = d.has_more;
         updateLoadMoreButton();
 
@@ -899,6 +962,18 @@ async function refreshConversation() {
     delete conversationCache[cacheKey];
 
     // 로딩 플래그 해제 후 다시 로드
+    window._conversationLoading = false;
+    await openConversation(currentConversation.profile_id, currentConversation.sender);
+}
+
+// 현재 대화 새로고침 (메시지 전송 후 호출)
+async function refreshCurrentConversation() {
+    if (!currentConversation || !currentConversation.profile_id) return;
+
+    // 캐시 삭제하여 새로운 메시지 가져오기
+    const cacheKey = `${currentConversation.profile_id}_${currentConversation.sender}`;
+    delete conversationCache[cacheKey];
+
     window._conversationLoading = false;
     await openConversation(currentConversation.profile_id, currentConversation.sender);
 }
@@ -1279,6 +1354,7 @@ async function sendFromConversationModal() {
     const profileId = currentConversation.profile_id;
     const input = document.getElementById('conversationInput');
     const message = input?.value?.trim();
+    const sendBtn = document.getElementById('conversationSendBtn');
 
     if (!profileId || !sender) {
         showToast('발신자 정보가 없습니다', 'error');
@@ -1288,6 +1364,13 @@ async function sendFromConversationModal() {
     if (!message) {
         showToast('메시지를 입력하세요', 'error');
         return;
+    }
+
+    // 버튼 로딩 상태
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '⏳ 전송중...';
+        sendBtn.style.opacity = '0.6';
     }
 
     // 번호 정리
@@ -1319,6 +1402,13 @@ async function sendFromConversationModal() {
         }
     } catch (e) {
         showToast(`전송 오류: ${e.message}`, 'error');
+    } finally {
+        // 버튼 복구
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '📤 전송';
+            sendBtn.style.opacity = '1';
+        }
     }
 }
 
@@ -2486,7 +2576,7 @@ function makeOpDaysEditable(el, storeName, currentDays) {
 // 운영일 업데이트 함수 (실제 반영) - 팝업 없이 조용히 업데이트 (이름 변경하여 캐시 회피)
 async function updateBulsajaOperationDaysSilent(storeName, days) {
     try {
-        const response = await fetch('/api/bulsaja/settings', {
+        const response = await fetch('/api/bulsaja/dashboard_settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2772,7 +2862,7 @@ async function updateBulsajaOperationDays(storeName, currentDays) {
     }
 
     try {
-        const res = await fetch('/api/bulsaja/settings', {
+        const res = await fetch('/api/bulsaja/dashboard_settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -5368,7 +5458,7 @@ async function loadDailyStatus(forceReload = false) {
     const savedFilters = saveCurrentFilters();
 
     try {
-        const r = await fetch('/api/monitor/daily-status');
+        const r = await fetch(`/api/monitor/daily-status${forceReload ? '?refresh=true' : ''}`);
         console.log('[디버깅] API 응답 상태:', r.status, r.statusText);
 
         const d = await r.json();
@@ -7126,11 +7216,11 @@ async function requireClient(callback) {
 let marketTableData = {};
 let currentMarketTab = 'all';
 
-async function loadMarketTable() {
+async function loadMarketTable(refresh = false) {
     try {
-        // 매출 데이터가 없으면 로드
-        if (!salesData) {
-            const salesR = await fetch('/api/sales/from-sheet');
+        // 매출 데이터 로드 (refresh 시 강제 새로고침)
+        if (!salesData || refresh) {
+            const salesR = await fetch(`/api/sales/from-sheet${refresh ? '?force=true' : ''}`);
             salesData = await salesR.json();
         }
 
@@ -7155,7 +7245,7 @@ async function loadMarketTable() {
         // 판매중 수량 + 마지막등록일 가져오기 (등록갯수/11번가 시트)
         let productCounts = {};  // {count, last_reg}
         try {
-            const countsR = await fetch('/api/monitor/product-counts');
+            const countsR = await fetch(`/api/monitor/product-counts${refresh ? '?refresh=true' : ''}`);
             const countsD = await countsR.json();
             if (countsD.success && countsD.data) {
                 productCounts = countsD.data;
@@ -8088,6 +8178,7 @@ function renderScheduleTable() {
                 <td class="action-btns">
                     <button class="action-btn run" onclick="runScheduleNow('${s.id}')" title="즉시 실행">▶️</button>
                     <button class="action-btn" onclick="viewScheduleLog('${s.id}', '${s.name}')" title="로그 보기" style="background:#3498db;">📄</button>
+                    <button class="action-btn edit" onclick="openEditScheduleModal('${s.id}')" title="수정" style="background:#f39c12;">✏️</button>
                     <button class="action-btn toggle" onclick="toggleSchedule('${s.id}')" title="${s.enabled ? '비활성화' : '활성화'}">${s.enabled ? '⏸️' : '▶️'}</button>
                     <button class="action-btn delete" onclick="deleteSchedule('${s.id}')" title="삭제">🗑️</button>
                 </td>
@@ -8123,6 +8214,11 @@ function updateSchedTasks() {
             <option value="판매중지">판매중지</option>
             <option value="판매재개">판매재개</option>
         `;
+    }
+
+    // 계정 목록도 로드
+    if (typeof loadSchedAccounts === 'function') {
+        loadSchedAccounts();
     }
 }
 
@@ -8200,6 +8296,12 @@ async function createSchedule() {
         intervalMinutes = parseInt(document.getElementById('schedIntervalMin').value) || 60;
     }
 
+    // 선택된 계정 가져오기
+    const selectedStores = typeof getSelectedSchedAccounts === 'function' ? getSelectedSchedAccounts() : [];
+
+    // 작업 옵션 가져오기
+    const taskOptions = typeof scheduleTaskOptions !== 'undefined' ? { ...scheduleTaskOptions } : {};
+
     try {
         const res = await fetchAPI('/api/schedules', {
             method: 'POST',
@@ -8207,18 +8309,22 @@ async function createSchedule() {
                 name: name,
                 platform: document.getElementById('schedPlatform').value,
                 task: document.getElementById('schedTask').value,
-                stores: [],  // All-in-One에서 선택한 스토어 (나중에 연동)
+                stores: selectedStores,
                 schedule_type: schedType,
                 cron: cron,
                 interval_minutes: intervalMinutes,
-                options: {},
+                options: taskOptions,
                 enabled: true
             })
         });
 
         if (res.success) {
-            alert('스케줄이 추가되었습니다');
+            alert(`스케줄이 추가되었습니다 (대상: ${selectedStores.length}개 계정)`);
             document.getElementById('schedName').value = '';
+            // 선택 계정 초기화
+            if (typeof schedMoveAllLeft === 'function') {
+                schedMoveAllLeft();
+            }
             loadSchedules();
         }
     } catch (e) {
@@ -9000,6 +9106,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', () => {
             if (tab.dataset.tab === 'scheduler') {
                 loadSchedules();
+                // 계정 목록도 로드
+                if (typeof loadSchedAccounts === 'function') {
+                    loadSchedAccounts();
+                }
             }
             if (tab.dataset.tab === 'sales') {
                 if (!salesData) loadSalesData();
