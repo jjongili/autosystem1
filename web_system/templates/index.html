@@ -1089,41 +1089,41 @@
             border-color: var(--accent-orange);
         }
 
-        /* 플랫폼별 색상 */
-        .dashboard-bulsaja .filter-pill-bulsaja[data-platform="naver"].active {
-            background: #03C75A !important;
+        /* 플랫폼별 색상 - 로고 색상과 통일 */
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="naver"].active {
+            background-color: #03C75A !important;
             border-color: #03C75A !important;
             color: #fff !important;
         }
-        .dashboard-bulsaja .filter-pill-bulsaja[data-platform="coupang"].active {
-            background: #E31837 !important;
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="coupang"].active {
+            background-color: #00B4D8 !important;
+            border-color: #00B4D8 !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="11st"].active {
+            background-color: #E31837 !important;
             border-color: #E31837 !important;
             color: #fff !important;
         }
-        .dashboard-bulsaja .filter-pill-bulsaja[data-platform="11st"].active {
-            background: #FF5722 !important;
-            border-color: #FF5722 !important;
-            color: #fff !important;
-        }
-        .dashboard-bulsaja .filter-pill-bulsaja[data-platform="gmarket"].active {
-            background: #1E3A5F !important;
-            border-color: #1E3A5F !important;
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="gmarket"].active {
+            background-color: #1A73E8 !important;
+            border-color: #1A73E8 !important;
             color: #fff !important;
         }
 
         /* 용도별 색상 */
-        .dashboard-bulsaja .filter-pill-bulsaja[data-usage="대량"].active {
-            background: #6366F1 !important;
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="대량"].active {
+            background-color: #6366F1 !important;
             border-color: #6366F1 !important;
             color: #fff !important;
         }
-        .dashboard-bulsaja .filter-pill-bulsaja[data-usage="반대량"].active {
-            background: #8B5CF6 !important;
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="반대량"].active {
+            background-color: #8B5CF6 !important;
             border-color: #8B5CF6 !important;
             color: #fff !important;
         }
-        .dashboard-bulsaja .filter-pill-bulsaja[data-usage="반자동"].active {
-            background: #EC4899 !important;
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="반자동"].active {
+            background-color: #EC4899 !important;
             border-color: #EC4899 !important;
             color: #fff !important;
         }
@@ -1134,6 +1134,7 @@
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px 8px 0 0;
+            padding-right: 15px; /* 스크롤바 너비 보정 */
         }
 
         .dashboard-bulsaja .table-header-cell-bulsaja {
@@ -1156,8 +1157,7 @@
             border-top: none;
             border-radius: 0 0 8px 8px;
             max-height: calc(100vh - 350px);
-            overflow-y: overlay;
-            scrollbar-gutter: stable;
+            overflow-y: auto;
         }
 
         .dashboard-bulsaja .table-row-bulsaja {
@@ -1672,52 +1672,56 @@
         .dashboard-bulsaja .revenue-bar-bulsaja {
             width: 80%;
             max-width: 100px;
-            height: 5px;
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 3px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
             overflow: hidden;
             margin: 0 auto;
         }
 
         body.dark-mode .dashboard-bulsaja .revenue-bar-bulsaja {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.15);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja {
             height: 100%;
-            border-radius: 3px;
+            border-radius: 4px;
             transition: width 0.5s ease;
+            position: relative;
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.achieved {
-            background: var(--accent-green);
+            background: linear-gradient(90deg, #00d4aa 0%, #00f5c4 50%, #4fffb0 100%);
+            box-shadow: 0 0 10px rgba(0, 212, 170, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.warning {
-            background: var(--accent-orange);
+            background: linear-gradient(90deg, #ff6b9d 0%, #ff8fab 50%, #ffb3c6 100%);
+            box-shadow: 0 0 10px rgba(255, 107, 157, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.danger {
-            background: var(--accent-red);
+            background: linear-gradient(90deg, #ff4757 0%, #ff6b7a 50%, #ff8a94 100%);
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .dashboard-bulsaja .revenue-percent-bulsaja {
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
-            text-align: center;
-            margin-top: 3px;
+            text-align: right;
+            margin-top: 4px;
         }
 
         .dashboard-bulsaja .revenue-percent-bulsaja.achieved {
-            color: var(--accent-green);
+            color: #00d4aa;
         }
 
         .dashboard-bulsaja .revenue-percent-bulsaja.warning {
-            color: var(--accent-orange);
+            color: #ff6b9d;
         }
 
         .dashboard-bulsaja .revenue-percent-bulsaja.danger {
-            color: var(--accent-red);
+            color: #ff4757;
         }
 
         /* Mobile View (Card) */
