@@ -2021,6 +2021,145 @@
         }
 
         /* 모달 스타일은 style.css에서 관리됨 */
+
+        /* ===========================================
+           index.html 전용 모바일 반응형
+           =========================================== */
+
+        /* 태블릿 (768px 이하) */
+        @media (max-width: 768px) {
+            /* SMS 대화창 반응형 */
+            .sms-template-panel {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100% !important;
+                height: 60vh;
+                border-left: none;
+                border-top: 1px solid #e0e0e0;
+                border-radius: 16px 16px 0 0;
+                z-index: 1000;
+            }
+
+            .conversation-messages {
+                padding: 10px;
+            }
+
+            .msg-item {
+                max-width: 85%;
+            }
+
+            /* SMS 상단 영역 */
+            .sms-top-row {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+
+            .sms-browser-section,
+            .sms-code-section {
+                width: 100% !important;
+            }
+
+            .auth-codes {
+                flex-direction: column !important;
+                gap: 8px !important;
+            }
+
+            /* 마케팅분석 테이블 -> 가로 스크롤 */
+            .marketing-account-table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* 필터 섹션 */
+            .filter-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .filter-section .filter-group {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+
+            /* 헤더 인증코드 */
+            .header-auth-code {
+                font-size: 11px !important;
+                padding: 3px 8px !important;
+            }
+        }
+
+        /* 모바일 폰 (480px 이하) */
+        @media (max-width: 480px) {
+            /* SMS 3등분 패널 각각 높이 조정 */
+            .sms-panel {
+                min-height: 180px;
+            }
+
+            .panel-header {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            .panel-messages .msg-item {
+                padding: 8px;
+                margin-bottom: 6px;
+            }
+
+            .panel-send {
+                padding: 8px;
+            }
+
+            .panel-send-msg {
+                padding: 6px;
+                font-size: 12px;
+            }
+
+            .panel-send-btn {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            /* 인증코드 영역 */
+            .auth-code-item {
+                padding: 4px 8px !important;
+            }
+
+            .auth-code-item .code {
+                font-size: 12px !important;
+            }
+
+            /* 내부 탭 버튼 */
+            .inner-tab-btn {
+                padding: 8px 12px;
+                font-size: 11px;
+            }
+
+            /* 관제센터 카드 */
+            .monitor-card {
+                width: 90px !important;
+                min-width: 90px !important;
+                max-width: 90px !important;
+            }
+
+            .monitor-card .shop-name {
+                max-width: 70px !important;
+                font-size: 9px !important;
+            }
+
+            /* 작업달력 */
+            .calendar-grid {
+                font-size: 10px;
+            }
+
+            .work-item {
+                font-size: 7px;
+                padding: 1px 2px;
+            }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>

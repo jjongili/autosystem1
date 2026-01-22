@@ -5708,3 +5708,253 @@ body[data-platform="스마트스토어"] .aio-task-item.smartstore-only {
     width: 100%;
     clear: both;
 }
+
+/* ===========================================
+   모바일 반응형 CSS (2025-01-22)
+   =========================================== */
+
+/* 태블릿 (768px 이하) */
+@media (max-width: 768px) {
+    /* 상단 헤더 */
+    .header {
+        padding: 10px 15px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .header h1 {
+        font-size: 16px;
+        width: 100%;
+        text-align: center;
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .user-info {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    .logout-btn {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    .client-download-btn {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+
+    /* 탭 메뉴 가로 스크롤 */
+    .tabs {
+        padding: 0 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 0;
+    }
+
+    .tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab {
+        white-space: nowrap;
+        padding: 10px 12px;
+        font-size: 12px;
+        flex-shrink: 0;
+    }
+
+    /* 컨텐츠 영역 */
+    .content {
+        padding: 10px;
+    }
+
+    .card {
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    /* 버튼 터치 영역 확대 */
+    button, .btn {
+        min-height: 40px;
+    }
+
+    /* 입력 필드 터치 최적화 */
+    input, select, textarea {
+        font-size: 16px; /* iOS 자동 줌 방지 */
+    }
+
+    /* 모달 */
+    .modal-content {
+        margin: 10px;
+        max-width: calc(100% - 20px);
+        max-height: calc(100vh - 20px);
+    }
+
+    /* 관제센터 카드 */
+    .monitor-grid {
+        justify-content: center;
+    }
+
+    .monitor-card,
+    #monitorGrid .monitor-card {
+        width: 110px !important;
+        min-width: 110px !important;
+        max-width: 110px !important;
+    }
+
+    .monitor-card .shop-name {
+        max-width: 90px !important;
+        font-size: 11px !important;
+    }
+
+    /* 테이블 가로 스크롤 */
+    .table-container,
+    .data-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* SMS 3등분 패널 -> 세로 배치 */
+    .sms-three-panels {
+        grid-template-columns: 1fr !important;
+        height: auto !important;
+    }
+
+    .sms-panel {
+        min-height: 250px;
+    }
+}
+
+/* 모바일 폰 (480px 이하) */
+@media (max-width: 480px) {
+    /* 헤더 더 컴팩트하게 */
+    .header {
+        padding: 8px 10px;
+    }
+
+    .header h1 {
+        font-size: 14px;
+    }
+
+    .header-right {
+        gap: 5px;
+    }
+
+    .user-info {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    .role-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+
+    .logout-btn,
+    .client-download-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    /* 탭 더 작게 */
+    .tab {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+
+    /* 카드 */
+    .card {
+        padding: 10px;
+        border-radius: 8px;
+    }
+
+    .card-title {
+        font-size: 14px;
+    }
+
+    /* 폰트 크기 조정 */
+    h1 { font-size: 18px; }
+    h2 { font-size: 16px; }
+    h3 { font-size: 14px; }
+
+    /* 관제센터 카드 더 작게 */
+    .monitor-card,
+    #monitorGrid .monitor-card {
+        width: 100px !important;
+        min-width: 100px !important;
+        max-width: 100px !important;
+        padding: 8px !important;
+    }
+
+    .monitor-card .shop-name {
+        max-width: 80px !important;
+        font-size: 10px !important;
+    }
+
+    /* SMS 패널 */
+    .sms-panel {
+        min-height: 200px;
+    }
+
+    .panel-messages .msg-item {
+        padding: 8px;
+    }
+
+    .panel-messages .msg-sender {
+        font-size: 12px;
+    }
+
+    .panel-messages .msg-preview {
+        font-size: 11px;
+    }
+
+    /* 버튼들 */
+    .phone-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .action-btn {
+        padding: 4px 6px;
+        font-size: 10px;
+    }
+
+    /* 매출현황 */
+    .sales-summary {
+        gap: 8px;
+    }
+
+    .summary-card {
+        min-width: calc(50% - 8px);
+        padding: 10px;
+    }
+
+    .summary-value {
+        font-size: 16px;
+    }
+
+    .summary-label {
+        font-size: 10px;
+    }
+
+    /* 차트 */
+    .sales-charts {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .chart-container {
+        padding: 10px;
+    }
+
+    .chart-container h4 {
+        font-size: 12px;
+    }
+}
