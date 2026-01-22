@@ -5266,23 +5266,19 @@ async def get_work_calendar(request: Request, year: int, month: int):
                         "method": method
                     })
         
-        # 그룹화된 데이터를 최종 형식으로 변환
+        # 개별 로그를 그대로 반환 (시간 정보 유지)
         month_data = []
         for date_key, work_types in grouped_data.items():
             for work_type, logs in work_types.items():
-                # 계정 목록 및 총 개수 계산
-                accounts = [log["account"] for log in logs]
-                total_count = sum(log["count"] for log in logs)
-                
-                month_data.append({
-                    "datetime": f"{date_key} 00:00:00",  # 날짜만 사용
-                    "work_type": work_type,
-                    "account": f"{len(accounts)}개 스토어",  # "2개 스토어" 형식
-                    "count": total_count,
-                    "detail": f"{', '.join(accounts[:3])}{'...' if len(accounts) > 3 else ''}",  # 처음 3개만 표시
-                    "method": logs[0]["method"] if logs else "",
-                    "store_count": len(accounts)  # 프론트엔드에서 사용할 수 있도록
-                })
+                for log in logs:
+                    month_data.append({
+                        "datetime": log["datetime"],  # 실제 시간 유지
+                        "work_type": work_type,
+                        "account": log["account"],
+                        "count": log["count"],
+                        "detail": log["detail"],
+                        "method": log["method"]
+                    })
         
         print(f"[월별 조회] {year}년 {month}월: {len(month_data)}개 그룹")
         return {"logs": month_data}
@@ -10579,7 +10575,7 @@ async def sync_marketing_manual(request: Request):
 
 @app.get("/api/marketing/summary")
 async def get_marketing_summary(request: Request, refresh: bool = False):
-    """마케팅 데이터 요약 (대시보드용)"""
+    """마케팅 데이터 요약 (대시보드용) - 스토어별 일별 방문자 데이터"""
     require_permission(request, "view")
 
     try:
@@ -10593,18 +10589,71 @@ async def get_marketing_summary(request: Request, refresh: bool = False):
             return {
                 "success": True,
                 "stores": store_names,
+                "dates": [],
+                "data": [],
                 "message": "전체데이터 시트 없음. 개별 스토어 조회 필요"
             }
 
         headers = all_values[0]
+
+        # 헤더에서 날짜 컬럼 추출 (YYYY-MM-DD 형식이거나 숫자 형식)
+        import re
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$|^\d{1,2}/\d{1,2}$')
+        date_columns = []
+        store_col_idx = -1
+        usage_col_idx = -1
+
+        for i, h in enumerate(headers):
+            h_strip = h.strip()
+            if h_strip in ['스토어명', '스토어', 'store']:
+                store_col_idx = i
+            elif h_strip in ['용도', 'usage']:
+                usage_col_idx = i
+            elif date_pattern.match(h_strip) or h_strip.replace('-', '').replace('/', '').isdigit():
+                date_columns.append((i, h_strip))
+
+        # 날짜 컬럼이 없으면 헤더 중 날짜처럼 보이는 것 찾기
+        if not date_columns:
+            for i, h in enumerate(headers):
+                if i > 1 and h.strip():  # 처음 2개 제외하고
+                    date_columns.append((i, h.strip()))
+
+        dates = [d[1] for d in date_columns]
         data = []
 
         for row in all_values[1:]:
             if not any(row): continue
-            row_dict = {header: row[i] if i < len(row) else "" for i, header in enumerate(headers)}
-            data.append(row_dict)
 
-        return {"success": True, "data": data, "total": len(data)}
+            # 스토어명과 용도 추출
+            store_name = row[store_col_idx].strip() if store_col_idx >= 0 and store_col_idx < len(row) else ""
+            usage = row[usage_col_idx].strip() if usage_col_idx >= 0 and usage_col_idx < len(row) else "-"
+
+            if not store_name:
+                # 첫 번째 컬럼이 스토어명일 수 있음
+                store_name = row[0].strip() if len(row) > 0 else ""
+
+            if not store_name:
+                continue
+
+            # 날짜별 값 추출
+            values = {}
+            for col_idx, date_str in date_columns:
+                if col_idx < len(row):
+                    val_str = row[col_idx].strip().replace(',', '')
+                    try:
+                        values[date_str] = int(val_str) if val_str else 0
+                    except:
+                        values[date_str] = 0
+                else:
+                    values[date_str] = 0
+
+            data.append({
+                "store": store_name,
+                "usage": usage,
+                "values": values
+            })
+
+        return {"success": True, "dates": dates, "data": data, "total": len(data)}
 
     except Exception as e:
         print(f"마케팅 요약 조회 오류: {e}")

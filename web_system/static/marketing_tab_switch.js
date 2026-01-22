@@ -12,10 +12,16 @@ function switchMarketingInnerTab(tabName) {
 
     // 선택된 탭 활성화
     if (tabName === 'visitors') {
-        event.target.classList.add('active');
+        document.querySelector('.inner-tab-btn[onclick*="visitors"]').classList.add('active');
         document.getElementById('mkt-inner-visitors').classList.add('active');
     } else if (tabName === 'products') {
-        event.target.classList.add('active');
+        document.querySelector('.inner-tab-btn[onclick*="products"]').classList.add('active');
         document.getElementById('mkt-inner-products').classList.add('active');
     }
+}
+
+// 스케줄러 작업 상세 설정 모달
+function openTaskSettingsModal() {
+    const task = document.getElementById('schedTask').value;
+    showToast(`${task} 상세 설정 기능은 준비 중입니다.`, 'info');
 }

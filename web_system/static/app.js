@@ -1492,6 +1492,9 @@ async function loadAccounts() {
     } catch (e) { console.error(e); }
 }
 
+// 계정관리 복수 선택 지원
+let selectedAccountPlatforms = new Set(['전체']);
+
 function renderPlatformCounts() {
     const countDiv = document.getElementById('platformCounts');
     if (!countDiv) return;
@@ -1510,12 +1513,12 @@ function renderPlatformCounts() {
             count = platformCounts[p] || 0;
         }
         const color = platformColors[p] || '#667eea';
-        const isActive = currentPlatform === p ? 'active' : '';
+        const isActive = selectedAccountPlatforms.has(p) ? 'active' : '';
 
-        html += `<button class="platform-filter-btn ${isActive}" 
-                    data-platform="${p}" 
+        html += `<button class="platform-filter-btn ${isActive}"
+                    data-platform="${p}"
                     style="--btn-color: ${color}"
-                    onclick="filterPlatform('${p}')">
+                    onclick="filterPlatform('${p}', event)">
                 ${p} <span class="pf-count">${count}</span>
             </button>`;
     });
@@ -1523,8 +1526,31 @@ function renderPlatformCounts() {
     countDiv.innerHTML = html;
 }
 
-function filterPlatform(p) {
-    currentPlatform = p;
+function filterPlatform(p, event) {
+    const isCtrlKey = event && (event.ctrlKey || event.metaKey);
+
+    if (p === '전체') {
+        selectedAccountPlatforms.clear();
+        selectedAccountPlatforms.add('전체');
+    } else if (isCtrlKey) {
+        // Ctrl+클릭: 복수 선택
+        selectedAccountPlatforms.delete('전체');
+        if (selectedAccountPlatforms.has(p)) {
+            selectedAccountPlatforms.delete(p);
+            if (selectedAccountPlatforms.size === 0) {
+                selectedAccountPlatforms.add('전체');
+            }
+        } else {
+            selectedAccountPlatforms.add(p);
+        }
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedAccountPlatforms.clear();
+        selectedAccountPlatforms.add(p);
+    }
+
+    // 호환성 유지
+    currentPlatform = selectedAccountPlatforms.has('전체') ? '전체' : [...selectedAccountPlatforms][0];
     renderPlatformCounts();
     renderAccounts();
 }
@@ -1540,13 +1566,17 @@ function getApiSummary(a) {
 function renderAccounts() {
     const s = document.getElementById('searchInput').value.toLowerCase();
     const f = accounts.filter(a => {
-        // ESM통합 선택 시 지마켓, 옥션도 함께 표시
-        if (currentPlatform !== '전체') {
-            if (currentPlatform === 'ESM통합') {
-                if (!['ESM통합', '지마켓', '옥션'].includes(a.platform)) return false;
-            } else {
-                if (a.platform !== currentPlatform) return false;
+        // 복수 선택 지원
+        if (!selectedAccountPlatforms.has('전체')) {
+            let matched = false;
+            for (const p of selectedAccountPlatforms) {
+                if (p === 'ESM통합') {
+                    if (['ESM통합', '지마켓', '옥션'].includes(a.platform)) matched = true;
+                } else {
+                    if (a.platform === p) matched = true;
+                }
             }
+            if (!matched) return false;
         }
         if (s && !`${a.스토어명} ${a.login_id} ${a.business_number}`.toLowerCase().includes(s)) return false;
         return true;
@@ -5483,41 +5513,41 @@ function buildMarketFilterBar() {
         const color = marketColors[market] || '#667eea';
         const isActive = selectedMarketFilters.has(market) ? 'active' : '';
         return `
-            <button class="market-filter-btn ${isActive}" 
-                    data-market="${market}" 
+            <button class="market-filter-btn ${isActive}"
+                    data-market="${market}"
                     style="--btn-color: ${color}"
-                    onclick="filterByMarket('${market}')">
+                    onclick="filterByMarket('${market}', event)">
                 ${market} <span class="market-count" id="count-bar-${market}">0</span>
             </button>
         `;
     }).join('');
 }
 
-// 마켓별 필터링 (복수 선택)
+// 마켓별 필터링 (Ctrl+클릭으로 복수 선택)
 let selectedMarketFilters = new Set(['전체']);
 
-function filterByMarket(market) {
+function filterByMarket(market, event) {
+    const isCtrlKey = event && (event.ctrlKey || event.metaKey);
+
     if (market === '전체') {
         // '전체' 클릭 시 - 모든 선택 해제하고 전체만 선택
         selectedMarketFilters.clear();
         selectedMarketFilters.add('전체');
-    } else {
-        // 개별 마켓 클릭 시
-        if (selectedMarketFilters.has('전체')) {
-            // 전체가 선택된 상태에서 개별 클릭 → 전체 해제, 해당 마켓만 선택
-            selectedMarketFilters.clear();
-            selectedMarketFilters.add(market);
-        } else if (selectedMarketFilters.has(market)) {
-            // 이미 선택된 마켓 클릭 → 선택 해제
+    } else if (isCtrlKey) {
+        // Ctrl+클릭: 복수 선택 모드
+        selectedMarketFilters.delete('전체');
+        if (selectedMarketFilters.has(market)) {
             selectedMarketFilters.delete(market);
-            // 아무것도 선택 안 되면 전체 선택
             if (selectedMarketFilters.size === 0) {
                 selectedMarketFilters.add('전체');
             }
         } else {
-            // 선택 안 된 마켓 클릭 → 추가 선택
             selectedMarketFilters.add(market);
         }
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedMarketFilters.clear();
+        selectedMarketFilters.add(market);
     }
 
     // 버튼 활성화 상태 업데이트
@@ -7215,6 +7245,7 @@ let marketTabsDragging = false;     // 드래그 선택용
 const marketTabOrder = ['all', '11번가', '스마트스토어', '옥션', '지마켓', '쿠팡'];
 
 function toggleMarketTab(platform, event = null) {
+    const isCtrl = event && (event.ctrlKey || event.metaKey);
     const isShift = event && event.shiftKey;
     const clickedIndex = marketTabOrder.indexOf(platform);
 
@@ -7234,23 +7265,22 @@ function toggleMarketTab(platform, event = null) {
                 selectedMarketPlatforms.add(marketTabOrder[i]);
             }
         }
-    } else {
-        // 개별 마켓 클릭 시
-        if (selectedMarketPlatforms.has('all')) {
-            // 전체가 선택된 상태에서 개별 클릭 → 전체 해제, 해당 마켓만 선택
-            selectedMarketPlatforms.clear();
-            selectedMarketPlatforms.add(platform);
-        } else if (selectedMarketPlatforms.has(platform)) {
-            // 이미 선택된 마켓 클릭 → 선택 해제
+    } else if (isCtrl) {
+        // Ctrl+클릭: 복수 선택 모드
+        selectedMarketPlatforms.delete('all');
+        if (selectedMarketPlatforms.has(platform)) {
             selectedMarketPlatforms.delete(platform);
-            // 아무것도 선택 안 되면 전체 선택
             if (selectedMarketPlatforms.size === 0) {
                 selectedMarketPlatforms.add('all');
             }
         } else {
-            // 선택 안 된 마켓 클릭 → 추가 선택
             selectedMarketPlatforms.add(platform);
         }
+        lastClickedMarketIndex = clickedIndex;
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedMarketPlatforms.clear();
+        selectedMarketPlatforms.add(platform);
         lastClickedMarketIndex = clickedIndex;
     }
 
@@ -8048,9 +8078,9 @@ function renderScheduleTable() {
         return `
             <tr>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                <td>${s.name}</td>
+                <td><a href="#" onclick="showScheduleDetail('${s.id}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${s.name}</a></td>
                 <td>${s.platform}</td>
-                <td>${s.task}</td>
+                <td><a href="#" onclick="showScheduleDetail('${s.id}'); return false;" style="color: #667eea; text-decoration: underline; cursor: pointer;">${s.task}</a></td>
                 <td>${cronText}</td>
                 <td>${s.next_run || '-'}</td>
                 <td>${s.last_run || '-'}</td>
@@ -8094,6 +8124,58 @@ function updateSchedTasks() {
             <option value="판매재개">판매재개</option>
         `;
     }
+}
+
+// 스케줄 상세 정보 모달
+function showScheduleDetail(scheduleId) {
+    const schedule = scheduleList.find(s => s.id === scheduleId);
+    if (!schedule) {
+        showToast('스케줄 정보를 찾을 수 없습니다.', 'error');
+        return;
+    }
+
+    const cronText = schedule.schedule_type === 'cron' ? schedule.cron : `${schedule.interval_minutes}분 간격`;
+    const stores = schedule.stores || [];
+    const options = schedule.options || {};
+
+    let detailHtml = `
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #333;">📋 기본 정보</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; color: #666; width: 120px;">스케줄 이름</td><td style="padding: 8px; font-weight: 600;">${schedule.name}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">플랫폼</td><td style="padding: 8px;">${schedule.platform}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">작업</td><td style="padding: 8px;">${schedule.task}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">실행 주기</td><td style="padding: 8px;">${cronText}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">상태</td><td style="padding: 8px;"><span style="color: ${schedule.enabled ? '#4caf50' : '#999'};">${schedule.enabled ? '✅ 활성' : '⏸️ 비활성'}</span></td></tr>
+                <tr><td style="padding: 8px; color: #666;">실행 횟수</td><td style="padding: 8px;">${schedule.run_count || 0}회</td></tr>
+            </table>
+        </div>
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #1976d2;">🎯 작업 대상</h4>
+            ${stores.length > 0 ? `
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${stores.map(store => `<span style="background: white; padding: 5px 12px; border-radius: 15px; font-size: 13px;">${store}</span>`).join('')}
+                </div>
+            ` : '<p style="color: #666; margin: 0;">전체 스토어 (지정되지 않음)</p>'}
+        </div>
+        <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #e65100;">⚙️ 작업 옵션</h4>
+            ${Object.keys(options).length > 0 ? `
+                <table style="width: 100%; border-collapse: collapse;">
+                    ${Object.entries(options).map(([k, v]) => `<tr><td style="padding: 6px; color: #666;">${k}</td><td style="padding: 6px;">${v}</td></tr>`).join('')}
+                </table>
+            ` : '<p style="color: #666; margin: 0;">추가 옵션 없음</p>'}
+        </div>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+            <h4 style="margin: 0 0 15px 0; color: #333;">📅 실행 기록</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; color: #666;">마지막 실행</td><td style="padding: 8px;">${schedule.last_run || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">다음 실행</td><td style="padding: 8px;">${schedule.next_run || '-'}</td></tr>
+            </table>
+        </div>
+    `;
+
+    showModal(`📅 스케줄 상세: ${schedule.name}`, detailHtml);
 }
 
 async function createSchedule() {
