@@ -140,6 +140,7 @@ SHEET_COLUMNS = [
     "아이디",
     "패스워드",
     "스토어명",
+    "쇼핑몰 별칭",
     "사업자번호",
     "스마트스토어 API 연동용 판매자ID",
     "스마트스토어 애플리케이션 ID",
@@ -1415,10 +1416,23 @@ class SMSBrowserManager:
     
     async def launch_browser(self, profile_id: str):
         """브라우저 실행 (async - sms_gui.py 방식)"""
+        # 기존 브라우저가 있으면 먼저 닫기
+        if profile_id in self.browsers:
+            try:
+                old_context = self.browsers[profile_id]
+                if old_context:
+                    await old_context.close()
+                    print(f"[BROWSER] [{profile_id}] 기존 브라우저 종료됨")
+            except Exception as e:
+                print(f"[WARN] [{profile_id}] 기존 브라우저 종료 실패: {e}")
+            self.browsers[profile_id] = None
+            self.pages[profile_id] = None
+            self.ready[profile_id] = False
+
         if self.playwright is None:
             from playwright.async_api import async_playwright
             self.playwright = await async_playwright().start()
-        
+
         # 기존 인증된 프로필 사용 (pw_sessions 바로 아래)
         actual_dir_name = PROFILE_DIR_MAPPING.get(profile_id, profile_id)
         profile_dir = APP_DIR / "pw_sessions" / actual_dir_name
@@ -1635,17 +1649,34 @@ class SMSBrowserManager:
                                 if (ariaLabel.toLowerCase().includes("unread") || ariaLabel.includes("읽지 않음")) return true;
                                 // 4. 내부에 unread indicator 요소가 있는지 체크
                                 if (el.querySelector(".unread-indicator, .unread-count, [data-unread]")) return true;
-                                // 5. 볼드체 이름 (안읽음 메시지는 보통 볼드체)
-                                const nameEl = el.querySelector(".name");
+                                // 5. 파란색 점 (unread dot) 체크 - 구글 메시지 최신 UI
+                                const dot = el.querySelector('[class*="unread"], [class*="dot"], .indicator');
+                                if (dot) {
+                                    const style = window.getComputedStyle(dot);
+                                    // 파란색 계열 배경색 체크
+                                    if (style.backgroundColor.includes("rgb(26, 115, 232)") ||
+                                        style.backgroundColor.includes("rgb(66, 133, 244)") ||
+                                        style.backgroundColor.includes("#1a73e8") ||
+                                        style.backgroundColor.includes("#4285f4")) return true;
+                                }
+                                // 6. 볼드체 이름 (안읽음 메시지는 보통 볼드체)
+                                const nameEl = el.querySelector(".name, .contact-name, [class*='name']");
                                 if (nameEl) {
                                     const style = window.getComputedStyle(nameEl);
                                     if (parseInt(style.fontWeight) >= 600 || style.fontWeight === "bold") return true;
                                 }
+                                // 7. 전체 클래스명에서 unread 관련 체크
+                                const allClasses = el.className || "";
+                                if (allClasses.toLowerCase().includes("unread")) return true;
                                 return false;
                             }''')
 
                             sender = await item.locator('.name').first.inner_text() if await item.locator('.name').count() else ""
                             content = await item.locator('.snippet, .text-content').first.inner_text() if await item.locator('.snippet, .text-content').count() else ""
+
+                            # 안읽음 상태 로그 (디버그용)
+                            if is_unread:
+                                print(f"  [SMS] 안읽음 감지: {sender[:10]}...")
                             
                             # 타임스탬프 추출 및 정밀화
                             timestamp = ""
@@ -1723,6 +1754,8 @@ class SMSBrowserManager:
                         updated_any = True
 
                     # 안읽음 상태였던 메시지들 다시 안읽음으로 표시 (우클릭 메뉴 사용)
+                    if unread_items_to_restore:
+                        print(f"[{profile_id}] 안읽음 복원 대상: {len(unread_items_to_restore)}개")
                     for unread_item in unread_items_to_restore:
                         try:
                             await self._mark_as_unread(page, unread_item)
@@ -1802,41 +1835,97 @@ class SMSBrowserManager:
         return time.time()
 
     async def _mark_as_unread(self, page, item):
-        """대화 항목을 읽지 않음으로 표시 (구글 메시지 우클릭 메뉴 사용)"""
+        """대화 항목을 읽지 않음으로 표시 (호버 → 3점 메뉴 클릭 → 읽지않음 선택)"""
         try:
-            # 1. 해당 항목 우클릭
-            await item.click(button="right")
+            # 1. 대화 항목에 마우스 호버 (3점 메뉴 버튼이 나타남)
+            await item.hover()
             await page.wait_for_timeout(300)
 
-            # 2. 컨텍스트 메뉴에서 "읽지 않음으로 표시" 버튼 찾기 (여러 선택자 시도)
-            selectors = [
-                'button.mat-menu-item:has-text("읽지 않음")',
-                'button.mat-menu-item:has-text("Mark as unread")',
+            # 2. 3점 메뉴 버튼(⋮) 찾아서 좌클릭
+            # 구글 메시지에서 대화 항목 내 more 버튼 선택자
+            more_btn_selectors = [
+                'button[aria-label="더보기"]',
+                'button[aria-label="More options"]',
+                'button.more-vert-button',
+                'button[mattooltip="더보기"]',
+                'button[mattooltip="More options"]',
+                '[data-e2e="conversation-menu-button"]',
+                'mws-conversation-list-item button[mat-icon-button]',
+                'button:has(mat-icon:has-text("more_vert"))',
+                'mat-icon:has-text("more_vert")',
+            ]
+
+            more_clicked = False
+            for selector in more_btn_selectors:
+                try:
+                    # item 내부에서 찾기
+                    btn = item.locator(selector).first
+                    if await btn.is_visible(timeout=300):
+                        await btn.click()
+                        more_clicked = True
+                        print(f"  [SMS] 3점 메뉴 클릭 (selector: {selector})")
+                        break
+                except:
+                    continue
+
+            if not more_clicked:
+                # item 내부 버튼 중 mat-icon-button 찾기
+                try:
+                    btn = item.locator('button[mat-icon-button]').first
+                    if await btn.is_visible(timeout=300):
+                        await btn.click()
+                        more_clicked = True
+                        print(f"  [SMS] 3점 메뉴 클릭 (mat-icon-button)")
+                except:
+                    pass
+
+            if not more_clicked:
+                print(f"  [SMS] 3점 메뉴 버튼을 찾지 못함")
+                return
+
+            await page.wait_for_timeout(500)
+
+            # 3. 메뉴에서 "읽지 않음으로 표시" 버튼 찾기
+            unread_selectors = [
+                'button.mat-mdc-menu-item:has-text("읽지 않음")',
+                'button[mat-menu-item]:has-text("읽지 않음")',
+                '.mat-mdc-menu-item:has-text("읽지 않음")',
+                'button.mat-mdc-menu-item:has-text("Mark as unread")',
+                'button[mat-menu-item]:has-text("Mark as unread")',
                 '[role="menuitem"]:has-text("읽지 않음")',
                 '[role="menuitem"]:has-text("Mark as unread")',
-                '.mat-menu-content button:has-text("읽지 않음")',
-                '.mat-menu-content button:has-text("Mark as unread")'
+                'button:has-text("읽지 않음으로 표시")',
             ]
 
             clicked = False
-            for selector in selectors:
-                unread_btn = page.locator(selector)
-                if await unread_btn.count() > 0:
-                    await unread_btn.first.click()
-                    await page.wait_for_timeout(100)
-                    print(f"  [SMS] 안읽음으로 표시 완료")
-                    clicked = True
-                    break
+            for selector in unread_selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if await btn.is_visible(timeout=500):
+                        await btn.click()
+                        await page.wait_for_timeout(200)
+                        print(f"  [SMS] 안읽음으로 표시 완료")
+                        clicked = True
+                        break
+                except:
+                    continue
 
             if not clicked:
-                # 메뉴가 열렸지만 옵션이 없으면 ESC로 닫기
+                # 디버그: 메뉴 항목들 출력
+                try:
+                    menu_items = await page.locator('button.mat-mdc-menu-item, button[mat-menu-item], [role="menuitem"]').all_text_contents()
+                    print(f"  [SMS] 메뉴 항목들: {menu_items}")
+                except:
+                    pass
                 await page.keyboard.press("Escape")
+                print(f"  [SMS] 안읽음 메뉴 찾지 못함")
+
         except Exception as e:
-            # 실패 시 ESC로 메뉴 닫기 시도
             try:
                 await page.keyboard.press("Escape")
             except:
                 pass
+            print(f"  [SMS] 안읽음 표시 오류: {e}")
             raise e
 
     def _extract_auth_code(self, text: str) -> Optional[str]:
@@ -3372,11 +3461,21 @@ async def delete_account(request: Request, platform: str, account_id: str):
 
 # ========== 관제센터 API ==========
 
+# 관제센터 캐시
+daily_status_cache = {"data": None, "updated_at": None}
+
 @app.get("/api/monitor/daily-status")
-async def get_daily_status(request: Request):
-    """마켓별 상태 조회 - 새로운 전용 데이터 시트(1r-ROJ...) 참조"""
+async def get_daily_status(request: Request, refresh: bool = False):
+    """마켓별 상태 조회 - 캐시 기반 (refresh=true로 새로고침)"""
     get_current_user(request)
-    
+
+    # 캐시 확인 (5분 이내면 캐시 사용)
+    if not refresh and daily_status_cache["data"] is not None and daily_status_cache["updated_at"]:
+        cache_age = (datetime.now() - daily_status_cache["updated_at"]).total_seconds()
+        if cache_age < 300:  # 5분
+            print(f"[관제센터] 캐시 사용 (age: {cache_age:.0f}초)")
+            return daily_status_cache["data"]
+
     try:
         # 1. 외부 전용 시트에서 등록갯수/11번가 데이터 가져오기 (전용 인증 파일 사용)
         ss_counts = {}
@@ -3568,14 +3667,21 @@ async def get_daily_status(request: Request):
                     elif status == "주의": item["status"] = "caution"
         except Exception as e:
             print(f"[관제센터] 마켓상태현황 조회 오류: {e}")
-        
-        return {
+
+        response = {
             "success": True,
             "data": result_data,
             "markets": sorted(list(markets_set)),
             "usages": sorted(list(usages_set))
         }
-        
+
+        # 캐시 저장
+        daily_status_cache["data"] = response
+        daily_status_cache["updated_at"] = datetime.now()
+        print(f"[관제센터] 캐시 갱신 완료")
+
+        return response
+
     except Exception as e:
         print(f"[관제센터] 조회 오류: {e}")
         import traceback
@@ -3986,11 +4092,21 @@ async def get_monitor_accounts(request: Request):
         print(f"[관제센터] 오류: {e}")
         return {"accounts": []}
 
+# 마켓현황용 캐시
+product_counts_cache = {"data": None, "updated_at": None}
+
 # 마켓현황용 판매중 수량 API
 @app.get("/api/monitor/product-counts")
-async def get_product_counts(request: Request):
-    """등록갯수/11번가/ESM판매중 시트에서 판매중 수량 + 마지막등록일 조회"""
+async def get_product_counts(request: Request, refresh: bool = False):
+    """등록갯수/11번가/ESM판매중 시트에서 판매중 수량 + 마지막등록일 조회 (캐시 기반)"""
     get_current_user(request)
+
+    # 캐시 확인 (5분 이내면 캐시 사용)
+    if not refresh and product_counts_cache["updated_at"]:
+        cache_age = (datetime.now() - product_counts_cache["updated_at"]).total_seconds()
+        if cache_age < 300:  # 5분
+            print(f"[product-counts] 캐시 사용 (age: {cache_age:.0f}초)")
+            return {"success": True, "data": product_counts_cache["data"], "cached": True}
 
     try:
         result = {}  # "스토어명_플랫폼": {"count": 수량, "last_reg": "YYYY-MM-DD"}
@@ -4126,6 +4242,11 @@ async def get_product_counts(request: Request):
         print(f"[product-counts] 총 {len(result)}개 중 last_reg 있음: {len(with_last_reg)}개")
         if with_last_reg[:5]:
             print(f"[product-counts] last_reg 샘플: {[(k, result[k]) for k in with_last_reg[:5]]}")
+
+        # 캐시 저장
+        product_counts_cache["data"] = result
+        product_counts_cache["updated_at"] = datetime.now()
+        print(f"[product-counts] 캐시 갱신 완료")
 
         return {
             "success": True,
@@ -5265,23 +5386,19 @@ async def get_work_calendar(request: Request, year: int, month: int):
                         "method": method
                     })
         
-        # 그룹화된 데이터를 최종 형식으로 변환
+        # 개별 로그를 그대로 반환 (시간 정보 유지)
         month_data = []
         for date_key, work_types in grouped_data.items():
             for work_type, logs in work_types.items():
-                # 계정 목록 및 총 개수 계산
-                accounts = [log["account"] for log in logs]
-                total_count = sum(log["count"] for log in logs)
-                
-                month_data.append({
-                    "datetime": f"{date_key} 00:00:00",  # 날짜만 사용
-                    "work_type": work_type,
-                    "account": f"{len(accounts)}개 스토어",  # "2개 스토어" 형식
-                    "count": total_count,
-                    "detail": f"{', '.join(accounts[:3])}{'...' if len(accounts) > 3 else ''}",  # 처음 3개만 표시
-                    "method": logs[0]["method"] if logs else "",
-                    "store_count": len(accounts)  # 프론트엔드에서 사용할 수 있도록
-                })
+                for log in logs:
+                    month_data.append({
+                        "datetime": log["datetime"],  # 실제 시간 유지
+                        "work_type": work_type,
+                        "account": log["account"],
+                        "count": log["count"],
+                        "detail": log["detail"],
+                        "method": log["method"]
+                    })
         
         print(f"[월별 조회] {year}년 {month}월: {len(month_data)}개 그룹")
         return {"logs": month_data}
@@ -7696,10 +7813,6 @@ async def get_sales_from_sheet_v2(request: Request, force: bool = False):
                 # 2주 이내 주문
                 if order_date >= days_14_ago:
                     market_sales[store_key]["orders_2w"] = market_sales[store_key].get("orders_2w", 0) + 1
-                
-                # 7일 이내 주문
-                if order_date >= days_7_ago:
-                    market_sales[store_key]["orders_7d"] = market_sales[store_key].get("orders_7d", 0) + 1
                 
                 # 7일 이내 주문
                 if order_date >= days_7_ago:
@@ -10146,6 +10259,63 @@ async def create_marketing_sheets(request: Request):
         return {"success": False, "error": str(e)}
 
 
+@app.get("/api/marketing/accounts-status")
+async def get_marketing_accounts_status(request: Request):
+    """마케팅 계정별 수집 상태 조회 (최근 수집일, 미수집/수집 상태)
+    - 전체데이터를 읽지 않고 개별 스토어 시트의 헤더(첫 행)만 확인하여 빠르게 처리
+    """
+    require_permission(request, "view")
+
+    import re
+    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')  # YYYY-MM-DD 형식
+
+    try:
+        # 마케팅 스프레드시트의 모든 워크시트 이름 조회
+        store_names = gsheet.get_worksheet_names_with_cache(sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=False)
+        store_names = [name for name in store_names if name not in ["템플릿", "설정", "전체데이터", "쇼핑몰정보", "스토어유입수"]]
+
+        # 각 스토어의 수집 상태 확인 (개별 시트 헤더만 읽기 - 빠름)
+        status_data = {}
+        for store_name in store_names:
+            last_date = None
+            try:
+                # 캐시된 데이터 사용 (이미 로드된 경우 빠름)
+                all_values = gsheet.get_values_with_cache(store_name, sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=False)
+
+                # 헤더에서 날짜 형식 컬럼 찾기 (가장 최근 날짜)
+                if all_values and len(all_values) > 0:
+                    headers = all_values[0]
+                    found_dates = []
+                    for h in headers:
+                        h_str = str(h).strip()
+                        if date_pattern.match(h_str):
+                            found_dates.append(h_str)
+                        # MM/DD 형식도 확인
+                        elif re.match(r'^\d{1,2}/\d{1,2}$', h_str):
+                            try:
+                                from datetime import datetime
+                                parsed = datetime.strptime(f"2025/{h_str}", "%Y/%m/%d")
+                                found_dates.append(parsed.strftime("%Y-%m-%d"))
+                            except:
+                                pass
+
+                    # 가장 최근 날짜 선택
+                    if found_dates:
+                        last_date = max(found_dates)
+            except Exception as e:
+                pass
+
+            status_data[store_name] = {
+                "collected": last_date is not None,
+                "last_date": last_date
+            }
+
+        return {"success": True, "status": status_data}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/api/marketing/data")
 async def get_marketing_data(request: Request, store: str = None, refresh: bool = False):
     """마케팅 수집 데이터 조회
@@ -10244,27 +10414,18 @@ async def get_marketing_data(request: Request, store: str = None, refresh: bool 
 
 
 @app.get("/api/marketing/store-traffic")
-async def get_marketing_store_traffic(request: Request):
-    """스토어유입수 시트 데이터 조회 (날짜별 추이) - 전일대비용"""
+async def get_marketing_store_traffic(request: Request, refresh: bool = False):
+    """스토어유입수 시트 데이터 조회 (날짜별 추이) - 캐시 기반"""
     require_permission(request, "view")
     try:
-        from google.oauth2.service_account import Credentials
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
-        gc = gspread.authorize(creds)
-        sheet = gc.open_by_key(MARKETING_SPREADSHEET_KEY)
-        
-        target_ws = None
-        try:
-            target_ws = sheet.worksheet("스토어유입수")
-        except:
-            try:
-                target_ws = sheet.worksheet("쇼핑몰정보")
-            except:
-                return {"success": False, "error": "'스토어유입수' 또는 '쇼핑몰정보' 시트를 찾을 수 없습니다."}
-        
-        rows = target_ws.get_all_values()
-        if len(rows) < 2:
+        # gsheet 캐시 기능 활용
+        rows = gsheet.get_values_with_cache("스토어유입수", sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+
+        if not rows:
+            # 구 이름 시도
+            rows = gsheet.get_values_with_cache("쇼핑몰정보", sheet_key=MARKETING_SPREADSHEET_KEY, force_refresh=refresh)
+
+        if not rows or len(rows) < 2:
             return {"success": True, "data": [], "dates": []}
             
         header = rows[0]
@@ -10539,7 +10700,7 @@ async def sync_marketing_manual(request: Request):
 
 @app.get("/api/marketing/summary")
 async def get_marketing_summary(request: Request, refresh: bool = False):
-    """마케팅 데이터 요약 (대시보드용)"""
+    """마케팅 데이터 요약 (대시보드용) - 스토어별 일별 방문자 데이터"""
     require_permission(request, "view")
 
     try:
@@ -10553,18 +10714,71 @@ async def get_marketing_summary(request: Request, refresh: bool = False):
             return {
                 "success": True,
                 "stores": store_names,
+                "dates": [],
+                "data": [],
                 "message": "전체데이터 시트 없음. 개별 스토어 조회 필요"
             }
 
         headers = all_values[0]
+
+        # 헤더에서 날짜 컬럼 추출 (YYYY-MM-DD 형식이거나 숫자 형식)
+        import re
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$|^\d{1,2}/\d{1,2}$')
+        date_columns = []
+        store_col_idx = -1
+        usage_col_idx = -1
+
+        for i, h in enumerate(headers):
+            h_strip = h.strip()
+            if h_strip in ['스토어명', '스토어', 'store']:
+                store_col_idx = i
+            elif h_strip in ['용도', 'usage']:
+                usage_col_idx = i
+            elif date_pattern.match(h_strip) or h_strip.replace('-', '').replace('/', '').isdigit():
+                date_columns.append((i, h_strip))
+
+        # 날짜 컬럼이 없으면 헤더 중 날짜처럼 보이는 것 찾기
+        if not date_columns:
+            for i, h in enumerate(headers):
+                if i > 1 and h.strip():  # 처음 2개 제외하고
+                    date_columns.append((i, h.strip()))
+
+        dates = [d[1] for d in date_columns]
         data = []
 
         for row in all_values[1:]:
             if not any(row): continue
-            row_dict = {header: row[i] if i < len(row) else "" for i, header in enumerate(headers)}
-            data.append(row_dict)
 
-        return {"success": True, "data": data, "total": len(data)}
+            # 스토어명과 용도 추출
+            store_name = row[store_col_idx].strip() if store_col_idx >= 0 and store_col_idx < len(row) else ""
+            usage = row[usage_col_idx].strip() if usage_col_idx >= 0 and usage_col_idx < len(row) else "-"
+
+            if not store_name:
+                # 첫 번째 컬럼이 스토어명일 수 있음
+                store_name = row[0].strip() if len(row) > 0 else ""
+
+            if not store_name:
+                continue
+
+            # 날짜별 값 추출
+            values = {}
+            for col_idx, date_str in date_columns:
+                if col_idx < len(row):
+                    val_str = row[col_idx].strip().replace(',', '')
+                    try:
+                        values[date_str] = int(val_str) if val_str else 0
+                    except:
+                        values[date_str] = 0
+                else:
+                    values[date_str] = 0
+
+            data.append({
+                "store": store_name,
+                "usage": usage,
+                "values": values
+            })
+
+        return {"success": True, "dates": dates, "data": data, "total": len(data)}
 
     except Exception as e:
         print(f"마케팅 요약 조회 오류: {e}")
@@ -10734,8 +10948,8 @@ async def get_download_info():
 
 
 # ========== 불사자 대시보드 API ==========
-@app.post("/api/bulsaja/settings")
-async def update_bulsaja_settings(request: Request):
+@app.post("/api/bulsaja/dashboard_settings")
+async def update_bulsaja_dashboard_settings(request: Request):
     """불사자 대시보드 개별 설정 저장 (운영일 등)"""
     get_current_user(request)
     try:
@@ -10746,7 +10960,7 @@ async def update_bulsaja_settings(request: Request):
         if not store_name:
             return {"success": False, "message": "스토어명이 없습니다."}
             
-        settings_path = os.path.join(APP_DIR, "bulsaja_settings.json")
+        settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bulsaja_settings.json")
         settings = {}
         if os.path.exists(settings_path):
             with open(settings_path, "r", encoding="utf-8") as f:
@@ -10760,7 +10974,8 @@ async def update_bulsaja_settings(request: Request):
             
         with open(settings_path, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=4, ensure_ascii=False)
-            
+
+        print(f"[대시보드 설정] 저장 완료: {store_name} -> operationDays={operation_days}, 경로={settings_path}")
         return {"success": True, "message": "설정이 저장되었습니다."}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -10807,10 +11022,48 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
         marketing_res = await get_marketing_data(request, refresh=refresh)
         marketing_map = marketing_res.get("data", {}) if marketing_res.get("success") else {}
 
+        # 스토어유입수 시트에서 유입흐름 데이터 가져오기
+        inflow_trend_map = {}  # {스토어명: 유입흐름(화살표)}
+        try:
+            marketing_sheet = gsheet.gc.open_by_key(MARKETING_SPREADSHEET_KEY)
+            inflow_ws = marketing_sheet.worksheet("스토어유입수")
+            inflow_data = inflow_ws.get_all_values()
+            if inflow_data and len(inflow_data) > 1:
+                headers = inflow_data[0]
+                # 유입흐름 컬럼 인덱스 찾기
+                flow_col_idx = None
+                for i, h in enumerate(headers):
+                    if h.strip() == "유입흐름":
+                        flow_col_idx = i
+                        break
+                # 스토어명 컬럼 (B열 = index 1)
+                if flow_col_idx:
+                    for row in inflow_data[1:]:
+                        if len(row) > max(1, flow_col_idx):
+                            store_name = row[1].strip() if len(row) > 1 else ""
+                            flow_trend = row[flow_col_idx].strip() if len(row) > flow_col_idx else ""
+                            if store_name and flow_trend:
+                                inflow_trend_map[store_name] = flow_trend
+        except Exception as e:
+            print(f"[불사자] 스토어유입수 조회 실패: {e}")
+
+        # 설정 파일을 루프 밖에서 한 번만 로드
+        all_settings = {}
+        s_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bulsaja_settings.json")
+        if os.path.exists(s_p):
+            try:
+                with open(s_p, "r", encoding="utf-8") as sf:
+                    all_settings = json.load(sf)
+                print(f"[불사자] 설정 파일 로드 완료: {len(all_settings)} 항목")
+            except Exception as e:
+                print(f"[불사자] 설정 파일 로드 실패: {e}")
+
+        sales_key_alias = all_settings.get("sales_key_alias", {})
+
         for acc in accounts:
             store_name = (acc.get("스토어명") or "").strip()
             raw_platform = (acc.get("platform") or "").strip().lower()
-            
+
             # 필수 필드 초기화
             acc["name"] = store_name or acc.get("login_id") or "Unknown"
             acc["revenue"] = 0
@@ -10849,23 +11102,16 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
                 pk = raw_platform
                 platform_display = raw_platform
 
-            # Alias 및 수동 설정값 로드
-            an = store_name
-            manual_op_days = None  # 수동 설정된 운영일수
-            s_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bulsaja_settings.json")
-            if os.path.exists(s_p):
-                try:
-                    with open(s_p, "r", encoding="utf-8") as sf:
-                        all_settings = json.load(sf)
-                        # sales_key_alias 처리
-                        al = all_settings.get("sales_key_alias", {})
-                        if store_name in al:
-                            an = al[store_name]
-                        # 스토어별 수동 설정값 (operationDays)
-                        store_settings = all_settings.get(store_name, {})
-                        if "operationDays" in store_settings:
-                            manual_op_days = int(store_settings["operationDays"])
-                except: pass
+            # Alias 로드 (미리 로드한 설정에서)
+            an = sales_key_alias.get(store_name, store_name)
+
+            # 수동 설정값 로드
+            manual_op_days = None
+            store_settings = all_settings.get(store_name, {})
+            if store_settings:
+                print(f"[대시보드 DEBUG] {store_name}: 설정 찾음 -> {store_settings}")
+            if "operationDays" in store_settings:
+                manual_op_days = int(store_settings["operationDays"])
 
             # HTML용 플랫폼 값 설정
             acc["platform"] = platform_display
@@ -10904,9 +11150,11 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
                 acc["month_profit"] = info.get("month_profit", 0)
                 acc["operationDays"] = info.get("operation_days", 30)
                 acc["orders_7d"] = info.get("orders_7d", 0)
+                acc["orders_2w"] = info.get("orders_2w", 0)  # 2주(14일) 주문
 
             # 수동 설정된 운영일수가 있으면 덮어쓰기
             if manual_op_days is not None:
+                print(f"[대시보드] {store_name}: 수동 운영일 적용 {manual_op_days}일 (기존: {acc.get('operationDays', 30)})")
                 acc["operationDays"] = manual_op_days
 
             # Marketing
@@ -10930,17 +11178,18 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
             elif pk == "11번가":
                 pc = st_counts.get(store_name, 0) or st_counts.get(acc.get("login_id"), 0)
             
-            tp = 10000
+            tp = 10000  # 스마트스토어: 최대 등록수량 10000
             if pk == "11번가":
-                tp = 5000
+                tp = 5000  # 11번가: 최대 등록수량 5000, 운영기준 4000개 이상
             elif pk in ["지마켓", "옥션"]:
-                tp = 2000
+                tp = 2000  # 지마켓/옥션: 최대 등록수량 2000, 운영기준 1500개 이상
             
             acc["products"] = pc
             acc["targetProducts"] = tp
             
             # 상품 등록률 계산
             registration_rate = (pc / tp) if tp > 0 else 0
+            acc["progress"] = int(registration_rate * 100)
             
             # 운영일 가져오기 (매칭된 경우에만, 기본값 30일)
             operation_days = acc.get("operationDays", 30)
@@ -10948,33 +11197,77 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
             # 매출 데이터
             month_revenue = acc.get("revenue", 0)
             orders_7d = acc.get("orders_7d", 0)
+            orders_2w = acc.get("orders_2w", 0)  # 2주(14일) 주문
             
             # 스토어 상태 판별
-            # 1단계: 업로드 vs 운영 구분
-            if registration_rate >= 0.9:
-                # 90% 이상 등록 -> 운영 상태
-                stage = "운영"  # 운영 (문자열!)
-                
+            # 1단계: 업로드 vs 운영 구분 (플랫폼별 운영기준 상품수)
+            # 11번가: 4000개 이상, 지마켓/옥션: 1500개 이상, 스마트스토어: 90% 이상
+            operation_threshold = tp * 0.9  # 기본값: 90%
+            if pk == "11번가":
+                operation_threshold = 4000
+            elif pk in ["지마켓", "옥션"]:
+                operation_threshold = 1500
+
+            if pc >= operation_threshold:
+                # 운영기준 충족 -> 운영 상태
+                stage = "운영"
+
+                # 운영 상태인 경우 기본 30일 설정 (DB나 수동 설정이 없을 때)
+                if acc.get("operationDays") is None or acc.get("operationDays") == 0:
+                    acc["operationDays"] = 30
+                    operation_days = 30
+
+                # 유입흐름 데이터 가져오기
+                inflow_trend = inflow_trend_map.get(store_name, "")
+                acc["inflowTrend"] = inflow_trend  # 프론트엔드에서 표시용
+
+                # 7일 연속 하락 여부 확인 (🔻가 7개 연속)
+                is_7day_decline = inflow_trend.count("🔻") >= 7 or inflow_trend == "🔻🔻🔻🔻🔻🔻🔻"
+
+                # 용도 확인 (대량 vs 반대량)
+                usage = acc.get("usage", "대량")
+                is_bulk = usage == "대량"
+
                 # 2단계: 리뉴얼대상 판별
-                # 조건1: 운영일 60일 경과
-                if operation_days >= 60:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
-                    acc["renewalReason"] = f"운영 {operation_days}일 경과"
-                
-                # 조건2: 운영일 30일 경과 + 최근 30일 매출 50만원 이하
-                elif operation_days >= 30 and month_revenue <= 500000:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
-                    acc["renewalReason"] = f"매출부진 ({month_revenue:,}원)"
-                
-                # 조건3: 7일 주문 0건 (유입수 감소는 향후 추가)
-                elif orders_7d == 0 and operation_days >= 7:
-                    stage = "리뉴얼대상"  # 리뉴얼대상 (문자열!)
-                    acc["renewalReason"] = "7일 주문 0건"
+                if is_bulk:
+                    # ★ 대량(닥등) 용도: 목표매출 50만원, 30일 매출 50만원 이하면 상품갈이
+                    acc["targetRevenue"] = 500000  # 목표매출 50만원
+                    if month_revenue <= 500000:
+                        stage = "리뉴얼대상"
+                        acc["renewalReason"] = f"매출부진 ({format_krw(month_revenue)})"
+                else:
+                    # ★ 반대량 용도: 기존 조건 유지
+                    # 조건1: 운영일 60일 경과
+                    if operation_days >= 60:
+                        stage = "리뉴얼대상"
+                        acc["renewalReason"] = f"운영 {operation_days}일 경과"
+
+                    # 조건2: 운영일 30일 경과 + 최근 30일 매출 50만원 이하
+                    elif operation_days >= 30 and month_revenue <= 500000:
+                        stage = "리뉴얼대상"
+                        acc["renewalReason"] = f"매출부진 ({format_krw(month_revenue)})"
+
+                    # 조건3: 7일 주문 0건
+                    elif orders_7d == 0 and operation_days >= 7:
+                        stage = "리뉴얼대상"
+                        acc["renewalReason"] = "7일 주문 0건"
+
+                    # 조건4: 7일간 유입 연속 하락 + 7일 주문 0건
+                    elif is_7day_decline and orders_7d == 0:
+                        stage = "리뉴얼대상"
+                        acc["renewalReason"] = "7일 유입하락 + 주문0"
             else:
                 # 90% 미만 등록 -> 업로드 상태
-                stage = "업로드"  # 업로드 (문자열!)
-                # 업로드 상태에서는 운영일 초기화 (향후 DB 업데이트 시 반영)
+                stage = "업로드"
+                # 업로드가 90% 이상 되지 않은 계정은 0일로 표시 (사용자 요청)
+                acc["operationDays"] = 0
+                operation_days = 0
+                # 업로드 상태에서도 목표매출은 표시하고 싶을 수 있으나, 일단 0으로 초기화하지 않고 상단 default(2M) 유지
             
+            # 모든 스토어에 대해 목표매출(200만) 보장
+            if not acc.get("targetRevenue"):
+                acc["targetRevenue"] = 2000000
+
             acc["stage"] = stage
 
         return {"success": True, "accounts": accounts}
@@ -10983,6 +11276,11 @@ async def get_bulsaja_dashboard_data(request: Request, refresh: bool = False):
         import traceback
         traceback.print_exc()
         return {"success": False, "message": str(e), "accounts": []}
+
+def format_krw(val):
+    if val >= 10000:
+        return f"{val//10000}만{val%10000//1000}천원" if val%10000 >= 1000 else f"{val//10000}만원"
+    return f"{val:,}원"
 
 
 # ========== 실행 제어 변수 ==========

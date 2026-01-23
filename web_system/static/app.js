@@ -8,6 +8,41 @@ let top40Data = [];  // TOP 40 상품 데이터
 let top40SortColumn = 'order_count';  // 정렬 기준 (order_count 또는 total_sales)
 let top40SortDesc = true;  // 내림차순
 
+// 다크모드/라이트모드 토글
+function toggleTheme() {
+    const body = document.body;
+    const btn = document.querySelector('.theme-toggle-btn');
+
+    if (body.classList.contains('dark-mode')) {
+        // 라이트모드로 전환
+        body.classList.remove('dark-mode');
+        if (btn) btn.textContent = '🌙';
+        localStorage.setItem('theme', 'light');
+    } else {
+        // 다크모드로 전환
+        body.classList.add('dark-mode');
+        if (btn) btn.textContent = '☀️';
+        localStorage.setItem('theme', 'dark');
+    }
+}
+
+// 페이지 로드시 저장된 테마 적용
+function applyStoredTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const btn = document.querySelector('.theme-toggle-btn');
+
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        if (btn) btn.textContent = '☀️';
+    } else {
+        document.body.classList.remove('dark-mode');
+        if (btn) btn.textContent = '🌙';
+    }
+}
+
+// DOM 로드 시 테마 적용
+document.addEventListener('DOMContentLoaded', applyStoredTheme);
+
 // 한글 우선 + 영어 fallback 헬퍼 함수
 function get플랫폼(acc) { return acc['플랫폼'] || acc.platform || ''; }
 function get아이디(acc) { return acc['아이디'] || acc.login_id || ''; }
@@ -199,6 +234,11 @@ function activateTab(tabName) {
     // 마케팅분석 탭 활성화 시 계정 목록 로드
     if (tabName === 'marketing') {
         loadMarketingAccounts();
+    }
+
+    // 자동화 대시보드 탭 활성화 시 초기화
+    if (tabName === 'bulsaja-dashboard') {
+        initBulsajaDashboard();
     }
 }
 
@@ -395,18 +435,26 @@ async function refreshMessages(force = false) {
             const displayMessages = messages.slice(0, DISPLAY_LIMIT);
             const hasMore = messages.length > DISPLAY_LIMIT;
 
-            let html = displayMessages.map(m => `
-                <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${m.sender.replace(/'/g, "\\'")}'); setReplyTarget('${phone}', '${m.sender.replace(/'/g, "\\'")}')">
-                    <div class="msg-sender">${m.sender}</div>
-                    <div class="msg-preview">${m.content}</div>
-                    <div class="msg-time">${m.timestamp || ''}</div>
+            let html = displayMessages.map(m => {
+                // HTML 이스케이프 처리
+                const safeContent = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safeSender = (m.sender || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const senderForJs = m.sender.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                return `
+                <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${senderForJs}'); setReplyTarget('${phone}', '${senderForJs}')">
+                    <div class="msg-sender">${safeSender}</div>
+                    <div class="msg-preview">${safeContent}</div>
+                    <div class="msg-time-row" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="msg-time">${m.timestamp || ''}</span>
+                        ${m.unread ? '<span style="background:#4caf50;color:white;font-size:10px;padding:2px 6px;border-radius:3px;">안읽음</span>' : ''}
+                    </div>
                     ${m.auth_code ? `<span class="message-code" style="background:#4caf50;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">${m.auth_code}</span>` : ''}
                 </div>
-            `).join('');
+            `}).join('');
 
             // 더보기 버튼 (20개 초과 시)
             if (hasMore) {
-                html += `<button class="load-more-panel-btn" onclick="loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
+                html += `<button class="load-more-panel-btn" onclick="event.stopPropagation(); loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
                     ⬇️ 더보기 (${messages.length - DISPLAY_LIMIT}개 남음)
                 </button>`;
             }
@@ -441,17 +489,25 @@ function loadMorePanelMessages(phone) {
     const displayMessages = messages.slice(0, displayCount);
     const hasMore = messages.length > displayCount;
 
-    let html = displayMessages.map(m => `
-        <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${m.sender.replace(/'/g, "\\'")}'); setReplyTarget('${phone}', '${m.sender.replace(/'/g, "\\'")}')">
-            <div class="msg-sender">${m.sender}</div>
-            <div class="msg-preview">${m.content}</div>
-            <div class="msg-time">${m.timestamp || ''}</div>
+    let html = displayMessages.map(m => {
+        // HTML 이스케이프 처리
+        const safeContent = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const safeSender = (m.sender || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const senderForJs = m.sender.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        return `
+        <div class="msg-item ${m.unread ? 'unread' : ''}" onclick="openConversation('${m.phone_profile}', '${senderForJs}'); setReplyTarget('${phone}', '${senderForJs}')">
+            <div class="msg-sender">${safeSender}</div>
+            <div class="msg-preview">${safeContent}</div>
+            <div class="msg-time-row" style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="msg-time">${m.timestamp || ''}</span>
+                ${m.unread ? '<span style="background:#4caf50;color:white;font-size:10px;padding:2px 6px;border-radius:3px;">안읽음</span>' : ''}
+            </div>
             ${m.auth_code ? `<span class="message-code" style="background:#4caf50;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">${m.auth_code}</span>` : ''}
         </div>
-    `).join('');
+    `}).join('');
 
     if (hasMore) {
-        html += `<button class="load-more-panel-btn" onclick="loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
+        html += `<button class="load-more-panel-btn" onclick="event.stopPropagation(); loadMorePanelMessages('${phone}')" style="width:100%;padding:10px;background:#f0f0f0;border:none;cursor:pointer;font-size:12px;color:#666;">
             ⬇️ 더보기 (${messages.length - displayCount}개 남음)
         </button>`;
     }
@@ -628,8 +684,29 @@ function openSearchModalForPhone(phone) {
     window.currentSearchPhone = phone;
 }
 
-// 대화 캐시 저장소 (누적 - 지우지 않음)
+// 대화 캐시 저장소 (최대 20개 대화 유지)
 const conversationCache = {};
+const MAX_CONVERSATION_CACHE = 20;
+
+// 캐시 정리 (오래된 것부터 삭제)
+function cleanConversationCache() {
+    const keys = Object.keys(conversationCache);
+    if (keys.length <= MAX_CONVERSATION_CACHE) return;
+
+    // cachedAt 기준 정렬 (오래된 것 먼저)
+    keys.sort((a, b) => {
+        const aTime = conversationCache[a].cachedAt || 0;
+        const bTime = conversationCache[b].cachedAt || 0;
+        return aTime - bTime;
+    });
+
+    // 초과분 삭제
+    const toDelete = keys.length - MAX_CONVERSATION_CACHE;
+    for (let i = 0; i < toDelete; i++) {
+        delete conversationCache[keys[i]];
+        console.log(`[캐시] 삭제: ${keys[i]} (오래된 캐시 정리)`);
+    }
+}
 
 // 캐시 통계
 function getCacheStats() {
@@ -638,7 +715,7 @@ function getCacheStats() {
     keys.forEach(k => {
         totalMessages += conversationCache[k].messages?.length || 0;
     });
-    return { conversations: keys.length, messages: totalMessages };
+    return { conversations: keys.length, messages: totalMessages, maxConversations: MAX_CONVERSATION_CACHE };
 }
 
 // 최근 대화 미리 로드 (캐시 누적)
@@ -799,11 +876,27 @@ async function openConversation(profileId, sender) {
     // 템플릿 버튼 초기화 (최초 1회)
     initTemplateButton();
 
-    // 항상 서버에서 로드 (캐시 비활성화)
+    // 캐시 키
+    const cacheKey = `${profileId}_${sender}`;
+
+    // 캐시에 있으면 즉시 표시
+    if (conversationCache[cacheKey] && conversationCache[cacheKey].messages?.length > 0) {
+        console.log(`[대화] 캐시에서 로드: ${cacheKey}`);
+        document.getElementById('conversationLoading').style.display = 'none';
+        window._conversationLoading = false;
+
+        hasMoreMessages = conversationCache[cacheKey].hasMore !== false;
+        updateLoadMoreButton();
+
+        renderConversationMessages(conversationCache[cacheKey].messages, true);
+        return;
+    }
+
+    // 캐시 없으면 서버에서 로드
     document.getElementById('conversationLoading').style.display = 'block';
     document.getElementById('conversationMessages').innerHTML = '';
 
-    console.log(`[대화] 요청: profile=${profileId}, sender=${sender}`);
+    console.log(`[대화] 서버 요청: profile=${profileId}, sender=${sender}`);
 
     try {
         const r = await fetch('/api/sms/conversation', {
@@ -832,6 +925,16 @@ async function openConversation(profileId, sender) {
             return;
         }
 
+        // 캐시에 저장
+        conversationCache[cacheKey] = {
+            messages: d.messages,
+            hasMore: d.has_more,
+            cachedAt: Date.now()
+        };
+
+        // 캐시 정리 (최대 20개 유지)
+        cleanConversationCache();
+
         hasMoreMessages = d.has_more;
         updateLoadMoreButton();
 
@@ -859,6 +962,18 @@ async function refreshConversation() {
     delete conversationCache[cacheKey];
 
     // 로딩 플래그 해제 후 다시 로드
+    window._conversationLoading = false;
+    await openConversation(currentConversation.profile_id, currentConversation.sender);
+}
+
+// 현재 대화 새로고침 (메시지 전송 후 호출)
+async function refreshCurrentConversation() {
+    if (!currentConversation || !currentConversation.profile_id) return;
+
+    // 캐시 삭제하여 새로운 메시지 가져오기
+    const cacheKey = `${currentConversation.profile_id}_${currentConversation.sender}`;
+    delete conversationCache[cacheKey];
+
     window._conversationLoading = false;
     await openConversation(currentConversation.profile_id, currentConversation.sender);
 }
@@ -1239,6 +1354,7 @@ async function sendFromConversationModal() {
     const profileId = currentConversation.profile_id;
     const input = document.getElementById('conversationInput');
     const message = input?.value?.trim();
+    const sendBtn = document.getElementById('conversationSendBtn');
 
     if (!profileId || !sender) {
         showToast('발신자 정보가 없습니다', 'error');
@@ -1248,6 +1364,13 @@ async function sendFromConversationModal() {
     if (!message) {
         showToast('메시지를 입력하세요', 'error');
         return;
+    }
+
+    // 버튼 로딩 상태
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '⏳ 전송중...';
+        sendBtn.style.opacity = '0.6';
     }
 
     // 번호 정리
@@ -1279,6 +1402,13 @@ async function sendFromConversationModal() {
         }
     } catch (e) {
         showToast(`전송 오류: ${e.message}`, 'error');
+    } finally {
+        // 버튼 복구
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '📤 전송';
+            sendBtn.style.opacity = '1';
+        }
     }
 }
 
@@ -1452,6 +1582,9 @@ async function loadAccounts() {
     } catch (e) { console.error(e); }
 }
 
+// 계정관리 복수 선택 지원
+let selectedAccountPlatforms = new Set(['전체']);
+
 function renderPlatformCounts() {
     const countDiv = document.getElementById('platformCounts');
     if (!countDiv) return;
@@ -1470,12 +1603,12 @@ function renderPlatformCounts() {
             count = platformCounts[p] || 0;
         }
         const color = platformColors[p] || '#667eea';
-        const isActive = currentPlatform === p ? 'active' : '';
+        const isActive = selectedAccountPlatforms.has(p) ? 'active' : '';
 
-        html += `<button class="platform-filter-btn ${isActive}" 
-                    data-platform="${p}" 
+        html += `<button class="platform-filter-btn ${isActive}"
+                    data-platform="${p}"
                     style="--btn-color: ${color}"
-                    onclick="filterPlatform('${p}')">
+                    onclick="filterPlatform('${p}', event)">
                 ${p} <span class="pf-count">${count}</span>
             </button>`;
     });
@@ -1483,8 +1616,31 @@ function renderPlatformCounts() {
     countDiv.innerHTML = html;
 }
 
-function filterPlatform(p) {
-    currentPlatform = p;
+function filterPlatform(p, event) {
+    const isCtrlKey = event && (event.ctrlKey || event.metaKey);
+
+    if (p === '전체') {
+        selectedAccountPlatforms.clear();
+        selectedAccountPlatforms.add('전체');
+    } else if (isCtrlKey) {
+        // Ctrl+클릭: 복수 선택
+        selectedAccountPlatforms.delete('전체');
+        if (selectedAccountPlatforms.has(p)) {
+            selectedAccountPlatforms.delete(p);
+            if (selectedAccountPlatforms.size === 0) {
+                selectedAccountPlatforms.add('전체');
+            }
+        } else {
+            selectedAccountPlatforms.add(p);
+        }
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedAccountPlatforms.clear();
+        selectedAccountPlatforms.add(p);
+    }
+
+    // 호환성 유지
+    currentPlatform = selectedAccountPlatforms.has('전체') ? '전체' : [...selectedAccountPlatforms][0];
     renderPlatformCounts();
     renderAccounts();
 }
@@ -1500,13 +1656,17 @@ function getApiSummary(a) {
 function renderAccounts() {
     const s = document.getElementById('searchInput').value.toLowerCase();
     const f = accounts.filter(a => {
-        // ESM통합 선택 시 지마켓, 옥션도 함께 표시
-        if (currentPlatform !== '전체') {
-            if (currentPlatform === 'ESM통합') {
-                if (!['ESM통합', '지마켓', '옥션'].includes(a.platform)) return false;
-            } else {
-                if (a.platform !== currentPlatform) return false;
+        // 복수 선택 지원
+        if (!selectedAccountPlatforms.has('전체')) {
+            let matched = false;
+            for (const p of selectedAccountPlatforms) {
+                if (p === 'ESM통합') {
+                    if (['ESM통합', '지마켓', '옥션'].includes(a.platform)) matched = true;
+                } else {
+                    if (a.platform === p) matched = true;
+                }
             }
+            if (!matched) return false;
         }
         if (s && !`${a.스토어명} ${a.login_id} ${a.business_number}`.toLowerCase().includes(s)) return false;
         return true;
@@ -2276,9 +2436,577 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tab.dataset.tab === 'bulsaja') {
                 initBulsajaTab();
             }
+            // 자동화 대시보드 탭
+            if (tab.dataset.tab === 'bulsaja-dashboard') {
+                initBulsajaDashboard();
+            }
         });
     });
 });
+
+// ========== 자동화 대시보드 기능 ==========
+let bulsajaDashboardAccounts = [];
+let bulsajaDashboardStageFilter = 'all';
+let bulsajaDashboardPlatformFilters = ['all'];  // 복수 선택 지원 (배열)
+let bulsajaDashboardUsageFilters = ['all'];     // 복수 선택 지원 (배열)
+let bulsajaDashboardSearchQuery = '';
+// 구버전 호환용 getter
+Object.defineProperty(window, 'bulsajaDashboardPlatformFilter', {
+    get: () => bulsajaDashboardPlatformFilters.includes('all') ? 'all' : bulsajaDashboardPlatformFilters[0],
+    set: (v) => { bulsajaDashboardPlatformFilters = [v]; }
+});
+Object.defineProperty(window, 'bulsajaDashboardUsageFilter', {
+    get: () => bulsajaDashboardUsageFilters.includes('all') ? 'all' : bulsajaDashboardUsageFilters[0],
+    set: (v) => { bulsajaDashboardUsageFilters = [v]; }
+});
+
+const bulsajaDashboardStageIcons = ['📤', '🏪', '🔨', '🗑️', '✏️', '📋'];
+const bulsajaDashboardStageNames = ['업로드', '운영', '리뉴얼대상', '삭제', '변경', '복사'];
+const bulsajaDashboardPlatformLogos = {
+    naver: { letter: 'N', class: 'naver' },
+    coupang: { letter: 'C', class: 'coupang' },
+    '11st': { letter: '11', class: 'st11' },
+    gmarket: { letter: 'G', class: 'gmarket' },
+    auction: { letter: 'A', class: 'auction' }
+};
+
+// 자동화 대시보드 초기화
+function initBulsajaDashboard() {
+    // 시간 업데이트
+    updateBulsajaDashboardTime();
+    setInterval(updateBulsajaDashboardTime, 1000);
+
+    // 데이터 로드
+    loadBulsajaDashboardData();
+
+    // 이벤트 리스너 설정
+    setupBulsajaDashboardEvents();
+}
+
+// 시간 업데이트
+function updateBulsajaDashboardTime() {
+    const timeEl = document.getElementById('currentTimeBulsaja');
+    if (timeEl) {
+        const now = new Date();
+        timeEl.textContent = now.toTimeString().slice(0, 8);
+    }
+}
+
+// 데이터 로드
+async function loadBulsajaDashboardData(refresh = false) {
+    try {
+        const url = refresh ? '/api/bulsaja/dashboard_data?refresh=true' : '/api/bulsaja/dashboard_data';
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.accounts) {
+            bulsajaDashboardAccounts = data.accounts;
+            renderBulsajaDashboard();
+        }
+    } catch (e) {
+        console.error('대시보드 데이터 로드 실패:', e);
+    }
+}
+
+// 매출 포맷팅
+function formatBulsajaRevenue(num) {
+    if (!num) return '0';
+    if (num >= 100000000) return (num / 100000000).toFixed(1) + '억';
+    if (num >= 10000000) return (num / 10000000).toFixed(0) + '천만';
+    if (num >= 10000) return (num / 10000).toFixed(0) + '만';
+    return num.toLocaleString();
+}
+
+// 매출 상태
+function getBulsajaRevenueStatus(revenue, target) {
+    const percent = (revenue / target) * 100;
+    if (percent >= 100) return 'achieved';
+    if (percent >= 50) return 'warning';
+    return 'danger';
+}
+
+// 운영일 클래스
+function getBulsajaDaysClass(days) {
+    if (days >= 60) return 'danger';
+    if (days >= 30) return 'warning';
+    return '';
+}
+
+// 매출 상태 텍스트 결정 함수
+function getRevenueStatusText(revenue, targetRevenue) {
+    const percent = (revenue / targetRevenue) * 100;
+    if (percent >= 100) return '목표달성';
+    if (percent >= 70) return '양호';
+    if (percent >= 40) return '주의';
+    return '매출부진';
+}
+
+// 운영일 클릭시 인라인 수정 가능하게 변환
+function makeOpDaysEditable(el, storeName, currentDays) {
+    // 이미 input이면 무시
+    if (el.querySelector('input')) return;
+
+    const originalHTML = el.innerHTML;
+    const daysClass = el.className.replace('operation-days', '').trim();
+
+    el.innerHTML = `<input type="number" class="op-days-inline-input" value="${currentDays}" min="0" max="9999">일`;
+    const input = el.querySelector('input');
+    input.focus();
+    input.select();
+
+    // Enter 또는 포커스 아웃 시 저장
+    const save = async () => {
+        const newDays = parseInt(input.value) || 0;
+        el.innerHTML = `${newDays}일`;
+        if (newDays !== currentDays) {
+            await updateBulsajaOperationDaysSilent(storeName, newDays);
+        }
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            input.blur();
+        } else if (e.key === 'Escape') {
+            el.innerHTML = originalHTML;
+        }
+    });
+}
+
+// 운영일 업데이트 함수 (실제 반영) - 팝업 없이 조용히 업데이트 (이름 변경하여 캐시 회피)
+async function updateBulsajaOperationDaysSilent(storeName, days) {
+    try {
+        const response = await fetch('/api/bulsaja/dashboard_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_name: storeName,
+                operationDays: parseInt(days)
+            })
+        });
+        const res = await response.json();
+        if (res.success) {
+            // 조용히 데이터 새로고침
+            loadBulsajaDashboardData();
+        } else {
+            console.error('불사자 업데이트 실패:', res.message);
+            // 실패 시에도 alert 띄우지 않음
+        }
+    } catch (e) {
+        console.error('운영일 수정 오류:', e);
+    }
+}
+
+// 대시보드 전체 렌더링
+function renderBulsajaDashboard() {
+    const stageMapReverse = {
+        '업로드': 1, '운영': 2, '리뉴얼대상': 3, '삭제': 4, '변경': 5, '복사': 6
+    };
+    const stageIcons = ['📤', '🏪', '🔨', '🗑️', '✏️', '📋'];
+
+    // 필터 적용
+    const filtered = bulsajaDashboardAccounts.filter(acc => {
+        // 스테이지 필터
+        let matchStage = bulsajaDashboardStageFilter === 'all';
+        if (!matchStage) {
+            const stageMap = { '1': '업로드', '2': '운영', '3': '리뉴얼대상', '4': '삭제', '5': '변경', '6': '복사' };
+            matchStage = acc.stage === stageMap[bulsajaDashboardStageFilter];
+        }
+        // 플랫폼 필터 (복수 선택 지원)
+        let matchPlatform = bulsajaDashboardPlatformFilters.includes('all');
+        if (!matchPlatform) {
+            const platform = (acc.platform || '').toLowerCase();
+            matchPlatform = bulsajaDashboardPlatformFilters.some(f => {
+                if (f === 'gmarket') return platform === 'gmarket' || platform === 'auction';
+                return platform === f;
+            });
+        }
+        // 용도 필터 (복수 선택 지원)
+        let matchUsage = bulsajaDashboardUsageFilters.includes('all');
+        if (!matchUsage) {
+            const usage = acc.usage || '대량';
+            matchUsage = bulsajaDashboardUsageFilters.includes(usage);
+        }
+        const matchSearch = (acc.name || '').toLowerCase().includes(bulsajaDashboardSearchQuery.toLowerCase());
+        return matchStage && matchPlatform && matchUsage && matchSearch;
+    });
+
+    // 카운트 업데이트
+    const stageCounts = { '업로드': 0, '운영': 0, '리뉴얼대상': 0, '삭제': 0, '변경': 0, '복사': 0 };
+    bulsajaDashboardAccounts.forEach(a => {
+        if (stageCounts[a.stage] !== undefined) stageCounts[a.stage]++;
+    });
+
+    const countAllEl = document.getElementById('countAllBulsaja');
+    if (countAllEl) countAllEl.textContent = bulsajaDashboardAccounts.length;
+    const count1El = document.getElementById('count1Bulsaja');
+    if (count1El) count1El.textContent = stageCounts['업로드'];
+    const count2El = document.getElementById('count2Bulsaja');
+    if (count2El) count2El.textContent = stageCounts['운영'];
+    const count3El = document.getElementById('count3Bulsaja');
+    if (count3El) count3El.textContent = stageCounts['리뉴얼대상'];
+    const count4El = document.getElementById('count4Bulsaja');
+    if (count4El) count4El.textContent = stageCounts['삭제'];
+    const count5El = document.getElementById('count5Bulsaja');
+    if (count5El) count5El.textContent = stageCounts['변경'];
+    const count6El = document.getElementById('count6Bulsaja');
+    if (count6El) count6El.textContent = stageCounts['복사'];
+
+    // 테이블 렌더링
+    const tableBody = document.getElementById('tableBodyBulsaja');
+    if (tableBody) {
+        tableBody.innerHTML = filtered.map(acc => {
+            const platform = (acc.platform || 'naver').toLowerCase();
+            const logo = bulsajaDashboardPlatformLogos[platform] || { letter: platform.charAt(0).toUpperCase(), class: '' };
+            const currentStageIdx = stageMapReverse[acc.stage] || 0;
+            const targetRevenue = acc.targetRevenue || 2000000;
+            const revenuePercent = Math.min((acc.revenue / targetRevenue) * 100, 100);
+            const revenueStatus = getBulsajaRevenueStatus(acc.revenue, targetRevenue);
+            const operationDays = acc.operationDays || 0;
+            const daysClass = getBulsajaDaysClass(operationDays);
+
+            // 공통 데이터 계산
+            const maxProducts = acc.targetProducts || 10000;
+            const currentProducts = acc.products || 0;
+            const uploadPercent = Math.min((currentProducts / maxProducts) * 100, 100);
+
+            // 스테이지 셀 생성
+            let stageCells = '';
+            for (let i = 1; i <= 6; i++) {
+                const isActive = i === currentStageIdx;
+                const isCompleted = i < currentStageIdx;
+
+                // active 셀에만 테두리: 리뉴얼=빨강, 그 외=오렌지
+                let cellClass = isActive ? (i === 3 ? 'blink-active-red' : 'blink-active') : '';
+                let content = '';
+
+                if (i === 1) {
+                    // 업로드 열: 항상 업로드 정보 표시 (핵심 요구사항)
+                    const indicatorClass = isActive ? 'active' : (isCompleted ? 'completed' : '');
+                    content = `
+                        <div class="stage-indicator-bulsaja ${indicatorClass}">
+                            <div class="value">${currentProducts.toLocaleString()} / ${maxProducts.toLocaleString()}</div>
+                            <div class="progress-bar"><div class="progress-bar-fill" style="width:${uploadPercent}%"></div></div>
+                            <div class="value">${uploadPercent.toFixed(0)}%</div>
+                        </div>`;
+                } else if (i === 2) {
+                    // 운영 열: 항상 운영일 표시 (핵심 요구사항) - 클릭시 인라인 수정
+                    const indicatorClass = isActive ? 'active' : (isCompleted ? 'completed' : '');
+                    const safeStoreName = acc.name.replace(/'/g, "\\'");
+                    content = `
+                        <div class="stage-indicator-bulsaja ${indicatorClass}">
+                            <div class="operation-days ${daysClass}" onclick="makeOpDaysEditable(this, '${safeStoreName}', ${operationDays})" style="cursor:pointer;">${operationDays}일</div>
+                        </div>`;
+                } else if (i === 3) {
+                    // 리뉴얼 열
+                    if (isActive) {
+                        // 리뉴얼 활성: 빨간 강조 + 사유 표시
+                        content = `
+                            <div class="stage-indicator-bulsaja active renewal-active">
+                                <div class="icon">🔨</div>
+                                <div class="value renewal-reason">${acc.renewalReason || '매출부진 (0원)'}</div>
+                            </div>`;
+                    } else if (isCompleted) {
+                        content = `<div class="stage-indicator-bulsaja completed"><div class="icon">✓</div></div>`;
+                    } else {
+                        content = `<div class="stage-indicator-bulsaja inactive"><div class="icon">🔨</div></div>`;
+                    }
+                } else {
+                    // 삭제/변경/복사 열
+                    if (isActive) {
+                        content = `
+                            <div class="stage-indicator-bulsaja active">
+                                <div class="icon">${stageIcons[i - 1]}</div>
+                            </div>`;
+                    } else if (isCompleted) {
+                        content = `<div class="stage-indicator-bulsaja completed"><div class="icon">✓</div></div>`;
+                    } else {
+                        content = `<div class="stage-indicator-bulsaja inactive"><div class="icon">${stageIcons[i - 1]}</div></div>`;
+                    }
+                }
+
+                stageCells += `<div class="stage-cell-bulsaja ${cellClass}">${content}</div>`;
+            }
+
+            // 목표매출 셀: 모든 행에 항상 표시 (핵심 요구사항)
+            let revenueCell = `
+                <div class="revenue-cell-bulsaja">
+                    <div class="revenue-header-row-bulsaja">
+                        <span class="revenue-current-bulsaja">${formatBulsajaRevenue(acc.revenue)}</span>
+                        <span class="revenue-target-text-bulsaja">${formatBulsajaRevenue(targetRevenue)}</span>
+                    </div>
+                    <div class="revenue-bar-bulsaja"><div class="revenue-bar-fill-bulsaja ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                    <div class="revenue-percent-bulsaja ${revenueStatus}">${revenuePercent.toFixed(0)}%</div>
+                </div>`;
+
+            return `
+                <div class="table-row-bulsaja">
+                    <div class="account-cell-bulsaja sticky-account-col">
+                        <div class="account-logo-bulsaja ${logo.class}">${logo.letter}</div>
+                        <div class="account-info">
+                            <span class="name">${acc.name || 'Unknown'}</span>
+                        </div>
+                    </div>
+                    ${stageCells}
+                    ${revenueCell}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 모바일 카드뷰 렌더링
+    const cardView = document.getElementById('cardViewBulsaja');
+    if (cardView) {
+        cardView.innerHTML = filtered.map(acc => {
+            const platform = (acc.platform || 'naver').toLowerCase();
+            const logo = bulsajaDashboardPlatformLogos[platform] || { letter: platform.charAt(0).toUpperCase(), class: '' };
+            const currentStageIdx = stageMapReverse[acc.stage] || 0;
+            const targetRevenue = acc.targetRevenue || 2000000;
+            const revenuePercent = Math.min((acc.revenue / targetRevenue) * 100, 100);
+            const revenueStatus = getBulsajaRevenueStatus(acc.revenue, targetRevenue);
+            const operationDays = acc.operationDays || 0;
+            const daysClass = getBulsajaDaysClass(operationDays);
+
+            // 미니 스테이지 표시
+            let miniStages = '';
+            for (let i = 1; i <= 6; i++) {
+                let cls = '';
+                if (i < currentStageIdx) cls = 'completed';
+                else if (i === currentStageIdx) cls = 'active';
+                miniStages += `<div class="mini-stage ${cls}"></div>`;
+            }
+
+            // 스테이지 내용
+            let stageContent = '';
+            if (acc.stage === '업로드') {
+                const maxProducts = acc.targetProducts || 10000;
+                const currentProducts = acc.products || 0;
+                stageContent = `
+                    <div class="card-stage-icon active">📤</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">업로드</div>
+                        <div class="card-stage-value">${currentProducts.toLocaleString()}/${maxProducts.toLocaleString()}</div>
+                    </div>
+                    <div class="card-progress">
+                        <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress || 0}%"></div></div>
+                    </div>`;
+            } else if (acc.stage === '운영') {
+                stageContent = `
+                    <div class="card-stage-icon active">🏪</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">운영중</div>
+                        <div class="card-stage-value days ${daysClass}">${operationDays}일</div>
+                    </div>`;
+            } else if (acc.stage === '리뉴얼대상') {
+                stageContent = `
+                    <div class="card-stage-icon active">🔨</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">리뉴얼대상</div>
+                        <div class="card-stage-value" style="color:var(--accent-red);font-size:12px;">${acc.renewalReason || '매출부진'}</div>
+                    </div>`;
+            } else {
+                stageContent = `
+                    <div class="card-stage-icon active">${stageIcons[currentStageIdx - 1] || '📤'}</div>
+                    <div class="card-stage-info">
+                        <div class="card-stage-name">${acc.stage}</div>
+                        <div class="card-stage-value">${acc.products?.toLocaleString() || 0}/${(acc.targetProducts || 10000).toLocaleString()}</div>
+                    </div>
+                    <div class="card-progress">
+                        <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress || 0}%"></div></div>
+                    </div>`;
+            }
+
+            // 매출 섹션 (운영/리뉴얼만)
+            let revenueSection = '';
+            if (acc.stage === '운영' || acc.stage === '리뉴얼대상') {
+                revenueSection = `
+                    <div class="card-revenue">
+                        <div class="card-revenue-header">
+                            <span class="card-revenue-title">💰 목표매출</span>
+                            <span class="card-revenue-value ${revenueStatus}">${revenuePercent.toFixed(0)}%</span>
+                        </div>
+                        <div class="card-revenue-bar"><div class="card-revenue-bar-fill ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                        <div class="card-revenue-footer">
+                            <span>${formatBulsajaRevenue(acc.revenue)}</span>
+                            <span class="card-revenue-target">/ ${formatBulsajaRevenue(targetRevenue)}</span>
+                        </div>
+                    </div>`;
+            }
+
+            return `
+                <div class="account-card-bulsaja">
+                    <div class="card-header-bulsaja">
+                        <div class="account-logo-bulsaja ${logo.class}">${logo.letter}</div>
+                        <div class="account-info">
+                            <h4>${acc.name || 'Unknown'}</h4>
+                        </div>
+                    </div>
+                    <div class="card-stage-bulsaja">${stageContent}</div>
+                    ${revenueSection}
+                    <div class="card-stages-mini">${miniStages}</div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// 운영일 수정
+async function updateBulsajaOperationDays(storeName, currentDays) {
+    const newDays = prompt(`${storeName}의 운영일을 입력하세요:`, currentDays);
+    if (newDays === null) return;
+
+    const days = parseInt(newDays);
+    if (isNaN(days)) {
+        alert('숫자만 입력 가능합니다.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/bulsaja/dashboard_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_name: storeName,
+                operationDays: days
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            const acc = bulsajaDashboardAccounts.find(a => a.name === storeName);
+            if (acc) {
+                acc.operationDays = days;
+                renderBulsajaDashboard();
+            }
+        } else {
+            alert('저장 실패: ' + data.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('통신 오류가 발생했습니다.');
+    }
+}
+
+// 이벤트 리스너 설정
+function setupBulsajaDashboardEvents() {
+    // 새로고침 버튼
+    const refreshBtn = document.getElementById('refreshBulsaja');
+    if (refreshBtn && !refreshBtn._bound) {
+        refreshBtn._bound = true;
+        refreshBtn.addEventListener('click', () => loadBulsajaDashboardData(true));
+    }
+
+    // 검색 입력
+    const searchInput = document.getElementById('searchInputBulsaja');
+    if (searchInput && !searchInput._bound) {
+        searchInput._bound = true;
+        searchInput.addEventListener('input', (e) => {
+            bulsajaDashboardSearchQuery = e.target.value;
+            renderBulsajaDashboard();
+        });
+    }
+
+    // 스테이지 탭
+    document.querySelectorAll('.stage-tab-bulsaja').forEach(tab => {
+        if (!tab._bound) {
+            tab._bound = true;
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.stage-tab-bulsaja').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                bulsajaDashboardStageFilter = tab.dataset.stage;
+                renderBulsajaDashboard();
+            });
+        }
+    });
+
+    // 플랫폼 필터 (Ctrl 복수 선택 지원)
+    document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(pill => {
+        if (!pill._bound) {
+            pill._bound = true;
+            pill.addEventListener('click', (e) => {
+                const platform = pill.dataset.platform;
+
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+클릭: 복수 선택
+                    if (platform === 'all') {
+                        // 전체 클릭시 다른거 해제
+                        bulsajaDashboardPlatformFilters = ['all'];
+                        document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                        pill.classList.add('active');
+                    } else {
+                        // 개별 필터 토글
+                        const allPill = document.querySelector('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja[data-platform="all"]');
+                        if (allPill) allPill.classList.remove('active');
+                        bulsajaDashboardPlatformFilters = bulsajaDashboardPlatformFilters.filter(f => f !== 'all');
+
+                        if (bulsajaDashboardPlatformFilters.includes(platform)) {
+                            // 이미 선택됨 -> 해제
+                            bulsajaDashboardPlatformFilters = bulsajaDashboardPlatformFilters.filter(f => f !== platform);
+                            pill.classList.remove('active');
+                        } else {
+                            // 선택
+                            bulsajaDashboardPlatformFilters.push(platform);
+                            pill.classList.add('active');
+                        }
+
+                        // 아무것도 선택 안된 경우 전체로
+                        if (bulsajaDashboardPlatformFilters.length === 0) {
+                            bulsajaDashboardPlatformFilters = ['all'];
+                            if (allPill) allPill.classList.add('active');
+                        }
+                    }
+                } else {
+                    // 일반 클릭: 단일 선택
+                    document.querySelectorAll('.filter-pills-bulsaja:not(.usage-filter-bulsaja) .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    bulsajaDashboardPlatformFilters = [platform];
+                }
+                renderBulsajaDashboard();
+            });
+        }
+    });
+
+    // 용도 필터 (Ctrl 복수 선택 지원)
+    document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(pill => {
+        if (!pill._bound) {
+            pill._bound = true;
+            pill.addEventListener('click', (e) => {
+                const usage = pill.dataset.usage;
+
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+클릭: 복수 선택
+                    if (usage === 'all') {
+                        bulsajaDashboardUsageFilters = ['all'];
+                        document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                        pill.classList.add('active');
+                    } else {
+                        const allPill = document.querySelector('.usage-filter-bulsaja .filter-pill-bulsaja[data-usage="all"]');
+                        if (allPill) allPill.classList.remove('active');
+                        bulsajaDashboardUsageFilters = bulsajaDashboardUsageFilters.filter(f => f !== 'all');
+
+                        if (bulsajaDashboardUsageFilters.includes(usage)) {
+                            bulsajaDashboardUsageFilters = bulsajaDashboardUsageFilters.filter(f => f !== usage);
+                            pill.classList.remove('active');
+                        } else {
+                            bulsajaDashboardUsageFilters.push(usage);
+                            pill.classList.add('active');
+                        }
+
+                        if (bulsajaDashboardUsageFilters.length === 0) {
+                            bulsajaDashboardUsageFilters = ['all'];
+                            if (allPill) allPill.classList.add('active');
+                        }
+                    }
+                } else {
+                    // 일반 클릭: 단일 선택
+                    document.querySelectorAll('.usage-filter-bulsaja .filter-pill-bulsaja').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    bulsajaDashboardUsageFilters = [usage];
+                }
+                renderBulsajaDashboard();
+            });
+        }
+    });
+}
 
 // ========== 검색 기능 ==========
 
@@ -4730,7 +5458,7 @@ async function loadDailyStatus(forceReload = false) {
     const savedFilters = saveCurrentFilters();
 
     try {
-        const r = await fetch('/api/monitor/daily-status');
+        const r = await fetch(`/api/monitor/daily-status${forceReload ? '?refresh=true' : ''}`);
         console.log('[디버깅] API 응답 상태:', r.status, r.statusText);
 
         const d = await r.json();
@@ -4875,41 +5603,41 @@ function buildMarketFilterBar() {
         const color = marketColors[market] || '#667eea';
         const isActive = selectedMarketFilters.has(market) ? 'active' : '';
         return `
-            <button class="market-filter-btn ${isActive}" 
-                    data-market="${market}" 
+            <button class="market-filter-btn ${isActive}"
+                    data-market="${market}"
                     style="--btn-color: ${color}"
-                    onclick="filterByMarket('${market}')">
+                    onclick="filterByMarket('${market}', event)">
                 ${market} <span class="market-count" id="count-bar-${market}">0</span>
             </button>
         `;
     }).join('');
 }
 
-// 마켓별 필터링 (복수 선택)
+// 마켓별 필터링 (Ctrl+클릭으로 복수 선택)
 let selectedMarketFilters = new Set(['전체']);
 
-function filterByMarket(market) {
+function filterByMarket(market, event) {
+    const isCtrlKey = event && (event.ctrlKey || event.metaKey);
+
     if (market === '전체') {
         // '전체' 클릭 시 - 모든 선택 해제하고 전체만 선택
         selectedMarketFilters.clear();
         selectedMarketFilters.add('전체');
-    } else {
-        // 개별 마켓 클릭 시
-        if (selectedMarketFilters.has('전체')) {
-            // 전체가 선택된 상태에서 개별 클릭 → 전체 해제, 해당 마켓만 선택
-            selectedMarketFilters.clear();
-            selectedMarketFilters.add(market);
-        } else if (selectedMarketFilters.has(market)) {
-            // 이미 선택된 마켓 클릭 → 선택 해제
+    } else if (isCtrlKey) {
+        // Ctrl+클릭: 복수 선택 모드
+        selectedMarketFilters.delete('전체');
+        if (selectedMarketFilters.has(market)) {
             selectedMarketFilters.delete(market);
-            // 아무것도 선택 안 되면 전체 선택
             if (selectedMarketFilters.size === 0) {
                 selectedMarketFilters.add('전체');
             }
         } else {
-            // 선택 안 된 마켓 클릭 → 추가 선택
             selectedMarketFilters.add(market);
         }
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedMarketFilters.clear();
+        selectedMarketFilters.add(market);
     }
 
     // 버튼 활성화 상태 업데이트
@@ -6488,11 +7216,11 @@ async function requireClient(callback) {
 let marketTableData = {};
 let currentMarketTab = 'all';
 
-async function loadMarketTable() {
+async function loadMarketTable(refresh = false) {
     try {
-        // 매출 데이터가 없으면 로드
-        if (!salesData) {
-            const salesR = await fetch('/api/sales/from-sheet');
+        // 매출 데이터 로드 (refresh 시 강제 새로고침)
+        if (!salesData || refresh) {
+            const salesR = await fetch(`/api/sales/from-sheet${refresh ? '?force=true' : ''}`);
             salesData = await salesR.json();
         }
 
@@ -6517,7 +7245,7 @@ async function loadMarketTable() {
         // 판매중 수량 + 마지막등록일 가져오기 (등록갯수/11번가 시트)
         let productCounts = {};  // {count, last_reg}
         try {
-            const countsR = await fetch('/api/monitor/product-counts');
+            const countsR = await fetch(`/api/monitor/product-counts${refresh ? '?refresh=true' : ''}`);
             const countsD = await countsR.json();
             if (countsD.success && countsD.data) {
                 productCounts = countsD.data;
@@ -6607,6 +7335,7 @@ let marketTabsDragging = false;     // 드래그 선택용
 const marketTabOrder = ['all', '11번가', '스마트스토어', '옥션', '지마켓', '쿠팡'];
 
 function toggleMarketTab(platform, event = null) {
+    const isCtrl = event && (event.ctrlKey || event.metaKey);
     const isShift = event && event.shiftKey;
     const clickedIndex = marketTabOrder.indexOf(platform);
 
@@ -6626,23 +7355,22 @@ function toggleMarketTab(platform, event = null) {
                 selectedMarketPlatforms.add(marketTabOrder[i]);
             }
         }
-    } else {
-        // 개별 마켓 클릭 시
-        if (selectedMarketPlatforms.has('all')) {
-            // 전체가 선택된 상태에서 개별 클릭 → 전체 해제, 해당 마켓만 선택
-            selectedMarketPlatforms.clear();
-            selectedMarketPlatforms.add(platform);
-        } else if (selectedMarketPlatforms.has(platform)) {
-            // 이미 선택된 마켓 클릭 → 선택 해제
+    } else if (isCtrl) {
+        // Ctrl+클릭: 복수 선택 모드
+        selectedMarketPlatforms.delete('all');
+        if (selectedMarketPlatforms.has(platform)) {
             selectedMarketPlatforms.delete(platform);
-            // 아무것도 선택 안 되면 전체 선택
             if (selectedMarketPlatforms.size === 0) {
                 selectedMarketPlatforms.add('all');
             }
         } else {
-            // 선택 안 된 마켓 클릭 → 추가 선택
             selectedMarketPlatforms.add(platform);
         }
+        lastClickedMarketIndex = clickedIndex;
+    } else {
+        // 일반 클릭: 단일 선택
+        selectedMarketPlatforms.clear();
+        selectedMarketPlatforms.add(platform);
         lastClickedMarketIndex = clickedIndex;
     }
 
@@ -7440,9 +8168,9 @@ function renderScheduleTable() {
         return `
             <tr>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                <td>${s.name}</td>
+                <td><a href="#" onclick="showScheduleDetail('${s.id}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${s.name}</a></td>
                 <td>${s.platform}</td>
-                <td>${s.task}</td>
+                <td><a href="#" onclick="showScheduleDetail('${s.id}'); return false;" style="color: #667eea; text-decoration: underline; cursor: pointer;">${s.task}</a></td>
                 <td>${cronText}</td>
                 <td>${s.next_run || '-'}</td>
                 <td>${s.last_run || '-'}</td>
@@ -7450,6 +8178,7 @@ function renderScheduleTable() {
                 <td class="action-btns">
                     <button class="action-btn run" onclick="runScheduleNow('${s.id}')" title="즉시 실행">▶️</button>
                     <button class="action-btn" onclick="viewScheduleLog('${s.id}', '${s.name}')" title="로그 보기" style="background:#3498db;">📄</button>
+                    <button class="action-btn edit" onclick="openEditScheduleModal('${s.id}')" title="수정" style="background:#f39c12;">✏️</button>
                     <button class="action-btn toggle" onclick="toggleSchedule('${s.id}')" title="${s.enabled ? '비활성화' : '활성화'}">${s.enabled ? '⏸️' : '▶️'}</button>
                     <button class="action-btn delete" onclick="deleteSchedule('${s.id}')" title="삭제">🗑️</button>
                 </td>
@@ -7486,6 +8215,63 @@ function updateSchedTasks() {
             <option value="판매재개">판매재개</option>
         `;
     }
+
+    // 계정 목록도 로드
+    if (typeof loadSchedAccounts === 'function') {
+        loadSchedAccounts();
+    }
+}
+
+// 스케줄 상세 정보 모달
+function showScheduleDetail(scheduleId) {
+    const schedule = scheduleList.find(s => s.id === scheduleId);
+    if (!schedule) {
+        showToast('스케줄 정보를 찾을 수 없습니다.', 'error');
+        return;
+    }
+
+    const cronText = schedule.schedule_type === 'cron' ? schedule.cron : `${schedule.interval_minutes}분 간격`;
+    const stores = schedule.stores || [];
+    const options = schedule.options || {};
+
+    let detailHtml = `
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #333;">📋 기본 정보</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; color: #666; width: 120px;">스케줄 이름</td><td style="padding: 8px; font-weight: 600;">${schedule.name}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">플랫폼</td><td style="padding: 8px;">${schedule.platform}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">작업</td><td style="padding: 8px;">${schedule.task}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">실행 주기</td><td style="padding: 8px;">${cronText}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">상태</td><td style="padding: 8px;"><span style="color: ${schedule.enabled ? '#4caf50' : '#999'};">${schedule.enabled ? '✅ 활성' : '⏸️ 비활성'}</span></td></tr>
+                <tr><td style="padding: 8px; color: #666;">실행 횟수</td><td style="padding: 8px;">${schedule.run_count || 0}회</td></tr>
+            </table>
+        </div>
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #1976d2;">🎯 작업 대상</h4>
+            ${stores.length > 0 ? `
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${stores.map(store => `<span style="background: white; padding: 5px 12px; border-radius: 15px; font-size: 13px;">${store}</span>`).join('')}
+                </div>
+            ` : '<p style="color: #666; margin: 0;">전체 스토어 (지정되지 않음)</p>'}
+        </div>
+        <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #e65100;">⚙️ 작업 옵션</h4>
+            ${Object.keys(options).length > 0 ? `
+                <table style="width: 100%; border-collapse: collapse;">
+                    ${Object.entries(options).map(([k, v]) => `<tr><td style="padding: 6px; color: #666;">${k}</td><td style="padding: 6px;">${v}</td></tr>`).join('')}
+                </table>
+            ` : '<p style="color: #666; margin: 0;">추가 옵션 없음</p>'}
+        </div>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+            <h4 style="margin: 0 0 15px 0; color: #333;">📅 실행 기록</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; color: #666;">마지막 실행</td><td style="padding: 8px;">${schedule.last_run || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #666;">다음 실행</td><td style="padding: 8px;">${schedule.next_run || '-'}</td></tr>
+            </table>
+        </div>
+    `;
+
+    showModal(`📅 스케줄 상세: ${schedule.name}`, detailHtml);
 }
 
 async function createSchedule() {
@@ -7510,6 +8296,12 @@ async function createSchedule() {
         intervalMinutes = parseInt(document.getElementById('schedIntervalMin').value) || 60;
     }
 
+    // 선택된 계정 가져오기
+    const selectedStores = typeof getSelectedSchedAccounts === 'function' ? getSelectedSchedAccounts() : [];
+
+    // 작업 옵션 가져오기
+    const taskOptions = typeof scheduleTaskOptions !== 'undefined' ? { ...scheduleTaskOptions } : {};
+
     try {
         const res = await fetchAPI('/api/schedules', {
             method: 'POST',
@@ -7517,18 +8309,22 @@ async function createSchedule() {
                 name: name,
                 platform: document.getElementById('schedPlatform').value,
                 task: document.getElementById('schedTask').value,
-                stores: [],  // All-in-One에서 선택한 스토어 (나중에 연동)
+                stores: selectedStores,
                 schedule_type: schedType,
                 cron: cron,
                 interval_minutes: intervalMinutes,
-                options: {},
+                options: taskOptions,
                 enabled: true
             })
         });
 
         if (res.success) {
-            alert('스케줄이 추가되었습니다');
+            alert(`스케줄이 추가되었습니다 (대상: ${selectedStores.length}개 계정)`);
             document.getElementById('schedName').value = '';
+            // 선택 계정 초기화
+            if (typeof schedMoveAllLeft === 'function') {
+                schedMoveAllLeft();
+            }
             loadSchedules();
         }
     } catch (e) {
@@ -7915,6 +8711,23 @@ function renderSalesCharts() {
     const salesValues = salesData.daily.map(d => d.sales);
     const profitValues = salesData.daily.map(d => d.profit);
 
+    // 평균/최고/최저 일매출 계산
+    const validSales = salesValues.filter(v => v > 0);
+    const avgSales = validSales.length > 0 ? Math.round(validSales.reduce((a, b) => a + b, 0) / validSales.length) : 0;
+    const maxSales = validSales.length > 0 ? Math.max(...validSales) : 0;
+    const minSales = validSales.length > 0 ? Math.min(...validSales) : 0;
+
+    // 평균 라인 데이터 (모든 날짜에 동일한 값)
+    const avgLineData = salesValues.map(() => avgSales);
+
+    // 통계 표시 업데이트
+    const avgEl = document.getElementById('avgDailySales');
+    const maxEl = document.getElementById('maxDailySales');
+    const minEl = document.getElementById('minDailySales');
+    if (avgEl) avgEl.textContent = formatMoney(avgSales);
+    if (maxEl) maxEl.textContent = formatMoney(maxSales);
+    if (minEl) minEl.textContent = formatMoney(minSales);
+
     // 매출 + 수익 합친 차트
     const ctx1 = document.getElementById('dailySalesChart');
     if (ctx1) {
@@ -7930,7 +8743,19 @@ function renderSalesCharts() {
                         backgroundColor: 'rgba(102, 126, 234, 0.6)',
                         borderColor: 'rgba(102, 126, 234, 1)',
                         borderWidth: 1,
-                        order: 2
+                        order: 3
+                    },
+                    {
+                        label: '평균 일매출',
+                        data: avgLineData,
+                        type: 'line',
+                        borderColor: 'rgba(255, 152, 0, 1)',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [10, 5],  // 점선
+                        pointRadius: 0,
+                        tension: 0,
+                        order: 1
                     },
                     {
                         label: '순익',
@@ -7943,7 +8768,7 @@ function renderSalesCharts() {
                         pointRadius: 3,
                         pointBackgroundColor: 'rgba(46, 125, 50, 1)',
                         tension: 0.3,
-                        order: 1,
+                        order: 2,
                         yAxisID: 'y1'
                     }
                 ]
@@ -8281,6 +9106,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', () => {
             if (tab.dataset.tab === 'scheduler') {
                 loadSchedules();
+                // 계정 목록도 로드
+                if (typeof loadSchedAccounts === 'function') {
+                    loadSchedAccounts();
+                }
             }
             if (tab.dataset.tab === 'sales') {
                 if (!salesData) loadSalesData();
@@ -9478,6 +10307,9 @@ async function initializeMarketingSheets() {
 // 계정 목록 로드 (기존 API 활용)
 let marketingAccountsData = []; // 원본 데이터 저장
 
+// 마케팅 수집 상태 저장
+let marketingCollectionStatus = {};
+
 async function loadMarketingAccounts() {
     try {
         // 기존 계정 목록 API 활용 - 플랫폼명은 한글!
@@ -9495,6 +10327,9 @@ async function loadMarketingAccounts() {
         // 원본 데이터 저장
         marketingAccountsData = accounts;
 
+        // 수집 상태 로드
+        await loadMarketingCollectionStatus();
+
         // 필터 UI 생성
         createMarketingFilters();
 
@@ -9504,6 +10339,19 @@ async function loadMarketingAccounts() {
     } catch (e) {
         console.error('계정 목록 로드 오류:', e);
         showToast('계정 목록 로드 실패', 'error');
+    }
+}
+
+// 마케팅 수집 상태 로드
+async function loadMarketingCollectionStatus() {
+    try {
+        const resp = await fetch('/api/marketing/accounts-status');
+        const data = await resp.json();
+        if (data.success && data.status) {
+            marketingCollectionStatus = data.status;
+        }
+    } catch (e) {
+        console.error('마케팅 수집 상태 로드 오류:', e);
     }
 }
 
@@ -9582,7 +10430,7 @@ function renderMarketingAccounts(accounts = null) {
     // 테이블 형식으로 표시
     let html = `
         <div style="margin-bottom: 10px;">
-            <input type="text" id="marketingSearchInput" placeholder="🔍 스토어명, 소유자, 용도 검색..." 
+            <input type="text" id="marketingSearchInput" placeholder="🔍 스토어명, 소유자, 용도 검색..."
                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;"
                    onkeyup="searchMarketingAccounts()">
         </div>
@@ -9599,6 +10447,7 @@ function renderMarketingAccounts(accounts = null) {
                     <th onclick="sortMarketingAccounts('용도')" style="cursor: pointer;">
                         용도 <span class="sort-arrow">↕</span>
                     </th>
+                    <th>수집상태</th>
                     <th>로그인ID</th>
                 </tr>
             </thead>
@@ -9606,12 +10455,25 @@ function renderMarketingAccounts(accounts = null) {
     `;
 
     data.forEach(acc => {
+        const storeName = acc.스토어명 || '';
+        const status = marketingCollectionStatus[storeName] || {};
+        const isCollected = status.collected;
+        const lastDate = status.last_date;
+
+        let statusHtml = '';
+        if (isCollected && lastDate) {
+            statusHtml = `<span style="color: #4caf50;">✅ ${lastDate}</span>`;
+        } else {
+            statusHtml = `<span style="color: #f44336;">❌ 미수집</span>`;
+        }
+
         html += `
             <tr>
                 <td><input type="checkbox" value="${acc.login_id}" class="marketing-account-cb"></td>
                 <td>${acc.스토어명 || '-'}</td>
                 <td>${acc.소유자 || '-'}</td>
                 <td>${acc.용도 || '-'}</td>
+                <td>${statusHtml}</td>
                 <td><small>${acc.login_id}</small></td>
             </tr>
         `;

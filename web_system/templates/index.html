@@ -472,25 +472,6 @@
             margin: 0 auto;
         }
 
-        .dashboard-bulsaja .revenue-percent-bulsaja {
-            font-size: 10px;
-            font-family: 'JetBrains Mono', monospace;
-            text-align: right;
-            margin-top: 2px;
-        }
-
-        .dashboard-bulsaja .revenue-percent-bulsaja.achieved {
-            color: var(--accent-green);
-        }
-
-        .dashboard-bulsaja .revenue-percent-bulsaja.warning {
-            color: var(--accent-yellow);
-        }
-
-        .dashboard-bulsaja .revenue-percent-bulsaja.danger {
-            color: var(--accent-red);
-        }
-
         .dashboard-bulsaja .renewal-target-bulsaja {
             background: rgba(239, 68, 68, 0.05);
             border: 1px solid rgba(239, 68, 68, 0.2);
@@ -1099,21 +1080,61 @@
             color: var(--text-secondary);
             font-size: 12px;
             cursor: pointer;
+            transition: all 0.2s ease;
         }
 
         .dashboard-bulsaja .filter-pill-bulsaja.active {
             background: var(--accent-orange);
-            color: #000;
+            color: #fff;
             border-color: var(--accent-orange);
+        }
+
+        /* 플랫폼별 색상 - 로고 색상과 통일 */
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="naver"].active {
+            background-color: #03C75A !important;
+            border-color: #03C75A !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="coupang"].active {
+            background-color: #00B4D8 !important;
+            border-color: #00B4D8 !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="11st"].active {
+            background-color: #E31837 !important;
+            border-color: #E31837 !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-platform="gmarket"].active {
+            background-color: #1A73E8 !important;
+            border-color: #1A73E8 !important;
+            color: #fff !important;
+        }
+
+        /* 용도별 색상 */
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="대량"].active {
+            background-color: #6366F1 !important;
+            border-color: #6366F1 !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="반대량"].active {
+            background-color: #8B5CF6 !important;
+            border-color: #8B5CF6 !important;
+            color: #fff !important;
+        }
+        .dashboard-bulsaja .filter-pills-bulsaja .filter-pill-bulsaja[data-usage="반자동"].active {
+            background-color: #EC4899 !important;
+            border-color: #EC4899 !important;
+            color: #fff !important;
         }
 
         .dashboard-bulsaja .table-header-bulsaja {
             display: grid;
-            grid-template-columns: 180px repeat(6, 1fr) 220px;
-            gap: 2px;
+            grid-template-columns: 130px repeat(6, 1fr) 150px;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px 8px 0 0;
+            padding-right: 15px; /* 스크롤바 너비 보정 */
         }
 
         .dashboard-bulsaja .table-header-cell-bulsaja {
@@ -1141,14 +1162,33 @@
 
         .dashboard-bulsaja .table-row-bulsaja {
             display: grid;
-            grid-template-columns: 180px repeat(6, 1fr) 220px;
-            gap: 2px;
+            grid-template-columns: 130px repeat(6, 1fr) 150px;
             border-bottom: 1px solid var(--border-color);
             align-items: stretch;
-            /* Stretch to fill height */
             text-align: center;
-            min-height: 85px;
-            /* Increase height for the new layout */
+            min-height: 70px;
+            background: #ffffff;
+            transition: background 0.15s;
+        }
+
+        .dashboard-bulsaja .table-row-bulsaja:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .dashboard-bulsaja .table-row-bulsaja:hover {
+            background: #f1f5f9;
+        }
+
+        body.dark-mode .dashboard-bulsaja .table-row-bulsaja {
+            background: var(--bg-card);
+        }
+
+        body.dark-mode .dashboard-bulsaja .table-row-bulsaja:nth-child(even) {
+            background: rgba(255,255,255,0.02);
+        }
+
+        body.dark-mode .dashboard-bulsaja .table-row-bulsaja:hover {
+            background: rgba(255,255,255,0.05);
         }
 
         .dashboard-bulsaja .account-cell-bulsaja {
@@ -1156,38 +1196,42 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            background: var(--bg-secondary);
+            background: #f1f5f9;
+            border-right: 2px solid #e2e8f0;
+        }
+
+        body.dark-mode .dashboard-bulsaja .account-cell-bulsaja {
+            background: #1e293b;
+            border-right: 2px solid #334155;
         }
 
         .dashboard-bulsaja .account-info span {
-            font-size: 10px;
-            /* 11px -> 10px */
-            opacity: 0.7;
+            font-size: 13px;
             display: block;
             margin-top: 1px;
-            /* 2px -> 1px */
         }
 
         .dashboard-bulsaja .account-info .name {
             color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
         }
 
         .dashboard-bulsaja .orders-text {
             color: var(--text-muted);
         }
 
-        .dashboard-bulsaja .revenue-cell-bulsaja {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0 12px;
-            background: var(--bg-secondary);
-        }
-
         .dashboard-bulsaja .stage-cell-bulsaja {
             display: flex;
             align-items: center;
             justify-content: center;
+            border-right: 1px solid #e2e8f0;
+            padding: 4px;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        body.dark-mode .dashboard-bulsaja .stage-cell-bulsaja {
             border-right: 1px solid var(--border-color);
         }
 
@@ -1235,13 +1279,110 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 8px 12px;
-            opacity: 0.25;
+            padding: 6px 4px;
+            gap: 3px;
+            opacity: 0.4;
             transition: all 0.3s ease;
+            overflow: hidden;
+            box-sizing: border-box;
         }
 
         .dashboard-bulsaja .stage-indicator-bulsaja.active {
             opacity: 1 !important;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja.completed {
+            opacity: 0.3 !important;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .icon {
+            font-size: 18px;
+            margin-bottom: 2px;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .value {
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja.active .value {
+            color: var(--accent-orange);
+            font-weight: 700;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .renewal-reason {
+            font-size: 11px;
+            color: var(--accent-red) !important;
+            text-align: center;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .operation-days {
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .operation-days.warning {
+            color: var(--accent-yellow);
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .operation-days.danger {
+            color: var(--accent-red);
+        }
+
+        /* 운영일 클릭시 인라인 수정용 input */
+        .dashboard-bulsaja .op-days-inline-input {
+            width: 45px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 800;
+            border: none;
+            border-bottom: 2px solid var(--accent-orange);
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            outline: none;
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+        .dashboard-bulsaja .op-days-inline-input::-webkit-outer-spin-button,
+        .dashboard-bulsaja .op-days-inline-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .sub-info {
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .progress-bar {
+            width: 85%;
+            height: 4px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 2px 0;
+        }
+
+        .dashboard-bulsaja .stage-indicator-bulsaja .progress-bar-fill {
+            height: 100%;
+            background: var(--accent-orange);
+            border-radius: 2px;
+        }
+
+        .dashboard-bulsaja .revenue-cell-bulsaja .revenue-empty {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 11px;
         }
 
         /* New Progress Cell Layout (Upload & Revenue) */
@@ -1368,9 +1509,9 @@
 
         .dashboard-bulsaja .renewal-active {
             opacity: 1 !important;
-            background: rgba(249, 115, 22, 0.15) !important;
-            border: 1px solid rgba(249, 115, 22, 0.4) !important;
-            box-shadow: 0 0 15px rgba(249, 115, 22, 0.2);
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
         }
 
         .dashboard-bulsaja .renewal-active .icon {
@@ -1449,123 +1590,138 @@
 
         .dashboard-bulsaja .blink-active {
             animation: led-pulse-orange 1.5s infinite ease-in-out !important;
-            border: 1px solid rgba(255, 87, 34, 0.5) !important;
-            background: rgba(255, 87, 34, 0.05) !important;
+            border: 2px solid rgba(255, 87, 34, 0.6) !important;
+            background: rgba(255, 87, 34, 0.08) !important;
+            border-radius: 6px;
+            opacity: 1 !important;
+        }
+
+        @keyframes led-pulse-red {
+            0% {
+                box-shadow: 0 0 5px rgba(239, 68, 68, 0.2), inset 0 0 2px rgba(239, 68, 68, 0.1);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.7), inset 0 0 10px rgba(239, 68, 68, 0.3);
+                border-color: rgba(239, 68, 68, 1);
+            }
+            100% {
+                box-shadow: 0 0 5px rgba(239, 68, 68, 0.2), inset 0 0 2px rgba(239, 68, 68, 0.1);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
+        }
+
+        .dashboard-bulsaja .blink-active-red {
+            animation: led-pulse-red 1.5s infinite ease-in-out !important;
+            border: 2px solid rgba(239, 68, 68, 0.7) !important;
+            background: rgba(239, 68, 68, 0.08) !important;
             border-radius: 6px;
             opacity: 1 !important;
         }
 
         @keyframes iconPulse {
-
-            0%,
-            100% {
+            0%, 100% {
                 transform: scale(1);
             }
-
             50% {
                 transform: scale(1.15);
             }
         }
 
-        /* 怨듯넻 ?뚰룷 ?덉씠?꾩썐 */
-        /* 怨듯넻 ?뚰룷 ?덉씠?꾩썐 */
-        .dashboard-bulsaja .stage-indicator .value,
-        .dashboard-bulsaja .stage-indicator-bulsaja .operation-days {
-            font-size: 9px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin: 1px 0;
-            white-space: nowrap;
-            opacity: 0.7;
-        }
-
-        .dashboard-bulsaja .stage-indicator-bulsaja .icon {
-            font-size: 16px;
-            /* 아이콘 크기 고정 */
-        }
-
-        .dashboard-bulsaja .stage-indicator .progress-bar {
-            width: 80%;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .dashboard-bulsaja .stage-indicator .progress-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #f97316, #fb923c);
-            border-radius: 2px;
-            transition: width 0.5s ease;
-        }
-
-        .dashboard-bulsaja .stage-indicator.completed .progress-bar-fill {
-            background: linear-gradient(90deg, #10b981, #34d399);
-            /* ?꾨즺?? 寃쎌슦 珥덈줉?? */
-        }
-
         /* Revenue Cell */
         .dashboard-bulsaja .revenue-cell-bulsaja {
-            padding: 4px 12px;
+            padding: 6px 6px;
             background: var(--bg-secondary);
             display: flex;
             flex-direction: column;
             justify-content: center;
             position: relative;
+            overflow: hidden;
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
         }
 
-        .dashboard-bulsaja .revenue-info-bulsaja {
+        .dashboard-bulsaja .revenue-header-row-bulsaja {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 4px;
+            align-items: baseline;
+            margin-bottom: 3px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .dashboard-bulsaja .revenue-current-bulsaja {
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .dashboard-bulsaja .revenue-target-text-bulsaja {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
         }
 
         .dashboard-bulsaja .revenue-bar-bulsaja {
-            width: 100%;
-            height: 18px;
-            /* 통통하게 */
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 9px;
+            width: 80%;
+            max-width: 100px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
             overflow: hidden;
-            position: relative;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+            margin: 0 auto;
+        }
+
+        body.dark-mode .dashboard-bulsaja .revenue-bar-bulsaja {
+            background: rgba(255, 255, 255, 0.15);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja {
             height: 100%;
-            border-radius: 9px;
-            background: linear-gradient(90deg, #f97316, #fb923c, #f59e0b);
-            box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
-            transition: width 0.8s cubic-bezier(0.17, 0.67, 0.83, 0.67);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .dashboard-bulsaja .revenue-bar-text-bulsaja {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            font-size: 10px;
-            font-weight: 800;
-            color: #fff;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-            pointer-events: none;
-            left: 0;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            position: relative;
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.achieved {
-            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+            background: linear-gradient(90deg, #00d4aa 0%, #00f5c4 50%, #4fffb0 100%);
+            box-shadow: 0 0 10px rgba(0, 212, 170, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.warning {
-            background: linear-gradient(90deg, var(--accent-yellow), var(--accent-orange));
+            background: linear-gradient(90deg, #ff6b9d 0%, #ff8fab 50%, #ffb3c6 100%);
+            box-shadow: 0 0 10px rgba(255, 107, 157, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .dashboard-bulsaja .revenue-bar-fill-bulsaja.danger {
-            background: linear-gradient(90deg, var(--accent-red), var(--accent-pink));
+            background: linear-gradient(90deg, #ff4757 0%, #ff6b7a 50%, #ff8a94 100%);
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja {
+            font-size: 11px;
+            font-weight: 700;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.achieved {
+            color: #00d4aa;
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.warning {
+            color: #ff6b9d;
+        }
+
+        .dashboard-bulsaja .revenue-percent-bulsaja.danger {
+            color: #ff4757;
         }
 
         /* Mobile View (Card) */
@@ -1865,6 +2021,145 @@
         }
 
         /* 모달 스타일은 style.css에서 관리됨 */
+
+        /* ===========================================
+           index.html 전용 모바일 반응형
+           =========================================== */
+
+        /* 태블릿 (768px 이하) */
+        @media (max-width: 768px) {
+            /* SMS 대화창 반응형 */
+            .sms-template-panel {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100% !important;
+                height: 60vh;
+                border-left: none;
+                border-top: 1px solid #e0e0e0;
+                border-radius: 16px 16px 0 0;
+                z-index: 1000;
+            }
+
+            .conversation-messages {
+                padding: 10px;
+            }
+
+            .msg-item {
+                max-width: 85%;
+            }
+
+            /* SMS 상단 영역 */
+            .sms-top-row {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+
+            .sms-browser-section,
+            .sms-code-section {
+                width: 100% !important;
+            }
+
+            .auth-codes {
+                flex-direction: column !important;
+                gap: 8px !important;
+            }
+
+            /* 마케팅분석 테이블 -> 가로 스크롤 */
+            .marketing-account-table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* 필터 섹션 */
+            .filter-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .filter-section .filter-group {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+
+            /* 헤더 인증코드 */
+            .header-auth-code {
+                font-size: 11px !important;
+                padding: 3px 8px !important;
+            }
+        }
+
+        /* 모바일 폰 (480px 이하) */
+        @media (max-width: 480px) {
+            /* SMS 3등분 패널 각각 높이 조정 */
+            .sms-panel {
+                min-height: 180px;
+            }
+
+            .panel-header {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            .panel-messages .msg-item {
+                padding: 8px;
+                margin-bottom: 6px;
+            }
+
+            .panel-send {
+                padding: 8px;
+            }
+
+            .panel-send-msg {
+                padding: 6px;
+                font-size: 12px;
+            }
+
+            .panel-send-btn {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            /* 인증코드 영역 */
+            .auth-code-item {
+                padding: 4px 8px !important;
+            }
+
+            .auth-code-item .code {
+                font-size: 12px !important;
+            }
+
+            /* 내부 탭 버튼 */
+            .inner-tab-btn {
+                padding: 8px 12px;
+                font-size: 11px;
+            }
+
+            /* 관제센터 카드 */
+            .monitor-card {
+                width: 90px !important;
+                min-width: 90px !important;
+                max-width: 90px !important;
+            }
+
+            .monitor-card .shop-name {
+                max-width: 70px !important;
+                font-size: 9px !important;
+            }
+
+            /* 작업달력 */
+            .calendar-grid {
+                font-size: 10px;
+            }
+
+            .work-item {
+                font-size: 7px;
+                padding: 1px 2px;
+            }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -2090,8 +2385,8 @@
                         <textarea id="conversationInput" placeholder="메시지 입력..." rows="2"
                             oninput="autoResizeTextarea(this)"
                             style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; resize:none; font-family:inherit; min-height:44px; max-height:120px;"></textarea>
-                        <button class="modal-btn primary" onclick="sendFromConversationModal()"
-                            style="padding:10px 20px;">전송</button>
+                        <button class="modal-btn primary" id="conversationSendBtn" onclick="sendFromConversationModal()"
+                            style="padding:10px 20px;">📤 전송</button>
                     </div>
                     <div style="display:flex; gap:8px; width:100%;">
                         <button class="modal-btn template-toggle" id="templateToggleBtn"
@@ -2172,7 +2467,7 @@
             <div class="card">
                 <div class="card-title">
                     📊 마켓별 현황표
-                    <button class="refresh-btn" onclick="loadMarketTable()">🔄 새로고침</button>
+                    <button class="refresh-btn" onclick="loadMarketTable(true)">🔄 새로고침</button>
                     <button class="refresh-btn" onclick="refresh11stCounts()" style="margin-left:10px;">📦 11번가
                         등록갯수</button>
                     <button class="refresh-btn" onclick="sendSelectedToAio()"
@@ -2825,6 +3120,33 @@
                             </div>
                         </div>
                     </div>
+                    <!-- 작업 대상 계정 선택 (듀얼 리스트) -->
+                    <div class="form-row">
+                        <div class="form-group" style="width: 100%;">
+                            <label>작업 대상 계정 선택</label>
+                            <div class="dual-list-container" style="display:flex; gap:10px; align-items:stretch;">
+                                <!-- 왼쪽: 선택 가능한 계정 -->
+                                <div style="flex:1; display:flex; flex-direction:column;">
+                                    <div style="font-size:12px; color:#666; margin-bottom:5px;">선택 가능한 계정</div>
+                                    <select id="schedAccountsAvailable" multiple style="flex:1; min-height:120px; border:1px solid #ddd; border-radius:6px; padding:5px;">
+                                    </select>
+                                </div>
+                                <!-- 중앙: 이동 버튼 -->
+                                <div style="display:flex; flex-direction:column; justify-content:center; gap:5px;">
+                                    <button type="button" class="btn secondary" onclick="schedMoveAccountRight()" style="padding:5px 10px;">➡️</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAllRight()" style="padding:5px 10px;">⏩</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAccountLeft()" style="padding:5px 10px;">⬅️</button>
+                                    <button type="button" class="btn secondary" onclick="schedMoveAllLeft()" style="padding:5px 10px;">⏪</button>
+                                </div>
+                                <!-- 오른쪽: 선택된 계정 -->
+                                <div style="flex:1; display:flex; flex-direction:column;">
+                                    <div style="font-size:12px; color:#666; margin-bottom:5px;">선택된 계정 (<span id="schedSelectedCount">0</span>개)</div>
+                                    <select id="schedAccountsSelected" multiple style="flex:1; min-height:120px; border:1px solid #ddd; border-radius:6px; padding:5px;">
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>스케줄 타입</label>
@@ -3159,8 +3481,8 @@
 
                     <div class="filter-bar-bulsaja">
                         <div class="search-actions-bulsaja" style="display: flex; gap: 10px; align-items: center;">
-                            <button class="btn-refresh-bulsaja" id="refreshBulsaja" title="새로고침">
-                                <span class="icon">🔄</span> 데이터 수동취합
+                            <button class="btn-refresh-bulsaja" id="refreshBulsaja" title="시트에서 최신 데이터 가져오기">
+                                <span class="icon">🔄</span> 새로고침
                             </button>
                             <div class="search-box-bulsaja">
                                 <input type="text" placeholder="계정명 검색..." id="searchInputBulsaja">
@@ -4277,12 +4599,8 @@
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <h3 style="margin: 0; color: #667eea;">📊 스토어별 통합 성과 요약 (스토어별 유입수 현황)</h3>
                             <div style="display: flex; gap: 10px; align-items: center;">
-                                <button id="btnMktSyncTotal" onclick="syncMarketingTotalData()" class="primary-btn"
-                                    style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-                                    📥 데이터 수동 취합
-                                </button>
                                 <button onclick="loadMarketingIntegratedData(true)" class="refresh-btn"
-                                    style="padding: 8px 16px;">🔄 전체 새로고침</button>
+                                    style="padding: 8px 16px;">🔄 새로고침</button>
                             </div>
                         </div>
                         <div style="overflow-x: auto;">
@@ -4498,7 +4816,8 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=20260115u"></script>
+    <script src="/static/app.js?v=20260122"></script>
+    <script src="/static/marketing_tab_switch.js?v=20260122"></script>
     <script>
         // (2026-01-20) 마케팅 테이블 정렬 기능
         function sortMarketingTable(tableId, colIndex, type) {
@@ -4593,8 +4912,8 @@
             tableBody.innerHTML = '<tr><td colspan="15" class="loading">데이터 로딩 중...</td></tr>';
 
             try {
-                // 1. API 호출
-                const resp = await fetch(`/api/marketing/summary?refresh=${refresh}`);
+                // 1. API 호출 (캐시 기반 - 스토어유입수 시트)
+                const resp = await fetch(`/api/marketing/store-traffic?refresh=${refresh}`);
                 const res = await resp.json();
 
                 if (!res.success) {
@@ -4606,7 +4925,7 @@
                 const data = res.data || [];
 
                 if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="15" class="empty">데이터가 없습니다. [데이터 수동 취합]을 실행해보세요.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="15" class="empty">데이터가 없습니다. [새로고침]을 실행해보세요.</td></tr>';
                     return;
                 }
 

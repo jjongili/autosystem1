@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Pconomy 상품갈이</title>
+    <link rel="manifest" href="data:application/json,{'name':'Pconomy','short_name':'Pconomy','start_url':'.','display':'standalone','background_color':'%230a0a0f','theme_color':'%23f97316'}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #222230;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-pink: #ec4899;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #2a2a3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+        }
+
+        html {
+            height: -webkit-fill-available;
+        }
+
+        .dashboard {
+            padding: 20px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 900;
+        }
+
+        .header h1 .logo {
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--accent-green);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .time-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Stage Tabs - 가로 스크롤 */
+        .stage-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .stage-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .stage-tabs::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 2px;
+        }
+
+        .stage-tab {
+            flex-shrink: 0;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 80px;
+        }
+
+        .stage-tab:hover, .stage-tab.active {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-orange);
+        }
+
+        .stage-tab.active {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+        }
+
+        .stage-tab .name {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .stage-tab .count {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stage-tab:nth-child(1) .count { color: var(--accent-cyan); }
+        .stage-tab:nth-child(2) .count { color: var(--accent-green); }
+        .stage-tab:nth-child(3) .count { color: var(--accent-yellow); }
+        .stage-tab:nth-child(4) .count { color: var(--accent-red); }
+        .stage-tab:nth-child(5) .count { color: var(--accent-purple); }
+        .stage-tab:nth-child(6) .count { color: var(--accent-blue); }
+        .stage-tab:nth-child(7) .count { color: var(--text-secondary); }
+
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px 10px 36px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent-orange);
+        }
+
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+        }
+
+        .filter-pills {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filter-pill {
+            flex-shrink: 0;
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .filter-pill.active {
+            background: var(--accent-orange);
+            color: #000;
+            border-color: var(--accent-orange);
+        }
+
+        /* PC: 테이블 뷰 */
+        .table-view {
+            display: block;
+        }
+
+        .table-header {
+            display: grid;
+            grid-template-columns: 180px repeat(6, 1fr) 150px;
+            gap: 2px;
+            margin-bottom: 2px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px 8px 0 0;
+        }
+
+        .table-header-cell {
+            padding: 12px 8px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+
+        .table-header-cell:last-child {
+            border-right: none;
+        }
+
+        .table-header-cell:first-child {
+            text-align: left;
+            padding-left: 14px;
+        }
+
+        .table-body {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: calc(100vh - 320px);
+            overflow-y: auto;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 180px repeat(6, 1fr) 150px;
+            gap: 2px;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.15s;
+        }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        .table-row:hover {
+            background: rgba(249, 115, 22, 0.03);
+        }
+
+        .account-cell {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-secondary);
+        }
+
+        .account-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .account-logo.naver { background: #03C75A; }
+        .account-logo.coupang { background: #00C4C4; }
+        .account-logo.gmarket { background: #5065E6; }
+        .account-logo.st11 { background: #E4415E; }
+        .account-logo.auction { background: #F5A623; }
+
+        .account-info h4 {
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .account-info span {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .cycle-badge {
+            display: inline-flex;
+            padding: 2px 6px;
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid var(--accent-purple);
+            border-radius: 10px;
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--accent-purple);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cycle-badge.many {
+            background: rgba(236, 72, 153, 0.2);
+            border-color: var(--accent-pink);
+            color: var(--accent-pink);
+        }
+
+        .stage-cell {
+            padding: 8px 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stage-indicator {
+            width: 100%;
+            height: 100%;
+            min-height: 50px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+        }
+
+        .stage-indicator.inactive {
+            opacity: 0.2;
+        }
+
+        .stage-indicator.completed {
+            background: transparent;
+            opacity: 0.15;
+        }
+
+        .stage-indicator.active {
+            background: rgba(249, 115, 22, 0.15);
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.3); }
+            50% { box-shadow: 0 0 25px rgba(249, 115, 22, 0.5); }
+        }
+
+        .stage-indicator .icon {
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+
+        .stage-indicator.active .icon {
+            animation: iconPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .stage-indicator .value {
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .stage-indicator.active .value {
+            color: var(--accent-orange);
+            font-weight: 600;
+        }
+
+        .stage-indicator.completed .value {
+            color: var(--text-muted);
+        }
+
+        .operation-days {
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .operation-days.warning { color: var(--accent-yellow); }
+        .operation-days.danger { color: var(--accent-red); }
+
+        .progress-bar {
+            width: 80%;
+            height: 3px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent-orange);
+            border-radius: 2px;
+        }
+
+        /* Revenue Cell */
+        .revenue-cell {
+            padding: 8px 10px;
+            background: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .revenue-header-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+
+        .revenue-current {
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .revenue-target {
+            color: var(--text-muted);
+        }
+
+        .revenue-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .revenue-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        .revenue-bar-fill.achieved { background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); }
+        .revenue-bar-fill.warning { background: linear-gradient(90deg, var(--accent-yellow), var(--accent-orange)); }
+        .revenue-bar-fill.danger { background: linear-gradient(90deg, var(--accent-red), var(--accent-pink)); }
+
+        .revenue-percent {
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .revenue-percent.achieved { color: var(--accent-green); }
+        .revenue-percent.warning { color: var(--accent-yellow); }
+        .revenue-percent.danger { color: var(--accent-red); }
+
+        .gali-tag {
+            display: inline-block;
+            padding: 2px 5px;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--accent-red);
+            border-radius: 4px;
+            font-size: 8px;
+            color: var(--accent-red);
+            margin-left: 4px;
+        }
+
+        /* 모바일: 카드 뷰 */
+        .card-view {
+            display: none;
+        }
+
+        .account-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-header .account-logo {
+            width: 40px;
+            height: 40px;
+            font-size: 14px;
+        }
+
+        .card-header .account-info {
+            flex: 1;
+        }
+
+        .card-header .account-info h4 {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .card-header .account-info span {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .card-stage {
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-stage-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .card-stage-icon.active {
+            background: rgba(249, 115, 22, 0.15);
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        .card-stage-info {
+            flex: 1;
+        }
+
+        .card-stage-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+        }
+
+        .card-stage-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent-orange);
+        }
+
+        .card-stage-value.days {
+            color: var(--accent-green);
+        }
+
+        .card-stage-value.days.warning {
+            color: var(--accent-yellow);
+        }
+
+        .card-stage-value.days.danger {
+            color: var(--accent-red);
+        }
+
+        .card-progress {
+            flex: 1;
+        }
+
+        .card-progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-primary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        .card-progress-bar-fill {
+            height: 100%;
+            background: var(--accent-orange);
+            border-radius: 3px;
+        }
+
+        .card-revenue {
+            padding: 12px 14px;
+        }
+
+        .card-revenue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card-revenue-title {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .card-revenue-value {
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card-revenue-bar {
+            width: 100%;
+            height: 10px;
+            background: var(--bg-primary);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .card-revenue-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+        }
+
+        .card-revenue-bar-fill.achieved { background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); }
+        .card-revenue-bar-fill.warning { background: linear-gradient(90deg, var(--accent-yellow), var(--accent-orange)); }
+        .card-revenue-bar-fill.danger { background: linear-gradient(90deg, var(--accent-red), var(--accent-pink)); }
+
+        .card-revenue-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 6px;
+            font-size: 11px;
+        }
+
+        .card-revenue-target {
+            color: var(--text-muted);
+        }
+
+        .card-stages-mini {
+            display: flex;
+            gap: 4px;
+            padding: 10px 14px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .mini-stage {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg-primary);
+        }
+
+        .mini-stage.completed {
+            background: var(--text-muted);
+            opacity: 0.3;
+        }
+
+        .mini-stage.active {
+            background: var(--accent-orange);
+            animation: miniPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes miniPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 반응형 */
+        @media (max-width: 1024px) {
+            .table-view {
+                display: none;
+            }
+            .card-view {
+                display: block;
+            }
+            .dashboard {
+                padding: 16px;
+            }
+            .header h1 {
+                font-size: 18px;
+            }
+            .time-badge {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .dashboard {
+                padding: 12px;
+            }
+            .header {
+                margin-bottom: 14px;
+                padding-bottom: 12px;
+            }
+            .header h1 {
+                font-size: 16px;
+            }
+            .header-subtitle {
+                font-size: 10px;
+            }
+            .stage-tab {
+                padding: 8px 12px;
+                min-width: 70px;
+            }
+            .stage-tab .name {
+                font-size: 10px;
+            }
+            .stage-tab .count {
+                font-size: 14px;
+            }
+            .search-box input {
+                padding: 10px 12px 10px 32px;
+                font-size: 14px;
+            }
+            .filter-pill {
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+        }
+
+        /* 안전영역 (노치 등) */
+        @supports (padding: max(0px)) {
+            .dashboard {
+                padding-left: max(16px, env(safe-area-inset-left));
+                padding-right: max(16px, env(safe-area-inset-right));
+                padding-bottom: max(16px, env(safe-area-inset-bottom));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div>
+                <h1>💰 <span class="logo">Pconomy</span></h1>
+                <div class="header-subtitle">업로드 → 운영 → 리뉴얼대상 → 삭제 → 변경 → 복사 🔄</div>
+            </div>
+            <div class="header-right">
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    가동중
+                </div>
+                <div class="time-badge" id="currentTime">15:32:45</div>
+            </div>
+        </header>
+
+        <!-- Stage Tabs -->
+        <div class="stage-tabs">
+            <div class="stage-tab active" data-stage="all">
+                <div class="name">전체</div>
+                <div class="count" id="countAll">127</div>
+            </div>
+            <div class="stage-tab" data-stage="1">
+                <div class="name">📤 업로드</div>
+                <div class="count" id="count1">15</div>
+            </div>
+            <div class="stage-tab" data-stage="2">
+                <div class="name">🏪 운영</div>
+                <div class="count" id="count2">89</div>
+            </div>
+            <div class="stage-tab" data-stage="3">
+                <div class="name">🔨 리뉴얼대상</div>
+                <div class="count" id="count3">8</div>
+            </div>
+            <div class="stage-tab" data-stage="4">
+                <div class="name">🗑️ 삭제</div>
+                <div class="count" id="count4">6</div>
+            </div>
+            <div class="stage-tab" data-stage="5">
+                <div class="name">✏️ 변경</div>
+                <div class="count" id="count5">5</div>
+            </div>
+            <div class="stage-tab" data-stage="6">
+                <div class="name">📋 복사</div>
+                <div class="count" id="count6">4</div>
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <div class="search-box">
+                <input type="text" placeholder="계정명 검색..." id="searchInput">
+            </div>
+            <div class="filter-pills">
+                <div class="filter-pill active" data-platform="all">전체</div>
+                <div class="filter-pill" data-platform="naver">네이버</div>
+                <div class="filter-pill" data-platform="coupang">쿠팡</div>
+                <div class="filter-pill" data-platform="11st">11번가</div>
+                <div class="filter-pill" data-platform="gmarket">지마켓</div>
+                <div class="filter-pill" data-platform="auction">옥션</div>
+            </div>
+        </div>
+
+        <!-- PC: Table View -->
+        <div class="table-view">
+            <div class="table-header">
+                <div class="table-header-cell">계정</div>
+                <div class="table-header-cell">📤 업로드</div>
+                <div class="table-header-cell">🏪 운영</div>
+                <div class="table-header-cell">🔨 리뉴얼대상</div>
+                <div class="table-header-cell">🗑️ 삭제</div>
+                <div class="table-header-cell">✏️ 변경</div>
+                <div class="table-header-cell">📋 복사</div>
+                <div class="table-header-cell">💰 목표매출</div>
+            </div>
+            <div class="table-body" id="tableBody">
+            </div>
+        </div>
+
+        <!-- Mobile: Card View -->
+        <div class="card-view" id="cardView">
+        </div>
+    </div>
+
+    <script>
+        const accounts = [
+            // 업로드 중
+            { id: 'store_001', name: '패션스토어1', platform: 'naver', stage: 1, currentProducts: 1440, targetProducts: 3200, progress: 45, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_002', name: '패션스토어2', platform: 'naver', stage: 1, currentProducts: 3672, targetProducts: 5100, progress: 72, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_014', name: '베이비존', platform: 'naver', stage: 1, currentProducts: 2475, targetProducts: 4500, progress: 55, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_011', name: '아웃도어샵', platform: 'naver', stage: 1, currentProducts: 4320, targetProducts: 4800, progress: 90, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 3, renewalReason: '' },
+            { id: 'coupang_007', name: '쿠팡키즈', platform: 'coupang', stage: 1, currentProducts: 3510, targetProducts: 5400, progress: 65, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 4, renewalReason: '' },
+            { id: 'auction_001', name: '옥션베스트', platform: 'auction', stage: 1, currentProducts: 1860, targetProducts: 6200, progress: 30, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            
+            // 운영중
+            { id: 'store_003', name: '리빙마켓', platform: 'naver', stage: 2, currentProducts: 12400, targetProducts: 12400, progress: 100, operationDays: 45, revenue: 62000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_004', name: '뷰티샵', platform: 'naver', stage: 2, currentProducts: 9800, targetProducts: 9800, progress: 100, operationDays: 32, revenue: 58000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_005', name: '키즈월드', platform: 'naver', stage: 2, currentProducts: 15200, targetProducts: 15200, progress: 100, operationDays: 18, revenue: 85000000, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            { id: 'coupang_001', name: '쿠팡스토어1', platform: 'coupang', stage: 2, currentProducts: 18500, targetProducts: 18500, progress: 100, operationDays: 52, revenue: 95000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: '11st_001', name: '11번가마켓', platform: '11st', stage: 2, currentProducts: 11000, targetProducts: 11000, progress: 100, operationDays: 38, revenue: 54000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_012', name: '트렌디샵', platform: 'naver', stage: 2, currentProducts: 11800, targetProducts: 11800, progress: 100, operationDays: 18, revenue: 71000000, targetRevenue: 50000000, cycleCount: 3, renewalReason: '' },
+            { id: 'gmarket_001', name: '지마켓스토어', platform: 'gmarket', stage: 2, currentProducts: 13400, targetProducts: 13400, progress: 100, operationDays: 21, revenue: 67000000, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            { id: 'coupang_002', name: '쿠팡스토어2', platform: 'coupang', stage: 2, currentProducts: 22000, targetProducts: 22000, progress: 100, operationDays: 12, revenue: 78000000, targetRevenue: 50000000, cycleCount: 3, renewalReason: '' },
+            { id: 'auction_002', name: '옥션패션', platform: 'auction', stage: 2, currentProducts: 8500, targetProducts: 8500, progress: 100, operationDays: 28, revenue: 42000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'store_020', name: '메가샵', platform: 'naver', stage: 2, currentProducts: 19200, targetProducts: 19200, progress: 100, operationDays: 15, revenue: 92000000, targetRevenue: 50000000, cycleCount: 5, renewalReason: '' },
+            { id: 'coupang_010', name: '쿠팡베스트', platform: 'coupang', stage: 2, currentProducts: 25000, targetProducts: 25000, progress: 100, operationDays: 8, revenue: 145000000, targetRevenue: 50000000, cycleCount: 6, renewalReason: '' },
+            
+            // 리뉴얼대상
+            { id: 'store_006', name: '스포츠킹', platform: 'naver', stage: 3, currentProducts: 11200, targetProducts: 11200, progress: 0, operationDays: 62, revenue: 18000000, targetRevenue: 50000000, cycleCount: 2, renewalReason: '60일 경과' },
+            { id: 'coupang_003', name: '쿠팡패션', platform: 'coupang', stage: 3, currentProducts: 14200, targetProducts: 14200, progress: 0, operationDays: 35, revenue: 12000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '30일 매출 기준이하' },
+            { id: 'gmarket_002', name: '지마켓패션', platform: 'gmarket', stage: 3, currentProducts: 10800, targetProducts: 10800, progress: 0, operationDays: 28, revenue: 25000000, targetRevenue: 50000000, cycleCount: 4, renewalReason: '5일연속 유입하락' },
+            { id: 'auction_003', name: '옥션리빙', platform: 'auction', stage: 3, currentProducts: 9200, targetProducts: 9200, progress: 0, operationDays: 22, revenue: 8000000, targetRevenue: 50000000, cycleCount: 1, renewalReason: '7일 주문X' },
+            
+            // 상품삭제
+            { id: 'store_007', name: '홈데코', platform: 'naver', stage: 4, currentProducts: 3115, targetProducts: 8900, progress: 35, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            { id: 'store_008', name: '펫프렌즈', platform: 'naver', stage: 4, currentProducts: 6232, targetProducts: 7600, progress: 82, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            { id: 'coupang_004', name: '쿠팡리빙', platform: 'coupang', stage: 4, currentProducts: 5460, targetProducts: 9100, progress: 60, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 3, renewalReason: '' },
+            { id: '11st_003', name: '11번가리빙', platform: '11st', stage: 4, currentProducts: 6150, targetProducts: 8200, progress: 75, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 1, renewalReason: '' },
+            
+            // 상품명변경
+            { id: 'store_009', name: '디지털존', platform: 'naver', stage: 5, currentProducts: 3520, targetProducts: 6400, progress: 55, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            { id: 'coupang_005', name: '쿠팡뷰티', platform: 'coupang', stage: 5, currentProducts: 2340, targetProducts: 7800, progress: 30, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 5, renewalReason: '' },
+            
+            // 복사
+            { id: 'store_010', name: '푸드마켓', platform: 'naver', stage: 6, currentProducts: 1040, targetProducts: 5200, progress: 20, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 3, renewalReason: '' },
+            { id: 'gmarket_003', name: '지마켓홈', platform: 'gmarket', stage: 6, currentProducts: 2680, targetProducts: 6700, progress: 40, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 2, renewalReason: '' },
+            { id: 'auction_004', name: '옥션잡화', platform: 'auction', stage: 6, currentProducts: 4930, targetProducts: 5800, progress: 85, operationDays: 0, revenue: 0, targetRevenue: 50000000, cycleCount: 4, renewalReason: '' },
+        ];
+
+        const platformLogos = {
+            naver: { letter: 'N', class: 'naver' },
+            coupang: { letter: 'C', class: 'coupang' },
+            '11st': { letter: '11', class: 'st11' },
+            gmarket: { letter: 'G', class: 'gmarket' },
+            auction: { letter: 'A', class: 'auction' }
+        };
+
+        const stageIcons = ['📤', '🏪', '🔨', '🗑️', '✏️', '📋'];
+        const stageNames = ['업로드', '운영', '리뉴얼대상', '삭제', '변경', '복사'];
+
+        let currentStageFilter = 'all';
+        let currentPlatformFilter = 'all';
+        let searchQuery = '';
+
+        function formatRevenue(num) {
+            if (num >= 100000000) return (num / 100000000).toFixed(1) + '억';
+            if (num >= 10000000) return (num / 10000000).toFixed(0) + '천만';
+            if (num >= 10000) return (num / 10000).toFixed(0) + '만';
+            return num.toLocaleString();
+        }
+
+        function getRevenueStatus(revenue, target) {
+            const percent = (revenue / target) * 100;
+            if (percent >= 100) return 'achieved';
+            if (percent >= 50) return 'warning';
+            return 'danger';
+        }
+
+        function getDaysClass(days) {
+            if (days >= 60) return 'danger';
+            if (days >= 30) return 'warning';
+            return '';
+        }
+
+        function renderAll() {
+            const filtered = accounts.filter(acc => {
+                const matchStage = currentStageFilter === 'all' || acc.stage === parseInt(currentStageFilter);
+                const matchPlatform = currentPlatformFilter === 'all' || acc.platform === currentPlatformFilter;
+                const matchSearch = acc.name.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchStage && matchPlatform && matchSearch;
+            });
+
+            // 카운트 업데이트
+            document.getElementById('countAll').textContent = accounts.length;
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`count${i}`).textContent = accounts.filter(a => a.stage === i).length;
+            }
+
+            // PC 테이블
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = filtered.map(acc => {
+                const logo = platformLogos[acc.platform];
+                const cycleClass = acc.cycleCount >= 4 ? 'many' : '';
+                const revenuePercent = Math.min((acc.revenue / acc.targetRevenue) * 100, 100);
+                const revenueStatus = getRevenueStatus(acc.revenue, acc.targetRevenue);
+                const isGaliTarget = acc.stage === 2 && revenuePercent < 60 && acc.operationDays >= 30;
+
+                let stageCells = '';
+                for (let i = 1; i <= 6; i++) {
+                    let stateClass = 'inactive';
+                    let content = `<div class="icon">${stageIcons[i-1]}</div>`;
+
+                    if (i < acc.stage) {
+                        stateClass = 'completed';
+                        content = `<div class="icon">✓</div>`;
+                    } else if (i === acc.stage) {
+                        stateClass = 'active';
+                        if (i === 1) {
+                            // 업로드: 수량/목표 + 퍼센트
+                            content = `<div class="icon">📤</div><div class="value">${acc.currentProducts}/${acc.targetProducts}</div><div class="progress-bar"><div class="progress-bar-fill" style="width:${acc.progress}%"></div></div><div class="value">${acc.progress}%</div>`;
+                        } else if (i === 2) {
+                            // 운영: 일수
+                            const daysClass = getDaysClass(acc.operationDays);
+                            content = `<div class="icon">🏪</div><div class="operation-days ${daysClass}">${acc.operationDays}일</div>`;
+                        } else if (i === 3) {
+                            // 리뉴얼대상: 사유만
+                            content = `<div class="icon">🔨</div><div class="value" style="font-size:9px;color:var(--accent-red);text-align:center;">${acc.renewalReason}</div>`;
+                        } else {
+                            // 삭제/변경/복사: 수량/목표 + 퍼센트
+                            content = `<div class="icon">${stageIcons[i-1]}</div><div class="value">${acc.currentProducts}/${acc.targetProducts}</div><div class="progress-bar"><div class="progress-bar-fill" style="width:${acc.progress}%"></div></div><div class="value">${acc.progress}%</div>`;
+                        }
+                    }
+
+                    stageCells += `<div class="stage-cell"><div class="stage-indicator ${stateClass}">${content}</div></div>`;
+                }
+
+                let revenueCell = '';
+                if (acc.stage === 2 || acc.stage === 3) {
+                    revenueCell = `
+                        <div class="revenue-cell">
+                            <div class="revenue-header-row">
+                                <span class="revenue-current">${formatRevenue(acc.revenue)}</span>
+                                <span class="revenue-target">/ ${formatRevenue(acc.targetRevenue)}</span>
+                            </div>
+                            <div class="revenue-bar"><div class="revenue-bar-fill ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                            <div class="revenue-percent ${revenueStatus}">${revenuePercent.toFixed(0)}%${isGaliTarget ? '<span class="gali-tag">갈이</span>' : ''}</div>
+                        </div>`;
+                } else {
+                    revenueCell = `<div class="revenue-cell"><div style="text-align:center;color:var(--text-muted);font-size:11px">-</div></div>`;
+                }
+
+                return `
+                    <div class="table-row">
+                        <div class="account-cell">
+                            <div class="account-logo ${logo.class}">${logo.letter}</div>
+                            <div class="account-info">
+                                <h4>${acc.name} ${acc.cycleCount > 1 ? `<span class="cycle-badge ${cycleClass}">${acc.cycleCount}회</span>` : ''}</h4>
+                            </div>
+                        </div>
+                        ${stageCells}
+                        ${revenueCell}
+                    </div>`;
+            }).join('');
+
+            // 모바일 카드
+            const cardView = document.getElementById('cardView');
+            cardView.innerHTML = filtered.map(acc => {
+                const logo = platformLogos[acc.platform];
+                const cycleClass = acc.cycleCount >= 4 ? 'many' : '';
+                const revenuePercent = Math.min((acc.revenue / acc.targetRevenue) * 100, 100);
+                const revenueStatus = getRevenueStatus(acc.revenue, acc.targetRevenue);
+                const isGaliTarget = acc.stage === 2 && revenuePercent < 60 && acc.operationDays >= 30;
+                const daysClass = getDaysClass(acc.operationDays);
+
+                let stageContent = '';
+                if (acc.stage === 1) {
+                    // 업로드: 수량/목표
+                    stageContent = `
+                        <div class="card-stage-icon active">📤</div>
+                        <div class="card-stage-info">
+                            <div class="card-stage-name">업로드</div>
+                            <div class="card-stage-value">${acc.currentProducts}/${acc.targetProducts}</div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress}%"></div></div>
+                        </div>`;
+                } else if (acc.stage === 2) {
+                    stageContent = `
+                        <div class="card-stage-icon active">🏪</div>
+                        <div class="card-stage-info">
+                            <div class="card-stage-name">운영중</div>
+                            <div class="card-stage-value days ${daysClass}">${acc.operationDays}일</div>
+                        </div>`;
+                } else if (acc.stage === 3) {
+                    // 리뉴얼대상: 사유만
+                    stageContent = `
+                        <div class="card-stage-icon active">🔨</div>
+                        <div class="card-stage-info">
+                            <div class="card-stage-name">리뉴얼대상</div>
+                            <div class="card-stage-value" style="color:var(--accent-red);font-size:12px;">${acc.renewalReason}</div>
+                        </div>`;
+                } else {
+                    // 삭제/변경/복사: 수량/목표
+                    stageContent = `
+                        <div class="card-stage-icon active">${stageIcons[acc.stage-1]}</div>
+                        <div class="card-stage-info">
+                            <div class="card-stage-name">${stageNames[acc.stage-1]}</div>
+                            <div class="card-stage-value">${acc.currentProducts}/${acc.targetProducts}</div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="card-progress-bar"><div class="card-progress-bar-fill" style="width:${acc.progress}%"></div></div>
+                        </div>`;
+                }
+
+                let miniStages = '';
+                for (let i = 1; i <= 6; i++) {
+                    let cls = '';
+                    if (i < acc.stage) cls = 'completed';
+                    else if (i === acc.stage) cls = 'active';
+                    miniStages += `<div class="mini-stage ${cls}"></div>`;
+                }
+
+                let revenueSection = '';
+                if (acc.stage === 2 || acc.stage === 3) {
+                    revenueSection = `
+                        <div class="card-revenue">
+                            <div class="card-revenue-header">
+                                <span class="card-revenue-title">💰 목표매출</span>
+                                <span class="card-revenue-value ${revenueStatus}">${revenuePercent.toFixed(0)}%${isGaliTarget ? ' 🔴' : ''}</span>
+                            </div>
+                            <div class="card-revenue-bar"><div class="card-revenue-bar-fill ${revenueStatus}" style="width:${revenuePercent}%"></div></div>
+                            <div class="card-revenue-footer">
+                                <span>${formatRevenue(acc.revenue)}</span>
+                                <span class="card-revenue-target">/ ${formatRevenue(acc.targetRevenue)}</span>
+                            </div>
+                        </div>`;
+                }
+
+                return `
+                    <div class="account-card">
+                        <div class="card-header">
+                            <div class="account-logo ${logo.class}">${logo.letter}</div>
+                            <div class="account-info">
+                                <h4>${acc.name} ${acc.cycleCount > 1 ? `<span class="cycle-badge ${cycleClass}">${acc.cycleCount}회</span>` : ''}</h4>
+                            </div>
+                        </div>
+                        <div class="card-stage">${stageContent}</div>
+                        ${revenueSection}
+                        <div class="card-stages-mini">${miniStages}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // 이벤트
+        document.querySelectorAll('.stage-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                currentStageFilter = this.dataset.stage;
+                renderAll();
+            });
+        });
+
+        document.querySelectorAll('.filter-pill').forEach(pill => {
+            pill.addEventListener('click', function() {
+                document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                currentPlatformFilter = this.dataset.platform;
+                renderAll();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('input', function() {
+            searchQuery = this.value;
+            renderAll();
+        });
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toTimeString().slice(0, 8);
+        }
+        setInterval(updateTime, 1000);
+
+        renderAll();
+        updateTime();
+    </script>
+</body>
+</html>
