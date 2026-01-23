@@ -7,12 +7,13 @@
 - 불사자 API로 대표옵션 업데이트
 """
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 import os
 import json
 import threading
 import subprocess
 import math
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional
@@ -86,7 +87,8 @@ def save_config(config):
 ALL_COLUMNS = {
     # 기본 정보
     "thumbnail": {"name": "썸네일", "width": 100, "category": "기본", "default": True},
-    "options": {"name": "옵션 선택", "width": 450, "category": "기본", "default": True},
+    "option_image": {"name": "옵션이미지", "width": 100, "category": "기본", "default": True},
+    "options": {"name": "옵션 선택", "width": 380, "category": "기본", "default": True},
     "product_name": {"name": "상품명", "width": 180, "category": "기본", "default": True},
     "is_safe": {"name": "안전", "width": 50, "category": "기본", "default": True},
     "option_count": {"name": "옵션수", "width": 60, "category": "기본", "default": True},
@@ -106,16 +108,18 @@ ALL_COLUMNS = {
     # 옵션 상세
     "total_options": {"name": "전체옵션", "width": 60, "category": "옵션", "default": False},
     "bait_options": {"name": "미끼옵션", "width": 60, "category": "옵션", "default": True},
+    "bait_keywords": {"name": "미끼키워드", "width": 120, "category": "옵션", "default": True},
+    "option_list": {"name": "옵션명목록", "width": 150, "category": "옵션", "default": True},
     "main_option": {"name": "대표옵션", "width": 100, "category": "옵션", "default": False},
 
     # 기타
     "product_id": {"name": "불사자ID", "width": 100, "category": "기타", "default": True},
-    "unsafe_reason": {"name": "위험사유", "width": 150, "category": "기타", "default": False},
+    "unsafe_reason": {"name": "위험키워드", "width": 120, "category": "기타", "default": True},
 }
 
 DEFAULT_COLUMN_ORDER = [
-    "product_id", "thumbnail", "options", "product_name", "thumb_score", "thumb_action",
-    "is_safe", "bait_options", "sale_price", "option_count", "group_name"
+    "product_id", "thumbnail", "option_image", "options", "option_list", "product_name",
+    "is_safe", "unsafe_reason", "bait_options", "bait_keywords", "sale_price", "option_count", "group_name"
 ]
 
 # ==================== 수집 설정 (업로더 v1.5와 동일) ====================
@@ -325,7 +329,7 @@ class ColumnSettingsDialog:
     def __init__(self, parent, current_columns: List[str], column_order: List[str]):
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("컬럼 설정")
-        self.dialog.geometry("500x600")
+        self.dialog.geometry("550x800")
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
@@ -363,7 +367,8 @@ class ColumnSettingsDialog:
 
             for col_id, col_info in cols:
                 var = tk.BooleanVar(value=col_id in self.current_columns)
-                cb = ttk.Checkbutton(cat_frame, text=col_info["name"], variable=var)
+                cb = ttk.Checkbutton(cat_frame, text=col_info["name"], variable=var,
+                                    command=lambda cid=col_id, v=var: self._on_checkbox_change(cid, v))
                 cb.pack(anchor=tk.W)
                 self.checkboxes[col_id] = var
 
@@ -393,6 +398,20 @@ class ColumnSettingsDialog:
         ttk.Button(bottom_frame, text="기본값", command=self._reset_default).pack(side=tk.LEFT)
         ttk.Button(bottom_frame, text="취소", command=self.dialog.destroy).pack(side=tk.RIGHT, padx=5)
         ttk.Button(bottom_frame, text="적용", command=self._apply).pack(side=tk.RIGHT)
+
+    def _on_checkbox_change(self, col_id, var):
+        """체크박스 변경 시 리스트박스 업데이트"""
+        if var.get():
+            # 체크됨 - 리스트에 추가 (없으면)
+            if col_id not in self.column_order:
+                self.column_order.append(col_id)
+                self.listbox.insert(tk.END, f"{ALL_COLUMNS[col_id]['name']} ({col_id})")
+        else:
+            # 체크 해제 - 리스트에서 제거
+            if col_id in self.column_order:
+                idx = self.column_order.index(col_id)
+                self.column_order.remove(col_id)
+                self.listbox.delete(idx)
 
     def _move_up(self):
         idx = self.listbox.curselection()
@@ -443,12 +462,32 @@ class SimulatorGUIv3:
     def __init__(self, root):
         self.root = root
         self.root.title("불사자 시뮬레이터 v3")
-        self.root.geometry("1600x900")
+        self.root.geometry("1600x1000")
+        self.root.minsize(1200, 800)
 
         self.data = []
         self.selected_options = {}
         self.option_frames = {}
+        self.expanded_rows = set()  # 옵션 확장된 행 추적
+        self.option_cells = {}  # {row_idx: (cell_frame, item, bg_color)} 옵션 셀 참조
+
+        # === 성능 최적화 ===
+        # LRU 캐시 (최대 100개, 오래된 것 자동 삭제)
         self.image_cache = {}
+        self.option_image_cache = {}
+        self._cache_max_size = 100
+
+        # ThreadPoolExecutor 재사용 (스레드 폭증 방지)
+        from concurrent.futures import ThreadPoolExecutor
+        self._image_executor = ThreadPoolExecutor(max_workers=8)
+
+        # 키워드 캐시 (파일 I/O 1회만)
+        self._bait_keywords_cache = None
+        self._banned_words_cache = None
+
+        # 페이지네이션
+        self.current_page = 0
+        self.page_size = 20  # 한 페이지에 20개
 
         # 컬럼 설정
         self.visible_columns = [col for col, info in ALL_COLUMNS.items() if info["default"]]
@@ -458,8 +497,8 @@ class SimulatorGUIv3:
         self._load_settings()
 
         self._create_ui()
-        # 검수 탭에서 최신 파일 자동 로드
-        self.root.after(100, self._auto_load_latest)
+        # 자동 로드 비활성화 - 사용자가 직접 엑셀 열기 클릭
+        # self.root.after(100, self._auto_load_latest)
 
     def _load_settings(self):
         """설정 파일 로드"""
@@ -670,6 +709,24 @@ class SimulatorGUIv3:
         ttk.Entry(save_row, textvariable=self.save_path_var, width=50).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
         ttk.Button(save_row, text="찾아보기", command=self._browse_save_path, width=8).pack(side=tk.RIGHT)
 
+        # === 6-1. 직접 API 업로드용 데이터 ===
+        api_data_frame = ttk.LabelFrame(scrollable, text="🔗 직접 API 업로드용 (스마트스토어 등)", padding=5)
+        api_data_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        api_row = ttk.Frame(api_data_frame)
+        api_row.pack(fill=tk.X, pady=2)
+
+        self.fetch_detail_contents_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(api_row, text="상세이미지 (uploadDetailContents)",
+                       variable=self.fetch_detail_contents_var).pack(side=tk.LEFT, padx=(0, 15))
+
+        self.fetch_category_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(api_row, text="카테고리 (uploadCategory)",
+                       variable=self.fetch_category_var).pack(side=tk.LEFT)
+
+        ttk.Label(api_data_frame, text="※ 체크 시 수집 속도가 느려집니다 (상품당 API 추가 호출)",
+                  font=('맑은 고딕', 8), foreground="gray").pack(anchor=tk.W)
+
         # === 7. 마진 설정 ===
         margin_frame = ttk.LabelFrame(scrollable, text="💰 마진 설정", padding=5)
         margin_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -711,7 +768,7 @@ class SimulatorGUIv3:
         ttk.Button(btn_frame, text="수집 시작", command=self._start_collection).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="수집 중지", command=self._stop_collection).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="엑셀로 저장", command=self._save_collection_to_excel).pack(side=tk.LEFT, padx=20)
-        ttk.Button(btn_frame, text="검수 탭으로 →", command=lambda: self.notebook.select(self.review_tab)).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="▶ 검수로 이동", command=self._transfer_to_review).pack(side=tk.RIGHT, padx=5)
 
         # === 7. 진행 상황 ===
         progress_frame = ttk.LabelFrame(scrollable, text="📊 진행 상황", padding=5)
@@ -736,7 +793,9 @@ class SimulatorGUIv3:
 
         ttk.Button(toolbar, text="엑셀 열기", command=self._load_excel).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="컬럼 설정", command=self._open_column_settings).pack(side=tk.LEFT, padx=5)
-        ttk.Button(toolbar, text="썸네일 분석", command=self._analyze_thumbnails).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="썸네일 로드 (현재페이지)", command=self._load_all_thumbnails).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="썸네일 분석 (누끼찾기)", command=self._analyze_thumbnails).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="지재권 분석", command=self._analyze_ip_words).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
@@ -753,6 +812,30 @@ class SimulatorGUIv3:
 
         self.count_label = ttk.Label(toolbar, text="상품: 0개")
         self.count_label.pack(side=tk.RIGHT, padx=20)
+
+        # 페이지네이션 바
+        page_bar = ttk.Frame(frame, padding=5)
+        page_bar.pack(fill=tk.X)
+
+        ttk.Button(page_bar, text="◀◀ 처음", width=8, command=self._go_first_page).pack(side=tk.LEFT, padx=2)
+        ttk.Button(page_bar, text="◀ 이전", width=8, command=self._go_prev_page).pack(side=tk.LEFT, padx=2)
+
+        self.page_label = ttk.Label(page_bar, text="1 / 1 페이지", font=("맑은 고딕", 10, "bold"))
+        self.page_label.pack(side=tk.LEFT, padx=20)
+
+        ttk.Button(page_bar, text="다음 ▶", width=8, command=self._go_next_page).pack(side=tk.LEFT, padx=2)
+        ttk.Button(page_bar, text="끝 ▶▶", width=8, command=self._go_last_page).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(page_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=15)
+
+        ttk.Label(page_bar, text="페이지당:").pack(side=tk.LEFT)
+        self.page_size_var = tk.StringVar(value="20")
+        page_size_combo = ttk.Combobox(page_bar, textvariable=self.page_size_var, values=["10", "20", "30", "50"], width=5, state="readonly")
+        page_size_combo.pack(side=tk.LEFT, padx=5)
+        page_size_combo.bind("<<ComboboxSelected>>", self._on_page_size_change)
+
+        self.page_info_label = ttk.Label(page_bar, text="(0 ~ 0 / 총 0개)", foreground="gray")
+        self.page_info_label.pack(side=tk.LEFT, padx=10)
 
         # 메인 영역 (스크롤)
         main_frame = ttk.Frame(frame)
@@ -775,7 +858,82 @@ class SimulatorGUIv3:
         scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        # 마우스휠 스크롤 핸들러
+        def _on_mousewheel(event):
+            try:
+                self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except:
+                pass
+
+        # 마우스휠 바인딩 저장 (자식 위젯에도 적용하기 위해)
+        self._mousewheel_handler = _on_mousewheel
+        self.canvas.bind("<MouseWheel>", _on_mousewheel)
+        self.scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
+
+        # 캔버스 진입/이탈 시 전역 마우스휠 바인딩
+        def _bind_mousewheel(event):
+            self.root.bind_all("<MouseWheel>", _on_mousewheel)
+        def _unbind_mousewheel(event):
+            self.root.unbind_all("<MouseWheel>")
+
+        self.canvas.bind("<Enter>", _bind_mousewheel)
+        self.canvas.bind("<Leave>", _unbind_mousewheel)
+
+    # ========== 페이지네이션 함수 ==========
+    def _get_total_pages(self):
+        """총 페이지 수"""
+        if not self.data:
+            return 1
+        return max(1, (len(self.data) + self.page_size - 1) // self.page_size)
+
+    def _go_first_page(self):
+        """첫 페이지로"""
+        if self.current_page != 0:
+            self.current_page = 0
+            self._render_data()
+
+    def _go_prev_page(self):
+        """이전 페이지"""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._render_data()
+
+    def _go_next_page(self):
+        """다음 페이지"""
+        if self.current_page < self._get_total_pages() - 1:
+            self.current_page += 1
+            self._render_data()
+
+    def _go_last_page(self):
+        """마지막 페이지로"""
+        last_page = self._get_total_pages() - 1
+        if self.current_page != last_page:
+            self.current_page = last_page
+            self._render_data()
+
+    def _on_page_size_change(self, event=None):
+        """페이지 크기 변경"""
+        try:
+            self.page_size = int(self.page_size_var.get())
+        except:
+            self.page_size = 20
+        self.current_page = 0  # 첫 페이지로
+        self._render_data()
+
+    def _update_page_info(self):
+        """페이지 정보 업데이트"""
+        total = len(self.data)
+        total_pages = self._get_total_pages()
+
+        start_idx = self.current_page * self.page_size + 1
+        end_idx = min((self.current_page + 1) * self.page_size, total)
+
+        if total == 0:
+            start_idx = 0
+            end_idx = 0
+
+        self.page_label.config(text=f"{self.current_page + 1} / {total_pages} 페이지")
+        self.page_info_label.config(text=f"({start_idx} ~ {end_idx} / 총 {total}개)")
 
     def _create_settings_tab(self):
         """설정 탭 UI"""
@@ -1116,6 +1274,13 @@ class SimulatorGUIv3:
         self.is_collecting = True
 
         def collect():
+            # 직접 API 업로드용 옵션 (메인 스레드에서 미리 가져옴)
+            fetch_detail_contents = self.fetch_detail_contents_var.get()
+            fetch_category = self.fetch_category_var.get()
+
+            if fetch_detail_contents or fetch_category:
+                self._log_collection(f"🔗 직접 API 옵션: 상세이미지={fetch_detail_contents}, 카테고리={fetch_category}")
+
             try:
                 collected_data = []
                 total_groups = len(group_names)
@@ -1143,9 +1308,23 @@ class SimulatorGUIv3:
                         try:
                             detail = self.api_client.get_product_detail(prod_id)
                             detail['_group_name'] = group_name  # 그룹명 추가
+
+                            # 직접 API 업로드용 추가 데이터 가져오기
+                            if fetch_detail_contents or fetch_category:
+                                try:
+                                    upload_fields = self.api_client.get_upload_fields(prod_id)
+                                    if upload_fields:
+                                        if fetch_detail_contents:
+                                            detail['uploadDetailContents'] = upload_fields.get('uploadDetailContents', {})
+                                        if fetch_category:
+                                            detail['uploadCategory'] = upload_fields.get('uploadCategory', {})
+                                except Exception as uf_e:
+                                    self._log_collection(f"      ⚠️ uploadFields 실패: {uf_e}")
+
                             collected_data.append(detail)
                             prod_name = prod.get('uploadCommonProductName', '') or prod.get('name', '')
-                            self._log_collection(f"   [{i+1}/{len(products)}] {prod_name[:25]}...")
+                            extra_info = " [+API]" if (fetch_detail_contents or fetch_category) else ""
+                            self._log_collection(f"   [{i+1}/{len(products)}] {prod_name[:25]}...{extra_info}")
                         except Exception as e:
                             self._log_collection(f"   ❌ {prod_id}: {e}")
 
@@ -1244,13 +1423,114 @@ class SimulatorGUIv3:
 
                 self._log_collection(f"✅ 저장 완료: {filepath}")
                 self._log_collection(f"   총 {stats['total']}개 / 안전 {stats['safe']}개 / 위험 {stats['unsafe']}개")
-                self.root.after(0, lambda: messagebox.showinfo("완료", f"엑셀 저장 완료!\n\n{filepath}"))
+
+                # 저장 후 자동으로 검수탭 전환 + 로드
+                def auto_load():
+                    messagebox.showinfo("완료", f"엑셀 저장 완료!\n\n{filepath}\n\n검수탭으로 이동합니다.")
+                    self._load_excel_file(filepath)
+                    self.notebook.select(self.review_tab)
+
+                self.root.after(0, auto_load)
 
             except Exception as e:
                 self._log_collection(f"❌ 저장 실패: {e}")
                 self.root.after(0, lambda: messagebox.showerror("오류", f"저장 실패: {e}"))
 
         threading.Thread(target=save_task, daemon=True).start()
+
+    def _transfer_to_review(self):
+        """수집 데이터를 엑셀 저장 없이 바로 검수탭으로 전달"""
+        if not hasattr(self, 'collected_data') or not self.collected_data:
+            messagebox.showwarning("경고", "먼저 수집을 실행하세요")
+            return
+
+        self._log_collection(f"📤 검수탭으로 데이터 전달 중... ({len(self.collected_data)}개)")
+
+        def transfer_task():
+            try:
+                # 키워드 로드
+                banned_words, _ = load_banned_words()
+                excluded_words = load_excluded_words()
+                bait_keywords = load_bait_keywords()
+
+                # 검수 설정
+                check_level = self.check_level_var.get()
+                risk_categories = [c.strip() for c in self.risk_categories_var.get().split(',') if c.strip()]
+
+                # 분석 결과 → 검수탭 포맷 변환
+                review_data = []
+                self.selected_options = {}
+
+                for idx, product in enumerate(self.collected_data):
+                    product_category = product.get('categoryPath', '') or product.get('category', '') or ''
+                    product_check_level = check_level
+
+                    for risk_cat in risk_categories:
+                        if risk_cat and risk_cat.lower() in product_category.lower():
+                            product_check_level = 'strict'
+                            break
+
+                    result = self._analyze_single_product(product, bait_keywords, excluded_words, product_check_level)
+                    result['group_name'] = product.get('_group_name', '')
+
+                    # 검수탭 item 포맷으로 변환
+                    item = {
+                        "row_idx": idx,
+                        "product_name": result.get('name', '')[:30],
+                        "product_id": result.get('id', ''),
+                        "is_safe": result.get('is_safe', True),
+                        "unsafe_reason": result.get('unsafe_reason', ''),
+                        "group_name": result.get('group_name', ''),
+                        "thumbnail_formula": "",
+                        "thumbnail_url": result.get('thumbnail_url', ''),
+                        "thumb_score": 0,
+                        "thumb_nukki": False,
+                        "thumb_text": False,
+                        "thumb_action": "-",
+                        "option_image_formula": "",
+                        "option_image_url": result.get('main_option_image', ''),
+                        "total_options": result.get('total_options', 0),
+                        "final_options": result.get('final_options', 0),
+                        "bait_options": result.get('bait_options', 0),
+                        "main_option": result.get('main_option_name', ''),
+                        "selected": "A",
+                        "option_names": '\n'.join([f"{chr(65+i)}. {opt}" for i, opt in enumerate(result.get('final_option_list', []))]),
+                        "cn_option_names": '\n'.join([f"{chr(65+i)}. {opt}" for i, opt in enumerate(result.get('cn_option_list', []))]),
+                        "price_cny": result.get('min_price_cny', 0),
+                        "price_krw": 0,
+                        "sale_price": 0,
+                        "option_images": result.get('option_images', {}),
+                        "option_count": f"{result.get('final_options', 0)}/{result.get('total_options', 0)}",
+                        "all_thumbnails": result.get('all_thumbnails', []),  # 전체 썸네일 (분석용)
+                    }
+
+                    # 옵션 파싱
+                    item["options"] = self._parse_options(item["option_names"], item["cn_option_names"])
+                    review_data.append(item)
+                    self.selected_options[idx] = "A"
+
+                    if (idx + 1) % 20 == 0:
+                        self._log_collection(f"  변환 중... {idx+1}/{len(self.collected_data)}")
+
+                # 검수탭 데이터 설정
+                self.data = review_data
+
+                def update_ui():
+                    self.file_label.config(text=f"[메모리] {len(self.data)}개 상품", foreground="blue")
+                    self.count_label.config(text=f"상품: {len(self.data)}개")
+                    self.current_page = 0  # 첫 페이지로 리셋
+                    self._render_data()
+                    self.notebook.select(self.review_tab)
+
+                self.root.after(0, update_ui)
+                self._log_collection(f"✅ 검수탭 전달 완료: {len(review_data)}개")
+
+            except Exception as e:
+                self._log_collection(f"❌ 전달 실패: {e}")
+                import traceback
+                traceback.print_exc()
+
+        threading.Thread(target=transfer_task, daemon=True).start()
 
     def _analyze_single_product(self, product: Dict, bait_keywords: list, excluded_words: list, check_level: str = 'normal') -> Dict:
         """단일 상품 분석 (기존 시뮬레이터 로직)
@@ -1286,6 +1566,15 @@ class SimulatorGUIv3:
             'main_option_image': '',
             'min_price_cny': 0,
             'max_price_cny': 0,
+            # 직접 API 업로드용 추가 데이터
+            'option_images': {},  # {A: url, B: url, C: url, ...}
+            'option_prices': {},  # {A: price, B: price, ...}
+            'all_thumbnails': [],  # 전체 썸네일 URL 목록
+            'all_skus': [],  # 전체 SKU 데이터 (직접 API용)
+            'raw_product': None,  # 원본 상품 데이터 전체
+            # 직접 API 업로드용 (옵션 선택 시)
+            'upload_detail_contents': None,  # 상세이미지 (uploadDetailContents)
+            'upload_category': None,  # 카테고리 (uploadCategory)
         }
 
         try:
@@ -1313,23 +1602,47 @@ class SimulatorGUIv3:
                     categories.append(f"유아:{','.join(cats['child'][:2])}")
                 if cats.get('prohibited'):
                     categories.append(f"금지:{','.join(cats['prohibited'][:2])}")
-                result['unsafe_reason'] = ' / '.join(categories)
+                if cats.get('brand'):
+                    categories.append(f"브랜드:{','.join(cats['brand'][:2])}")
+                result['unsafe_reason'] = ' / '.join(categories) if categories else '위험키워드감지'
 
-            # 2. 썸네일 URL
+            # 2. 원본 상품 데이터 저장 (직접 API용)
+            result['raw_product'] = product
+
+            # 2-1. 직접 API 업로드용 추가 데이터 (수집 시 옵션 선택된 경우)
+            if product.get('uploadDetailContents'):
+                result['upload_detail_contents'] = product.get('uploadDetailContents')
+            if product.get('uploadCategory'):
+                result['upload_category'] = product.get('uploadCategory')
+
+            # 3. 썸네일 URL
             thumbnails = product.get('uploadThumbnails', [])
+            result['all_thumbnails'] = thumbnails  # 모든 썸네일 저장
             if thumbnails:
                 result['thumbnail_url'] = thumbnails[0]
 
-            # 3. SKU 정보
+            # 4. SKU 정보
             upload_skus = product.get('uploadSkus', [])
             if not upload_skus:
                 upload_skus = product.get('original_skus', [])
 
+            # 전체 SKU 데이터 저장 (직접 API용)
+            result['all_skus'] = upload_skus
+
             result['total_options'] = len(upload_skus)
 
             if upload_skus:
-                # 가격 범위
-                prices = [sku.get('_origin_price', 0) for sku in upload_skus if sku.get('_origin_price', 0) > 0]
+                # 가격 범위 (None 안전 처리)
+                prices = []
+                for sku in upload_skus:
+                    p = sku.get('_origin_price')
+                    if p is not None:
+                        try:
+                            p = float(p)
+                            if p > 0:
+                                prices.append(p)
+                        except (ValueError, TypeError):
+                            pass
                 if prices:
                     result['min_price_cny'] = min(prices)
                     result['max_price_cny'] = max(prices)
@@ -1361,28 +1674,49 @@ class SimulatorGUIv3:
                         result['main_option_image'] = main_option_img
 
                     # 옵션 개수 제한 (5개)
-                    option_count = self.option_count_var.get() if hasattr(self, 'option_count_var') else 5
-                    main_sku_price = main_sku.get('_origin_price', 0)
+                    try:
+                        option_count = int(self.option_count_var.get()) if hasattr(self, 'option_count_var') else 5
+                    except (ValueError, TypeError):
+                        option_count = 5
+
+                    # 가격을 float로 안전하게 변환하는 헬퍼
+                    def safe_price(val):
+                        if val is None:
+                            return 0.0
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return 0.0
+
+                    main_sku_price = safe_price(main_sku.get('_origin_price'))
 
                     if option_count > 0:
                         eligible_skus = [
                             sku for sku in valid_skus
-                            if sku.get('_origin_price', 0) >= main_sku_price
+                            if safe_price(sku.get('_origin_price')) >= main_sku_price
                         ]
-                        eligible_skus.sort(key=lambda x: x.get('_origin_price', 0))
+                        eligible_skus.sort(key=lambda x: safe_price(x.get('_origin_price')))
                         final_skus = eligible_skus[:option_count]
                     else:
                         final_skus = valid_skus
 
                     result['final_options'] = len(final_skus)
 
-                    # 최종 옵션 목록
-                    for sku in final_skus:
+                    # 최종 옵션 목록 + 옵션 이미지/가격 수집
+                    labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                    for idx, sku in enumerate(final_skus):
                         opt_name = sku.get('text_ko', '') or sku.get('text', '')
                         opt_cn = sku.get('text', '') or ''
-                        opt_price = sku.get('_origin_price', 0)
+                        opt_price = safe_price(sku.get('_origin_price', 0))
+                        opt_image = sku.get('urlRef', '') or sku.get('image', '')
+
                         result['final_option_list'].append(f"{opt_name[:20]}({opt_price:.1f})")
                         result['cn_option_list'].append(opt_cn[:20])
+
+                        # A, B, C... 라벨로 옵션 이미지/가격 저장
+                        label = labels[idx] if idx < len(labels) else str(idx + 1)
+                        result['option_images'][label] = opt_image
+                        result['option_prices'][label] = opt_price
 
         except Exception as e:
             result['unsafe_reason'] = f"분석오류: {str(e)[:50]}"
@@ -1409,6 +1743,7 @@ class SimulatorGUIv3:
     def _save_results_to_excel(self, filepath: str, results: list, stats: dict):
         """분석 결과를 엑셀로 저장 (기존 시뮬레이터 형식)"""
         from datetime import datetime
+        import json
         wb = Workbook()
         ws = wb.active
         ws.title = "분석결과"
@@ -1431,7 +1766,8 @@ class SimulatorGUIv3:
         headers = [
             "썸네일\n이미지", "옵션\n이미지", "상품명", "안전여부", "위험사유",
             "전체옵션", "유효옵션", "최종옵션", "미끼옵션", "미끼옵션목록",
-            "대표옵션", "선택방식", "선택", "옵션명", "중국어\n옵션명", "그룹명"
+            "대표옵션", "선택방식", "선택", "옵션명", "중국어\n옵션명", "그룹명",
+            "불사자ID", "옵션이미지JSON"
         ]
 
         for col, header in enumerate(headers, 1):
@@ -1514,12 +1850,21 @@ class SimulatorGUIv3:
             ws.cell(row=row_idx, column=col, value=result.get('group_name', ''))
             col += 1
 
+            # 17. 불사자ID
+            ws.cell(row=row_idx, column=col, value=result.get('id', ''))
+            col += 1
+
+            # 18. 옵션이미지JSON
+            opt_images = result.get('option_images', {})
+            ws.cell(row=row_idx, column=col, value=json.dumps(opt_images, ensure_ascii=False) if opt_images else '')
+            col += 1
+
             # 테두리 적용
             for c in range(1, col):
                 ws.cell(row=row_idx, column=c).border = border
 
         # 열 너비 조정
-        column_widths = [15, 15, 40, 8, 20, 8, 8, 8, 8, 30, 25, 12, 6, 35, 35, 12]
+        column_widths = [15, 15, 40, 8, 20, 8, 8, 8, 8, 30, 25, 12, 6, 35, 35, 12, 15, 50]
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = width
 
@@ -1536,7 +1881,8 @@ class SimulatorGUIv3:
         detail_headers = [
             "그룹", "불사자ID", "상품명", "안전여부", "위험사유",
             "전체옵션", "유효옵션", "최종옵션", "미끼옵션", "미끼옵션목록",
-            "선택", "대표옵션", "최저가(CNY)", "최고가(CNY)", "최종옵션목록", "메인썸네일URL", "옵션이미지URL"
+            "선택", "대표옵션", "최저가(CNY)", "최고가(CNY)", "최종옵션목록", "메인썸네일URL", "옵션이미지URL",
+            "옵션이미지JSON", "옵션가격JSON", "전체썸네일", "중국어옵션목록"
         ]
         for col, header in enumerate(detail_headers, 1):
             cell = ws_detail.cell(row=1, column=col, value=header)
@@ -1583,8 +1929,25 @@ class SimulatorGUIv3:
             ws_detail.cell(row=row_idx, column=16, value=result.get('thumbnail_url', '')).border = border
             ws_detail.cell(row=row_idx, column=17, value=result.get('main_option_image', '')).border = border
 
+            # 추가 데이터 (직접 API 업로드용)
+            # 18. 옵션이미지JSON
+            opt_images = result.get('option_images', {})
+            ws_detail.cell(row=row_idx, column=18, value=json.dumps(opt_images, ensure_ascii=False) if opt_images else '').border = border
+
+            # 19. 옵션가격JSON
+            opt_prices = result.get('option_prices', {})
+            ws_detail.cell(row=row_idx, column=19, value=json.dumps(opt_prices, ensure_ascii=False) if opt_prices else '').border = border
+
+            # 20. 전체썸네일
+            all_thumbs = result.get('all_thumbnails', [])
+            ws_detail.cell(row=row_idx, column=20, value='|'.join(all_thumbs) if all_thumbs else '').border = border
+
+            # 21. 중국어옵션목록
+            cn_opts = result.get('cn_option_list', [])
+            ws_detail.cell(row=row_idx, column=21, value=self._format_options_abc(cn_opts)).border = border
+
         # 상세시트 열 너비
-        detail_widths = [12, 12, 40, 8, 25, 8, 8, 8, 8, 35, 6, 25, 10, 10, 40, 45, 45]
+        detail_widths = [12, 12, 40, 8, 25, 8, 8, 8, 8, 35, 6, 25, 10, 10, 40, 45, 45, 50, 35, 80, 40]
         for i, width in enumerate(detail_widths, 1):
             ws_detail.column_dimensions[get_column_letter(i)].width = width
 
@@ -1601,6 +1964,43 @@ class SimulatorGUIv3:
         for row_idx, row_data in enumerate(stats_data, 1):
             for col_idx, value in enumerate(row_data, 1):
                 ws_stats.cell(row=row_idx, column=col_idx, value=value)
+
+        # === 원본SKU데이터 시트 (직접 API 업로드용) ===
+        ws_raw = wb.create_sheet("원본SKU데이터")
+        raw_headers = ["불사자ID", "상품명", "전체SKU_JSON", "전체썸네일_JSON", "원본데이터요약"]
+        for col, header in enumerate(raw_headers, 1):
+            cell = ws_raw.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = border
+
+        for row_idx, result in enumerate(results, 2):
+            ws_raw.cell(row=row_idx, column=1, value=result.get('id', '')).border = border
+            ws_raw.cell(row=row_idx, column=2, value=result.get('name', '')[:50]).border = border
+
+            # 전체 SKU JSON (직접 API용)
+            all_skus = result.get('all_skus', [])
+            sku_json = json.dumps(all_skus, ensure_ascii=False) if all_skus else ''
+            # 엑셀 셀 크기 제한 (32767자)
+            if len(sku_json) > 32000:
+                sku_json = sku_json[:32000] + '...[truncated]'
+            ws_raw.cell(row=row_idx, column=3, value=sku_json).border = border
+
+            # 전체 썸네일 JSON
+            all_thumbs = result.get('all_thumbnails', [])
+            ws_raw.cell(row=row_idx, column=4, value=json.dumps(all_thumbs, ensure_ascii=False) if all_thumbs else '').border = border
+
+            # 원본 데이터 요약 (키 목록만)
+            raw_product = result.get('raw_product', {})
+            if raw_product:
+                summary_keys = list(raw_product.keys())[:20]
+                ws_raw.cell(row=row_idx, column=5, value=f"keys: {', '.join(summary_keys)}").border = border
+
+        # 원본SKU 시트 열 너비
+        raw_widths = [15, 40, 100, 80, 50]
+        for i, width in enumerate(raw_widths, 1):
+            ws_raw.column_dimensions[get_column_letter(i)].width = width
 
         wb.save(filepath)
 
@@ -1682,25 +2082,72 @@ class SimulatorGUIv3:
 
     def _load_excel(self):
         """파일 선택"""
-        filepath = filedialog.askopenfilename(
-            title="시뮬레이션 엑셀 선택",
-            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-            initialdir=str(Path(__file__).parent)
-        )
+        try:
+            filepath = filedialog.askopenfilename(
+                title="시뮬레이션 엑셀 선택",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                initialdir=str(Path(__file__).parent)
+            )
+        except Exception:
+            # initialdir 오류 시 기본 경로로 재시도
+            filepath = filedialog.askopenfilename(
+                title="시뮬레이션 엑셀 선택",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
         if filepath:
             self._load_excel_file(filepath)
 
     def _load_excel_file(self, filepath):
-        """엑셀 파일 로드"""
-        if not PANDAS_AVAILABLE:
-            messagebox.showerror("오류", "pandas가 필요합니다: pip install pandas openpyxl")
+        """엑셀 파일 로드 - openpyxl로 수식까지 읽기"""
+        if not OPENPYXL_AVAILABLE:
+            messagebox.showerror("오류", "openpyxl이 필요합니다: pip install openpyxl")
             return
 
         try:
-            df = pd.read_excel(filepath, engine='openpyxl')
+            # openpyxl로 직접 읽기 (수식 보존)
+            from openpyxl import load_workbook
+            wb = load_workbook(filepath, data_only=False)  # data_only=False로 수식 읽기
+
+            # 분석결과 시트 선택 (없으면 첫 번째 시트)
+            if "분석결과" in wb.sheetnames:
+                ws = wb["분석결과"]
+            else:
+                ws = wb.active
+
+            # 헤더 읽기
+            headers = []
+            for col in range(1, ws.max_column + 1):
+                val = ws.cell(row=1, column=col).value
+                headers.append(str(val) if val else f"col_{col}")
+
+            print(f"📊 엑셀 컬럼명: {headers}")
+
+            # 데이터 읽기
+            data_rows = []
+            for row_idx in range(2, ws.max_row + 1):
+                row_data = {}
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    row_data[header] = cell.value
+                data_rows.append(row_data)
+
+            # DataFrame으로 변환
+            df = pd.DataFrame(data_rows)
+            wb.close()
+
+            # 디버그 파일 저장
+            with open("excel_debug.txt", "w", encoding="utf-8") as f:
+                f.write(f"컬럼명: {headers}\n\n")
+                if data_rows:
+                    f.write(f"첫 번째 행 데이터:\n")
+                    for k, v in data_rows[0].items():
+                        f.write(f"  [{k}]: {str(v)[:100]}\n")
+
         except Exception as e:
+            print(f"❌ 엑셀 로드 오류: {e}")
+            # 폴백: pandas로 시도
             try:
-                df = pd.read_excel(filepath)
+                df = pd.read_excel(filepath, engine='openpyxl')
             except Exception as e2:
                 messagebox.showerror("오류", f"엑셀 로드 실패:\n{e}\n{e2}")
                 return
@@ -1708,29 +2155,82 @@ class SimulatorGUIv3:
         self._parse_excel_data(df)
         self.file_label.config(text=Path(filepath).name, foreground="black")
         self.count_label.config(text=f"상품: {len(self.data)}개")
+        self.current_page = 0  # 첫 페이지로 리셋
         self._render_data()
+
+    def _get_column_value(self, row, *possible_names):
+        """여러 가능한 컬럼명을 시도하여 값 가져오기 (줄바꿈 처리 포함)"""
+        for name in possible_names:
+            # 직접 시도
+            if name in row.index:
+                val = row.get(name)
+                if pd.notna(val) and val != "":
+                    return val
+            # 줄바꿈을 공백으로 치환해서 시도
+            name_no_newline = name.replace("\n", " ")
+            if name_no_newline in row.index:
+                val = row.get(name_no_newline)
+                if pd.notna(val) and val != "":
+                    return val
+            # 줄바꿈을 제거해서 시도
+            name_no_space = name.replace("\n", "")
+            if name_no_space in row.index:
+                val = row.get(name_no_space)
+                if pd.notna(val) and val != "":
+                    return val
+        return ""
 
     def _parse_excel_data(self, df):
         """엑셀 데이터 파싱 - 확장된 정보 수집"""
         self.data = []
 
+        # 컬럼명 출력 (디버그용)
+        col_list = list(df.columns)
+        print(f"📊 엑셀 컬럼명 ({len(col_list)}개): {col_list}")
+
+        # 컬럼명 정규화 맵 생성 (줄바꿈 처리)
+        col_map = {}
+        for col in df.columns:
+            col_str = str(col)
+            col_map[col_str] = col
+            col_map[col_str.replace("\n", " ")] = col
+            col_map[col_str.replace("\n", "")] = col
+
         for idx, row in df.iterrows():
-            # 불사자ID 추출 (여러 컬럼명 시도)
-            product_id = (self._safe_str(row.get("불사자ID", "")) or
-                         self._safe_str(row.get("상품ID", "")) or
-                         self._safe_str(row.get("id", ""))).strip()
+            # 불사자ID 추출 (여러 컬럼명 시도 - 상세정보 시트와 분석결과 시트 모두 지원)
+            product_id = (self._safe_str(self._get_column_value(row, "불사자ID", "상품ID", "id")) or str(idx)).strip()
+
+            # 안전여부 파싱 (O/X 또는 안전/위험 모두 지원)
+            safe_val = self._safe_str(self._get_column_value(row, "안전여부"))
+            is_safe = safe_val in ["O", "안전", "True", "1", ""]
+
+            # 썸네일 컬럼 (줄바꿈 여러 형태 지원)
+            thumb_formula = self._safe_str(self._get_column_value(row,
+                "썸네일\n이미지", "썸네일 이미지", "썸네일이미지", "메인썸네일URL"))
+
+            # 옵션이미지 컬럼
+            option_img_formula = self._safe_str(self._get_column_value(row,
+                "옵션\n이미지", "옵션 이미지", "옵션이미지", "옵션이미지URL"))
+
+            # 중국어 옵션명 컬럼
+            cn_options = self._safe_str(self._get_column_value(row,
+                "중국어\n옵션명", "중국어 옵션명", "중국어옵션명"))
+
+            # 옵션명 컬럼
+            option_names = self._safe_str(self._get_column_value(row,
+                "옵션명", "최종옵션목록"))
 
             item = {
                 "row_idx": idx,
                 # 기본 정보
-                "product_name": self._safe_str(row.get("상품명", ""))[:30],
+                "product_name": self._safe_str(self._get_column_value(row, "상품명"))[:30],
                 "product_id": product_id,
-                "is_safe": row.get("안전여부") == "O" if pd.notna(row.get("안전여부")) else True,
-                "unsafe_reason": self._safe_str(row.get("위험사유", "")),
-                "group_name": self._safe_str(row.get("그룹명", "")),
+                "is_safe": is_safe,
+                "unsafe_reason": self._safe_str(self._get_column_value(row, "위험사유")),
+                "group_name": self._safe_str(self._get_column_value(row, "그룹명", "그룹")),
 
                 # 썸네일
-                "thumbnail_formula": self._safe_str(row.get("썸네일\n이미지", "")),
+                "thumbnail_formula": thumb_formula,
                 "thumbnail_url": "",
 
                 # 썸네일 분석 결과 (나중에 채움)
@@ -1740,27 +2240,61 @@ class SimulatorGUIv3:
                 "thumb_action": "-",
 
                 # 옵션 정보
-                "option_image_formula": self._safe_str(row.get("옵션\n이미지", "")),
-                "total_options": int(row.get("전체옵션", 0)) if pd.notna(row.get("전체옵션")) else 0,
-                "final_options": int(row.get("최종옵션", 0)) if pd.notna(row.get("최종옵션")) else 0,
-                "bait_options": int(row.get("미끼옵션", 0)) if pd.notna(row.get("미끼옵션")) else 0,
-                "main_option": self._safe_str(row.get("대표옵션", "")),
-                "selected": self._safe_str(row.get("선택", "A")),
-                "option_names": self._safe_str(row.get("옵션명", "")),
-                "cn_option_names": self._safe_str(row.get("중국어\n옵션명", "")),
+                "option_image_formula": option_img_formula,
+                "total_options": self._safe_int(self._get_column_value(row, "전체옵션")),
+                "final_options": self._safe_int(self._get_column_value(row, "최종옵션", "유효옵션")),
+                "bait_options": self._safe_int(self._get_column_value(row, "미끼옵션")),
+                "main_option": self._safe_str(self._get_column_value(row, "대표옵션")),
+                "selected": self._safe_str(self._get_column_value(row, "선택")) or "A",
+                "option_names": option_names,
+                "cn_option_names": cn_options,
 
                 # 가격 정보
-                "price_cny": self._safe_float(row.get("위안가", 0)),
-                "price_krw": self._safe_float(row.get("원화가", 0)),
-                "sale_price": self._safe_float(row.get("판매가", 0)),
+                "price_cny": self._safe_float(self._get_column_value(row, "최저가(CNY)", "위안가")),
+                "price_krw": self._safe_float(self._get_column_value(row, "원화가")),
+                "sale_price": self._safe_float(self._get_column_value(row, "판매가")),
             }
 
             # URL 추출
             item["thumbnail_url"] = self._extract_image_url(item["thumbnail_formula"])
             item["option_image_url"] = self._extract_image_url(item["option_image_formula"])
 
+            # 옵션이미지JSON 파싱 (직접 API 업로드용)
+            import json
+            opt_images_json = self._safe_str(self._get_column_value(row, "옵션이미지JSON"))
+            if opt_images_json:
+                try:
+                    item["option_images"] = json.loads(opt_images_json)
+                except json.JSONDecodeError:
+                    item["option_images"] = {}
+            else:
+                item["option_images"] = {}
+
+            # 전체썸네일 파싱 (파이프로 구분)
+            all_thumbs_str = self._safe_str(self._get_column_value(row, "전체썸네일"))
+            if all_thumbs_str:
+                item["all_thumbnails"] = [t.strip() for t in all_thumbs_str.split('|') if t.strip()]
+            else:
+                item["all_thumbnails"] = []
+
+            # 미끼옵션목록 파싱 (줄바꿈으로 구분)
+            bait_list_str = self._safe_str(self._get_column_value(row, "미끼옵션목록"))
+            if bait_list_str:
+                item["bait_option_list"] = [b.strip() for b in bait_list_str.split('\n') if b.strip()]
+            else:
+                item["bait_option_list"] = []
+
+            # 디버깅 (첫 3개만)
+            if idx < 3:
+                print(f"[{idx}] 썸네일formula: '{item['thumbnail_formula'][:60]}'" if item['thumbnail_formula'] else f"[{idx}] 썸네일formula: EMPTY")
+                print(f"[{idx}] 썸네일URL: '{item['thumbnail_url'][:60]}'" if item['thumbnail_url'] else f"[{idx}] 썸네일URL: EMPTY")
+                print(f"[{idx}] 옵션명: '{item['option_names'][:60]}'" if item['option_names'] else f"[{idx}] 옵션명: EMPTY")
+
             # 옵션 파싱
             item["options"] = self._parse_options(item["option_names"], item["cn_option_names"])
+
+            if idx < 3:
+                print(f"[{idx}] 파싱된 옵션 수: {len(item['options'])}")
 
             # 옵션수 계산
             item["option_count"] = f"{item['final_options']}/{item['total_options']}"
@@ -1782,6 +2316,15 @@ class SimulatorGUIv3:
             return float(val)
         except:
             return 0.0
+
+    def _safe_int(self, val) -> int:
+        """안전한 정수 변환"""
+        if pd.isna(val) or val == "":
+            return 0
+        try:
+            return int(float(val))  # float 경유하여 "5.0" 같은 것도 처리
+        except:
+            return 0
 
     def _extract_image_url(self, formula) -> str:
         """=IMAGE("url") 에서 URL 추출"""
@@ -1830,11 +2373,15 @@ class SimulatorGUIv3:
         return options
 
     def _render_data(self):
-        """데이터 렌더링"""
+        """데이터 렌더링 - 현재 페이지만 표시 (페이지네이션)"""
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
         self.option_frames = {}
+        self.option_cells = {}
+
+        # 페이지 정보 업데이트
+        self._update_page_info()
 
         if not self.data:
             ttk.Label(self.scrollable_frame, text="데이터 없음").pack(pady=50)
@@ -1850,49 +2397,70 @@ class SimulatorGUIv3:
         # 헤더
         self._create_header(visible_ordered)
 
-        # 데이터 행
-        for item in self.data:
+        # 현재 페이지의 데이터만 표시 (페이지네이션)
+        start_idx = self.current_page * self.page_size
+        end_idx = start_idx + self.page_size
+        page_data = self.data[start_idx:end_idx]
+
+        # 데이터 행 (현재 페이지만) - 배치 업데이트
+        for i, item in enumerate(page_data):
             self._create_row(item, visible_ordered)
+            # 5행마다 UI 업데이트 (프리징 방지)
+            if (i + 1) % 5 == 0:
+                self.root.update_idletasks()
 
     def _create_header(self, columns):
-        """헤더 생성"""
+        """헤더 생성 - 픽셀 단위로 정확히 맞춤"""
         header_frame = tk.Frame(self.scrollable_frame, bg="#4472C4")
-        header_frame.pack(fill=tk.X, pady=(0, 2))
+        header_frame.pack(fill=tk.X, pady=(0, 0))
 
         for col_id in columns:
             col_info = ALL_COLUMNS.get(col_id, {"name": col_id, "width": 100})
+            width = col_info["width"]
+
+            # 헤더 셀 (테두리 포함)
+            cell = tk.Frame(header_frame, width=width, height=30, bg="#4472C4",
+                           highlightbackground="#2c5282", highlightthickness=1)
+            cell.pack(side=tk.LEFT, padx=0, pady=0)
+            cell.pack_propagate(False)
+
             lbl = tk.Label(
-                header_frame,
+                cell,
                 text=col_info["name"],
-                width=col_info["width"] // 8,
                 bg="#4472C4",
                 fg="white",
-                font=("맑은 고딕", 9, "bold"),
-                pady=5
+                font=("맑은 고딕", 9, "bold")
             )
-            lbl.pack(side=tk.LEFT, padx=1)
+            lbl.pack(expand=True)
 
     def _create_row(self, item, columns):
-        """데이터 행 생성"""
+        """데이터 행 생성 - 세로선으로 구분"""
         row_idx = item["row_idx"]
         bg_color = "#C8E6C9" if item.get("is_safe", True) else "#FFCDD2"
+        border_color = "#888888"
 
-        row_frame = tk.Frame(self.scrollable_frame, bg=bg_color, relief="solid", bd=1)
-        row_frame.pack(fill=tk.X, pady=1)
+        row_frame = tk.Frame(self.scrollable_frame, bg=border_color)
+        row_frame.pack(fill=tk.X, pady=0)
 
         for col_id in columns:
             col_info = ALL_COLUMNS.get(col_id, {"width": 100})
             width = col_info["width"]
 
-            cell_frame = tk.Frame(row_frame, width=width, height=90, bg=bg_color)
-            cell_frame.pack(side=tk.LEFT, padx=1, pady=2)
+            # 셀 프레임 (테두리 효과)
+            cell_frame = tk.Frame(row_frame, width=width, height=90, bg=bg_color,
+                                 highlightbackground=border_color, highlightthickness=1)
+            cell_frame.pack(side=tk.LEFT, padx=0, pady=0)
             cell_frame.pack_propagate(False)
 
             # 컬럼별 렌더링
             if col_id == "thumbnail":
                 self._render_thumbnail(cell_frame, item, bg_color)
+            elif col_id == "option_image":
+                self._render_option_image(cell_frame, item, bg_color)
             elif col_id == "options":
                 self._render_options(cell_frame, item, row_idx, bg_color)
+                # 옵션 셀 참조 저장 (확장 시 해당 셀만 업데이트용)
+                self.option_cells[row_idx] = (cell_frame, item, bg_color)
             elif col_id == "is_safe":
                 self._render_safe(cell_frame, item, bg_color)
             elif col_id == "thumb_score":
@@ -1905,37 +2473,229 @@ class SimulatorGUIv3:
                 self._render_price(cell_frame, item.get("price_cny", 0), bg_color, "CNY")
             elif col_id == "price_krw":
                 self._render_price(cell_frame, item.get("price_krw", 0), bg_color)
+            elif col_id == "product_id":
+                self._render_product_id(cell_frame, item, bg_color)
+            elif col_id == "bait_options":
+                self._render_bait_options(cell_frame, item, bg_color)
+            elif col_id == "bait_keywords":
+                self._render_bait_keywords(cell_frame, item, bg_color)
+            elif col_id == "unsafe_reason":
+                self._render_unsafe_reason(cell_frame, item, bg_color)
+            elif col_id == "option_list":
+                self._render_option_list(cell_frame, item, bg_color)
             else:
                 # 일반 텍스트 컬럼
                 value = str(item.get(col_id, ""))[:20]
                 tk.Label(cell_frame, text=value, bg=bg_color,
                         font=("맑은 고딕", 9), wraplength=width-10).pack(expand=True)
 
+    def _render_product_id(self, frame, item, bg_color):
+        """불사자ID 렌더링 - 클릭 시 불사자 옵션탭 열기"""
+        product_id = item.get("product_id", "")
+
+        id_label = tk.Label(
+            frame,
+            text=product_id[:12] + ".." if len(product_id) > 12 else product_id,
+            bg=bg_color,
+            fg="#2196F3",  # 파란색 링크 스타일
+            font=("맑은 고딕", 9, "underline"),
+            cursor="hand2"
+        )
+        id_label.pack(expand=True)
+
+        # 클릭 시 불사자 옵션탭 열기
+        if product_id:
+            id_label.bind("<Button-1>", lambda e, pid=product_id: self._open_bulsaja_option_tab(pid))
+
+    def _open_bulsaja_option_tab(self, product_id):
+        """불사자 상품 상세수정 페이지 열기"""
+        url = f"https://www.bulsaja.com/products/manage/list/{product_id}"
+        webbrowser.open(url)
+
+    def _render_bait_options(self, frame, item, bg_color):
+        """미끼옵션 렌더링 - 클릭 시 상세 보기"""
+        bait_count = item.get("bait_options", 0)
+
+        if bait_count > 0:
+            # 미끼 있으면 빨간색 + 클릭 가능
+            lbl = tk.Label(
+                frame,
+                text=f"{bait_count}개",
+                bg=bg_color,
+                fg="#F44336",
+                font=("맑은 고딕", 10, "bold"),
+                cursor="hand2"
+            )
+            lbl.pack(expand=True)
+            lbl.bind("<Button-1>", lambda e, it=item: self._show_bait_detail(it))
+        else:
+            # 없으면 그냥 표시
+            tk.Label(frame, text="-", bg=bg_color, fg="gray",
+                    font=("맑은 고딕", 9)).pack(expand=True)
+
+    def _show_bait_detail(self, item):
+        """미끼옵션 상세 보기 팝업"""
+        popup = tk.Toplevel(self.root)
+        popup.title("미끼옵션 상세")
+        popup.geometry("600x450")
+        popup.transient(self.root)
+
+        # 상품 정보
+        info_frame = ttk.LabelFrame(popup, text="상품 정보", padding=10)
+        info_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        product_name = item.get("product_name", "")[:50]
+        ttk.Label(info_frame, text=f"상품명: {product_name}").pack(anchor=tk.W)
+        ttk.Label(info_frame, text=f"전체옵션: {item.get('total_options', 0)}개 | 유효옵션: {item.get('valid_options', 0)}개 | 미끼옵션: {item.get('bait_options', 0)}개").pack(anchor=tk.W)
+
+        # 미끼옵션 목록
+        bait_frame = ttk.LabelFrame(popup, text="미끼옵션 목록", padding=10)
+        bait_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # 트리뷰
+        columns = ("option", "reason")
+        tree = ttk.Treeview(bait_frame, columns=columns, show="headings", height=10)
+        tree.heading("option", text="옵션명")
+        tree.heading("reason", text="미끼 판정 사유")
+        tree.column("option", width=250)
+        tree.column("reason", width=300)
+
+        scrollbar = ttk.Scrollbar(bait_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 미끼옵션 목록 표시
+        bait_list = item.get("bait_option_list", [])
+        bait_keywords = []
+        if BULSAJA_API_AVAILABLE:
+            bait_keywords = load_bait_keywords()
+
+        for bait_text in bait_list:
+            # 매칭된 키워드 찾기
+            matched = []
+            for kw in bait_keywords:
+                if kw.lower() in bait_text.lower():
+                    matched.append(kw)
+
+            reason = f"키워드: {', '.join(matched)}" if matched else "가격 기준"
+            tree.insert("", tk.END, values=(bait_text, reason, ", ".join(matched)))
+
+        # 오탐 수정 버튼 영역
+        fix_frame = ttk.Frame(bait_frame)
+        fix_frame.pack(fill=tk.X, pady=5)
+
+        def remove_keyword():
+            """선택한 항목의 키워드를 미끼 목록에서 제거 (오탐 수정)"""
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("경고", "제거할 항목을 선택하세요")
+                return
+
+            keywords_to_remove = set()
+            for sel in selected:
+                values = tree.item(sel)['values']
+                if len(values) >= 3 and values[2]:
+                    for kw in str(values[2]).split(", "):
+                        if kw.strip():
+                            keywords_to_remove.add(kw.strip())
+
+            if not keywords_to_remove:
+                messagebox.showinfo("알림", "제거할 키워드가 없습니다 (가격 기준 판정)")
+                return
+
+            if messagebox.askyesno("확인", f"다음 키워드를 미끼 목록에서 제거할까요?\n\n{', '.join(keywords_to_remove)}"):
+                current_keywords = load_bait_keywords() if BULSAJA_API_AVAILABLE else []
+                new_keywords = [kw for kw in current_keywords if kw not in keywords_to_remove]
+
+                if save_bait_keywords(new_keywords):
+                    messagebox.showinfo("완료", f"{len(keywords_to_remove)}개 키워드 제거됨\n\n※ 다시 수집해야 반영됩니다")
+                    # 트리뷰에서 삭제
+                    for sel in selected:
+                        tree.delete(sel)
+                else:
+                    messagebox.showerror("오류", "저장 실패")
+
+        ttk.Button(fix_frame, text="❌ 선택 키워드 제거 (오탐 수정)", command=remove_keyword).pack(side=tk.LEFT, padx=5)
+        ttk.Label(fix_frame, text="← 미끼 아닌데 미끼로 판정된 경우", foreground="gray").pack(side=tk.LEFT)
+
+        # 키워드 설정 영역
+        kw_frame = ttk.LabelFrame(popup, text="미끼 키워드 관리", padding=10)
+        kw_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(kw_frame, text="현재 미끼 키워드:").pack(anchor=tk.W)
+        kw_text = tk.Text(kw_frame, height=2, width=70)
+        kw_text.pack(fill=tk.X, pady=5)
+        kw_text.insert("1.0", ", ".join(bait_keywords) if bait_keywords else "(없음)")
+
+        kw_btn_frame = ttk.Frame(kw_frame)
+        kw_btn_frame.pack(fill=tk.X)
+
+        def save_keywords():
+            new_kw = kw_text.get("1.0", tk.END).strip()
+            keywords = [k.strip() for k in new_kw.replace("\n", ",").split(",") if k.strip()]
+            if BULSAJA_API_AVAILABLE and save_bait_keywords(keywords):
+                messagebox.showinfo("완료", f"{len(keywords)}개 키워드 저장됨\n\n※ 다시 수집해야 반영됩니다")
+            else:
+                messagebox.showerror("오류", "저장 실패")
+
+        def add_keyword():
+            """새 키워드 추가"""
+            new_kw = simpledialog.askstring("키워드 추가", "추가할 미끼 키워드:")
+            if new_kw and new_kw.strip():
+                current = kw_text.get("1.0", tk.END).strip()
+                if current and current != "(없음)":
+                    kw_text.delete("1.0", tk.END)
+                    kw_text.insert("1.0", current + ", " + new_kw.strip())
+                else:
+                    kw_text.delete("1.0", tk.END)
+                    kw_text.insert("1.0", new_kw.strip())
+
+        ttk.Button(kw_btn_frame, text="➕ 키워드 추가", command=add_keyword).pack(side=tk.LEFT, padx=5)
+        ttk.Button(kw_btn_frame, text="💾 저장", command=save_keywords).pack(side=tk.LEFT, padx=5)
+
+        # 닫기 버튼
+        btn_frame = ttk.Frame(popup, padding=10)
+        btn_frame.pack(fill=tk.X)
+        ttk.Button(btn_frame, text="닫기", command=popup.destroy).pack(side=tk.RIGHT, padx=5)
+
     def _render_thumbnail(self, frame, item, bg_color):
-        """썸네일 렌더링"""
+        """썸네일 렌더링 - 이미지는 나중에 로드 (성능)"""
         thumb_label = tk.Label(frame, text="[썸네일]", bg=bg_color, font=("맑은 고딕", 8))
         thumb_label.pack(expand=True)
 
-        if PIL_AVAILABLE and item.get("thumbnail_url"):
-            self._load_image(item["thumbnail_url"], thumb_label, 80, 80)
+        # 이미지 로딩은 "썸네일 로드" 버튼으로 따로 실행 (500개 이미지 다운로드 너무 느림)
+        # 나중에 로드할 수 있도록 참조 저장
+        item["_thumb_label"] = thumb_label
+
+    def _render_option_image(self, frame, item, bg_color):
+        """옵션 이미지 렌더링 - 이미지는 나중에 로드"""
+        opt_img_label = tk.Label(frame, text="[옵션]", bg=bg_color, font=("맑은 고딕", 8))
+        opt_img_label.pack(expand=True)
+
+        # 나중에 로드할 수 있도록 참조 저장
+        item["_opt_img_label"] = opt_img_label
 
     def _render_options(self, frame, item, row_idx, bg_color):
-        """옵션 선택 영역 렌더링"""
+        """옵션 선택 영역 렌더링 - 6개까지만 표시"""
         options = item.get("options", [])
-        max_display = 4
+        option_images = item.get("option_images", {})  # {"A": url, "B": url, ...}
 
-        for i, opt in enumerate(options[:max_display]):
+        # 최대 6개만 표시 (속도 우선)
+        display_options = options[:6]
+
+        for i, opt in enumerate(display_options):
             is_selected = (self.selected_options.get(row_idx, "A") == opt["label"])
 
             opt_frame = tk.Frame(
                 frame,
-                width=85, height=80,
+                width=60, height=60,
                 bg="#2196F3" if is_selected else "#E0E0E0",
                 relief="solid",
                 bd=2 if is_selected else 1,
                 cursor="hand2"
             )
-            opt_frame.pack(side=tk.LEFT, padx=2, pady=2)
+            opt_frame.pack(side=tk.LEFT, padx=1, pady=1)
             opt_frame.pack_propagate(False)
 
             opt_frame.bind("<Button-1>", lambda e, r=row_idx, o=opt["label"]: self._on_option_click(r, o))
@@ -1943,35 +2703,326 @@ class SimulatorGUIv3:
             lbl_color = "white" if is_selected else "black"
             lbl_bg = "#2196F3" if is_selected else "#E0E0E0"
 
-            label_widget = tk.Label(opt_frame, text=opt["label"], bg=lbl_bg, fg=lbl_color,
-                                   font=("맑은 고딕", 11, "bold"))
-            label_widget.pack(pady=2)
-            label_widget.bind("<Button-1>", lambda e, r=row_idx, o=opt["label"]: self._on_option_click(r, o))
+            # 옵션 이미지 (40x40으로 축소)
+            img_label = tk.Label(opt_frame, text="", bg=lbl_bg, width=40, height=40)
+            img_label.pack(side=tk.TOP)
+            img_label.bind("<Button-1>", lambda e, r=row_idx, o=opt["label"]: self._on_option_click(r, o))
 
-            name_short = opt["name"][:7] + ".." if len(opt["name"]) > 7 else opt["name"]
-            name_widget = tk.Label(opt_frame, text=name_short, bg=lbl_bg, fg=lbl_color,
-                                  font=("맑은 고딕", 8), wraplength=75)
-            name_widget.pack(pady=1)
-            name_widget.bind("<Button-1>", lambda e, r=row_idx, o=opt["label"]: self._on_option_click(r, o))
+            # 옵션 이미지 비동기 로딩
+            opt_label = opt["label"]
+            if opt_label in option_images:
+                self._load_option_button_image(img_label, option_images[opt_label], lbl_bg)
+
+            # 하단에 라벨만 (간단하게)
+            label_widget = tk.Label(opt_frame, text=opt['label'], bg=lbl_bg, fg=lbl_color,
+                                   font=("맑은 고딕", 9, "bold"))
+            label_widget.pack(side=tk.BOTTOM)
+            label_widget.bind("<Button-1>", lambda e, r=row_idx, o=opt["label"]: self._on_option_click(r, o))
 
             self.option_frames[(row_idx, opt["label"])] = {
                 "frame": opt_frame,
                 "label": label_widget,
-                "name": name_widget
+                "name": label_widget,
+                "img": img_label
             }
 
-        if len(options) > max_display:
-            more_btn = tk.Label(frame, text=f"+{len(options)-max_display}",
-                               bg="#9E9E9E", fg="white", font=("맑은 고딕", 9),
-                               width=4, cursor="hand2")
-            more_btn.pack(side=tk.LEFT, padx=2, pady=30)
+    def _load_option_button_image(self, label, url, bg_color):
+        """옵션 버튼용 작은 이미지 비동기 로딩 (최적화)"""
+        if not PIL_AVAILABLE or not url:
+            return
+
+        # 캐시 확인
+        if url in self.option_image_cache:
+            try:
+                label.config(image=self.option_image_cache[url], text="")
+            except tk.TclError:
+                pass
+            return
+
+        def load():
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0',
+                    'Referer': 'https://www.bulsaja.com/'
+                }
+                response = requests.get(url, headers=headers, timeout=2)  # 타임아웃 2초로 단축
+                if response.status_code != 200:
+                    return
+
+                img = Image.open(BytesIO(response.content))
+                img.thumbnail((40, 40), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+
+                # LRU 캐시 제한 (오래된 것 삭제)
+                if len(self.option_image_cache) >= self._cache_max_size:
+                    oldest = next(iter(self.option_image_cache))
+                    del self.option_image_cache[oldest]
+                self.option_image_cache[url] = photo
+
+                # UI 업데이트
+                self.root.after(0, lambda: self._update_option_image(label, photo))
+            except Exception:
+                pass
+
+        # ThreadPoolExecutor 사용 (스레드 폭증 방지)
+        self._image_executor.submit(load)
+
+    def _update_option_image(self, label, photo):
+        """메인 스레드에서 옵션 이미지 업데이트"""
+        try:
+            label.config(image=photo, text="")
+        except tk.TclError:
+            pass  # 위젯이 이미 파괴됨
+
+    def _toggle_options_expand(self, row_idx):
+        """옵션 확장/축소 토글 - 해당 셀만 업데이트 (전체 새로고침 X)"""
+        if row_idx in self.expanded_rows:
+            self.expanded_rows.discard(row_idx)
+        else:
+            self.expanded_rows.add(row_idx)
+
+        # 해당 행의 옵션 셀만 업데이트 (전체 새로고침 안함!)
+        if row_idx in self.option_cells:
+            cell_frame, item, bg_color = self.option_cells[row_idx]
+            # 기존 내용 삭제
+            for widget in cell_frame.winfo_children():
+                widget.destroy()
+            # 해당 행의 옵션 프레임 정보 제거
+            keys_to_remove = [k for k in self.option_frames.keys() if k[0] == row_idx]
+            for k in keys_to_remove:
+                del self.option_frames[k]
+            # 다시 렌더링
+            self._render_options(cell_frame, item, row_idx, bg_color)
+
+    def _get_bait_keywords_cached(self):
+        """미끼 키워드 캐시 로드 (1회만 파일 I/O)"""
+        if self._bait_keywords_cache is None and BULSAJA_API_AVAILABLE:
+            self._bait_keywords_cache = load_bait_keywords()
+            # 미리 소문자로 변환해서 저장 (매번 lower() 호출 방지)
+            self._bait_keywords_lower = {kw.lower(): kw for kw in self._bait_keywords_cache}
+        return self._bait_keywords_cache or []
+
+    def _render_bait_keywords(self, frame, item, bg_color):
+        """미끼옵션 키워드 렌더링 (최적화)"""
+        bait_list = item.get("bait_option_list", [])
+
+        if not bait_list:
+            tk.Label(frame, text="-", bg=bg_color, fg="gray",
+                    font=("맑은 고딕", 9)).pack(expand=True)
+            return
+
+        # 매칭된 키워드 수집 (캐시된 키워드 사용)
+        matched_keywords = set()
+        bait_keywords = self._get_bait_keywords_cached()
+        if bait_keywords:
+            for bait_text in bait_list:
+                bait_lower = bait_text.lower()
+                for kw in bait_keywords:
+                    if kw.lower() in bait_lower:
+                        matched_keywords.add(kw)
+                        break  # 하나 찾으면 다음 옵션으로
+
+        if matched_keywords:
+            kw_text = ", ".join(list(matched_keywords)[:3])  # 최대 3개
+            if len(matched_keywords) > 3:
+                kw_text += f" +{len(matched_keywords)-3}"
+        else:
+            kw_text = "가격기준"
+
+        lbl = tk.Label(frame, text=kw_text, bg=bg_color, fg="#F44336",
+                      font=("맑은 고딕", 8), wraplength=110)
+        lbl.pack(expand=True)
+
+    def _render_option_list(self, frame, item, bg_color):
+        """옵션명 목록 렌더링 (A. xxx / B. yyy 형태로 세로 표시)"""
+        options = item.get("options", [])
+
+        if not options:
+            # options가 없으면 option_names에서 파싱
+            option_names = item.get("option_names", "")
+            if option_names:
+                lines = [line.strip() for line in option_names.split('\n') if line.strip()][:6]
+                text = '\n'.join(lines)
+            else:
+                text = "-"
+        else:
+            # options에서 라벨+이름 조합
+            lines = []
+            for opt in options[:6]:
+                name = opt.get("name", "")[:12]
+                lines.append(f"{opt['label']}. {name}")
+            text = '\n'.join(lines)
+
+        lbl = tk.Label(frame, text=text, bg=bg_color, fg="black",
+                      font=("맑은 고딕", 8), justify=tk.LEFT, anchor="nw")
+        lbl.pack(expand=True, fill=tk.BOTH, padx=2, pady=2)
+
+    def _render_unsafe_reason(self, frame, item, bg_color):
+        """위험사유 렌더링"""
+        is_safe = item.get("is_safe", True)
+
+        if is_safe:
+            tk.Label(frame, text="-", bg=bg_color, fg="gray",
+                    font=("맑은 고딕", 9)).pack(expand=True)
+            return
+
+        unsafe_reason = item.get("unsafe_reason", "")
+
+        # 키워드 간단히 표시 (예: "성인: 바이브 | 의료: 산소" -> "바이브, 산소")
+        keywords = []
+        for part in unsafe_reason.split("|"):
+            part = part.strip()
+            if ":" in part:
+                _, kw = part.split(":", 1)
+                keywords.append(kw.strip()[:6])  # 6자 제한
+            elif part:
+                keywords.append(part[:6])
+
+        if keywords:
+            kw_text = ", ".join(keywords[:3])  # 최대 3개
+            if len(keywords) > 3:
+                kw_text += f" +{len(keywords)-3}"
+            lbl = tk.Label(frame, text=kw_text, bg=bg_color, fg="#F44336",
+                          font=("맑은 고딕", 8), wraplength=110)
+        else:
+            # 키워드 없으면 - 표시 (안전 컬럼에서 이미 X 표시됨)
+            lbl = tk.Label(frame, text="-", bg=bg_color, fg="gray",
+                          font=("맑은 고딕", 9))
+
+        lbl.pack(expand=True)
 
     def _render_safe(self, frame, item, bg_color):
-        """안전 여부 렌더링"""
-        safe_text = "O" if item.get("is_safe", True) else "X"
-        safe_color = "#4CAF50" if item.get("is_safe", True) else "#F44336"
-        tk.Label(frame, text=safe_text, bg=bg_color, fg=safe_color,
-                font=("맑은 고딕", 16, "bold")).pack(expand=True)
+        """안전 여부 렌더링 - 클릭하면 토글"""
+        is_safe = item.get("is_safe", True)
+        safe_text = "O" if is_safe else "X"
+        safe_color = "#4CAF50" if is_safe else "#F44336"
+
+        lbl = tk.Label(frame, text=safe_text, bg=bg_color, fg=safe_color,
+                      font=("맑은 고딕", 16, "bold"), cursor="hand2")
+        lbl.pack(expand=True)
+
+        # 클릭하면 안전/위험 토글
+        def toggle_safe(e):
+            item["is_safe"] = not item.get("is_safe", True)
+            new_safe = item["is_safe"]
+            lbl.config(
+                text="O" if new_safe else "X",
+                fg="#4CAF50" if new_safe else "#F44336"
+            )
+            # 배경색 변경
+            new_bg = "#C8E6C9" if new_safe else "#FFCDD2"
+            frame.config(bg=new_bg)
+            lbl.config(bg=new_bg)
+            # 안전으로 바꾸면 위험사유 제거
+            if new_safe:
+                item["unsafe_reason"] = ""
+
+        lbl.bind("<Button-1>", toggle_safe)
+
+    def _show_safety_detail(self, item):
+        """안전/위험 상세 보기 팝업"""
+        popup = tk.Toplevel(self.root)
+        popup.title("위험 판정 상세")
+        popup.geometry("550x400")
+        popup.transient(self.root)
+
+        # 상품 정보
+        info_frame = ttk.LabelFrame(popup, text="상품 정보", padding=10)
+        info_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        product_name = item.get("product_name", "")
+        ttk.Label(info_frame, text=f"상품명: {product_name[:60]}...", wraplength=500).pack(anchor=tk.W)
+        ttk.Label(info_frame, text=f"판정: ❌ 위험", foreground="red", font=("맑은 고딕", 10, "bold")).pack(anchor=tk.W)
+
+        # 위험 사유
+        reason_frame = ttk.LabelFrame(popup, text="위험 판정 사유", padding=10)
+        reason_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        unsafe_reason = item.get("unsafe_reason", "")
+        unsafe_keywords = item.get("unsafe_keywords", [])
+
+        # 트리뷰
+        columns = ("keyword", "category")
+        tree = ttk.Treeview(reason_frame, columns=columns, show="headings", height=8)
+        tree.heading("keyword", text="위험 키워드")
+        tree.heading("category", text="카테고리")
+        tree.column("keyword", width=200)
+        tree.column("category", width=150)
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        # 위험 키워드 파싱
+        if unsafe_reason:
+            # unsafe_reason 형식: "성인: 바이브레이터 | 의료: 산소발생기"
+            for part in unsafe_reason.split("|"):
+                part = part.strip()
+                if ":" in part:
+                    cat, kw = part.split(":", 1)
+                    tree.insert("", tk.END, values=(kw.strip(), cat.strip()))
+                elif part:
+                    tree.insert("", tk.END, values=(part, "기타"))
+
+        # 오탐 수정 영역
+        fix_frame = ttk.LabelFrame(popup, text="오탐 수정", padding=10)
+        fix_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(fix_frame, text="이 상품이 실제로 안전하다면, 키워드를 예외 처리하세요.").pack(anchor=tk.W)
+
+        def add_to_excluded():
+            """선택한 키워드를 예외 목록에 추가"""
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("경고", "예외 처리할 키워드를 선택하세요")
+                return
+
+            keywords = [tree.item(sel)['values'][0] for sel in selected]
+
+            if messagebox.askyesno("확인", f"다음 키워드를 예외 목록에 추가할까요?\n\n{', '.join(keywords)}\n\n※ 예외 처리하면 다음 검수부터 이 키워드는 무시됩니다"):
+                try:
+                    from bulsaja_common import load_excluded_words
+                    excluded = load_excluded_words()
+                    excluded_file = "excluded_words.json"
+
+                    # 기존 데이터 로드
+                    import json
+                    if os.path.exists(excluded_file):
+                        with open(excluded_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                    else:
+                        data = {'words': []}
+
+                    # 키워드 추가
+                    for kw in keywords:
+                        if kw not in data['words']:
+                            data['words'].append(kw)
+
+                    # 저장
+                    with open(excluded_file, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+
+                    messagebox.showinfo("완료", f"{len(keywords)}개 키워드가 예외 목록에 추가됨\n\n※ 다시 수집해야 반영됩니다")
+
+                    # 트리뷰에서 삭제
+                    for sel in selected:
+                        tree.delete(sel)
+
+                except Exception as e:
+                    messagebox.showerror("오류", f"저장 실패: {e}")
+
+        def mark_as_safe():
+            """이 상품을 안전으로 변경"""
+            item["is_safe"] = True
+            item["unsafe_reason"] = ""
+            messagebox.showinfo("완료", "이 상품을 안전으로 변경했습니다.\n\n※ 저장해야 엑셀에 반영됩니다")
+            popup.destroy()
+            self._render_data()
+
+        btn_frame = ttk.Frame(fix_frame)
+        btn_frame.pack(fill=tk.X, pady=5)
+        ttk.Button(btn_frame, text="🔓 선택 키워드 예외 처리", command=add_to_excluded).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="✅ 이 상품 안전으로 변경", command=mark_as_safe).pack(side=tk.LEFT, padx=5)
+
+        # 닫기
+        ttk.Button(popup, text="닫기", command=popup.destroy).pack(pady=10)
 
     def _render_thumb_score(self, frame, item, bg_color):
         """썸네일 점수 렌더링"""
@@ -2020,7 +3071,7 @@ class SimulatorGUIv3:
                 font=("맑은 고딕", 9)).pack(expand=True)
 
     def _on_option_click(self, row_idx, option_label):
-        """옵션 클릭"""
+        """옵션 클릭 - 선택 변경 및 옵션이미지 업데이트"""
         old_selected = self.selected_options.get(row_idx, "A")
 
         if (row_idx, old_selected) in self.option_frames:
@@ -2028,62 +3079,531 @@ class SimulatorGUIv3:
             old_widgets["frame"].config(bg="#E0E0E0", bd=1)
             old_widgets["label"].config(bg="#E0E0E0", fg="black")
             old_widgets["name"].config(bg="#E0E0E0", fg="black")
+            if "img" in old_widgets:
+                old_widgets["img"].config(bg="#E0E0E0")
 
         if (row_idx, option_label) in self.option_frames:
             new_widgets = self.option_frames[(row_idx, option_label)]
             new_widgets["frame"].config(bg="#2196F3", bd=2)
             new_widgets["label"].config(bg="#2196F3", fg="white")
             new_widgets["name"].config(bg="#2196F3", fg="white")
+            if "img" in new_widgets:
+                new_widgets["img"].config(bg="#2196F3")
 
         self.selected_options[row_idx] = option_label
 
+        # 옵션이미지 업데이트 (option_images에서 선택된 옵션의 이미지 URL 가져와서 로드)
+        if row_idx < len(self.data):
+            item = self.data[row_idx]
+            opt_images = item.get("option_images", {})
+            new_img_url = opt_images.get(option_label, "")
+
+            if new_img_url and "_opt_img_label" in item:
+                # 비동기로 이미지 로드
+                self._load_option_image_async(item, new_img_url)
+
+    def _load_option_image_async(self, item, url):
+        """옵션 이미지를 비동기로 로드하여 라벨에 표시"""
+        import threading
+
+        def load_and_update():
+            try:
+                response = requests.get(url, timeout=2)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content))
+                    img = img.resize((75, 75), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+
+                    # UI 업데이트는 메인 스레드에서
+                    def update_ui():
+                        if "_opt_img_label" in item:
+                            label = item["_opt_img_label"]
+                            label.config(image=photo, text="")
+                            label.image = photo  # 참조 유지
+
+                    self.root.after(0, update_ui)
+            except Exception as e:
+                print(f"옵션이미지 로드 실패: {e}")
+
+        thread = threading.Thread(target=load_and_update, daemon=True)
+        thread.start()
+
+    def _load_all_thumbnails(self):
+        """현재 페이지 썸네일 이미지 로드 (병렬 처리로 빠르게)"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        if not self.data:
+            messagebox.showwarning("경고", "먼저 데이터를 로드하세요")
+            return
+
+        # 현재 페이지 데이터만
+        start_idx = self.current_page * self.page_size
+        end_idx = start_idx + self.page_size
+        page_data = self.data[start_idx:end_idx]
+
+        if not page_data:
+            messagebox.showwarning("경고", "현재 페이지에 데이터가 없습니다")
+            return
+
+        # 진행 다이얼로그
+        progress = tk.Toplevel(self.root)
+        progress.title(f"썸네일 로드 중... (페이지 {self.current_page + 1})")
+        progress.geometry("350x120")
+        progress.transient(self.root)
+
+        progress_var = tk.StringVar(value="준비 중...")
+        ttk.Label(progress, textvariable=progress_var).pack(pady=10)
+        pb = ttk.Progressbar(progress, length=300, mode='determinate')
+        pb.pack(pady=10)
+
+        cancel_var = tk.BooleanVar(value=False)
+        ttk.Button(progress, text="취소", command=lambda: cancel_var.set(True)).pack(pady=5)
+
+        progress.update()
+
+        def load_single_image(task):
+            """단일 이미지 로드 (병렬 실행용)"""
+            item_idx, img_type, url = task
+            if not url:
+                return (item_idx, img_type, None, "no_url")
+            try:
+                headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.bulsaja.com/'}
+                response = requests.get(url, headers=headers, timeout=2)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content))
+                    img = img.resize((75, 75), Image.Resampling.LANCZOS)
+                    return (item_idx, img_type, img, "ok")
+                return (item_idx, img_type, None, "http_error")
+            except:
+                return (item_idx, img_type, None, "error")
+
+        def load_thread():
+            # 현재 페이지의 썸네일 + 옵션이미지 작업 목록 생성
+            tasks = []
+            for item in page_data:
+                i = item.get("row_idx", 0)
+                thumb_url = item.get("thumbnail_url", "")
+                opt_url = item.get("option_image_url", "")
+                if thumb_url:
+                    tasks.append((i, "thumb", thumb_url))
+                if opt_url:
+                    tasks.append((i, "opt", opt_url))
+
+            total = len(tasks)
+            if total == 0:
+                self.root.after(0, lambda: progress_var.set("로드할 이미지 없음"))
+                self.root.after(1500, progress.destroy)
+                return
+
+            loaded = 0
+            failed = 0
+            completed = 0
+
+            # 15개 동시 다운로드
+            with ThreadPoolExecutor(max_workers=15) as executor:
+                futures = {executor.submit(load_single_image, task): task for task in tasks}
+
+                for future in as_completed(futures):
+                    if cancel_var.get():
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
+
+                    completed += 1
+                    item_idx, img_type, img, status = future.result()
+
+                    if status == "ok" and img:
+                        if img_type == "thumb":
+                            label = self.data[item_idx].get("_thumb_label")
+                        else:
+                            label = self.data[item_idx].get("_opt_img_label")
+
+                        if label:
+                            try:
+                                photo = ImageTk.PhotoImage(img)
+                                def update_label(lbl, p):
+                                    try:
+                                        lbl.config(image=p, text="")
+                                        lbl.image = p
+                                    except:
+                                        pass
+                                self.root.after(0, update_label, label, photo)
+                                loaded += 1
+                            except:
+                                failed += 1
+                        else:
+                            failed += 1
+                    else:
+                        if status != "no_url":
+                            failed += 1
+
+                    # 진행률 업데이트 (20개마다)
+                    if completed % 20 == 0:
+                        pct = completed / total * 100
+                        self.root.after(0, lambda v=pct, l=loaded, f=failed, c=completed, t=total:
+                            (pb.configure(value=v), progress_var.set(f"{c}/{t} ({l}성공/{f}실패)")))
+
+            # 완료
+            self.root.after(0, lambda: (
+                progress_var.set(f"완료: {loaded}성공 / {failed}실패"),
+                pb.configure(value=100)
+            ))
+            self.root.after(1500, progress.destroy)
+
+        threading.Thread(target=load_thread, daemon=True).start()
+
     def _analyze_thumbnails(self):
-        """썸네일 분석 실행"""
+        """
+        썸네일 분석 - 전체 썸네일 중 최적 이미지 선택
+
+        점수 기준 (thumbnail_analyzer.py):
+        - 누끼 점수: 흰배경 90%+ = 50점, 70%+ = 40점, 밝은배경 = 30점
+        - 텍스트 점수: 없음 = +30점, 적음 = +10점, 많음 = -30점
+        - 중앙 객체: 있음 = +20점
+
+        총점 높은 썸네일을 대표 이미지로 자동 선택
+        """
         if not self.data:
             messagebox.showwarning("경고", "먼저 데이터를 로드하세요")
             return
 
         try:
             from thumbnail_analyzer import ThumbnailAnalyzer
+            has_analyzer = True
         except ImportError:
-            messagebox.showerror("오류", "thumbnail_analyzer.py가 필요합니다")
+            has_analyzer = False
+            messagebox.showerror("오류", "thumbnail_analyzer.py가 필요합니다.\n\n필요 패키지: pip install opencv-python easyocr pillow")
             return
+
+        # 전체/페이지 선택
+        total_count = len(self.data)
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, total_count)
+        page_count = end_idx - start_idx
+
+        choice_win = tk.Toplevel(self.root)
+        choice_win.title("분석 범위 선택")
+        choice_win.geometry("350x150")
+        choice_win.transient(self.root)
+        choice_win.grab_set()
+
+        ttk.Label(choice_win, text="썸네일 분석 범위를 선택하세요", font=("맑은 고딕", 10, "bold")).pack(pady=10)
+
+        result_var = tk.StringVar(value="")
+
+        btn_frame = ttk.Frame(choice_win)
+        btn_frame.pack(pady=10)
+
+        def select_page():
+            result_var.set("page")
+            choice_win.destroy()
+
+        def select_all():
+            result_var.set("all")
+            choice_win.destroy()
+
+        ttk.Button(btn_frame, text=f"현재 페이지만 ({page_count}개)", command=select_page, width=20).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text=f"전체 분석 ({total_count}개)", command=select_all, width=20).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(choice_win, text="※ 전체 분석은 시간이 오래 걸릴 수 있습니다", foreground="gray").pack(pady=5)
+
+        choice_win.wait_window()
+
+        if not result_var.get():
+            return
+
+        # 분석 대상 결정
+        if result_var.get() == "page":
+            analyze_data = self.data[start_idx:end_idx]
+            analyze_indices = list(range(start_idx, end_idx))
+        else:
+            analyze_data = self.data
+            analyze_indices = list(range(len(self.data)))
 
         # 진행 다이얼로그
         progress = tk.Toplevel(self.root)
         progress.title("썸네일 분석 중...")
-        progress.geometry("300x100")
+        progress.geometry("450x180")
         progress.transient(self.root)
 
         progress_var = tk.StringVar(value="분석 준비 중...")
-        ttk.Label(progress, textvariable=progress_var).pack(pady=20)
-        pb = ttk.Progressbar(progress, length=250, mode='determinate')
+        ttk.Label(progress, textvariable=progress_var, font=("맑은 고딕", 10)).pack(pady=10)
+
+        detail_var = tk.StringVar(value="")
+        ttk.Label(progress, textvariable=detail_var, font=("맑은 고딕", 9)).pack(pady=5)
+
+        pb = ttk.Progressbar(progress, length=400, mode='determinate')
         pb.pack(pady=10)
 
+        cancel_var = tk.BooleanVar(value=False)
+        ttk.Button(progress, text="취소", command=lambda: cancel_var.set(True)).pack(pady=5)
         progress.update()
 
-        analyzer = ThumbnailAnalyzer()
-        total = len(self.data)
+        total = len(analyze_data)
+        stats = {"analyzed": 0, "changed": 0, "best_scores": []}
 
-        for i, item in enumerate(self.data):
-            progress_var.set(f"분석 중... {i+1}/{total}")
-            pb['value'] = (i + 1) / total * 100
-            progress.update()
+        def analyze_thread():
+            analyzer = ThumbnailAnalyzer()
 
-            if item.get("thumbnail_url"):
-                try:
-                    result = analyzer.analyze_thumbnail(item["thumbnail_url"], i)
-                    item["thumb_score"] = result.total_score
-                    item["thumb_nukki"] = result.is_nukki
-                    item["thumb_text"] = result.has_text
-                    item["thumb_action"] = result.recommendation.replace("needs_", "").replace("best", "none")
-                except Exception as e:
-                    item["thumb_score"] = 0
-                    item["thumb_action"] = "error"
+            for i, item in enumerate(analyze_data):
+                if cancel_var.get():
+                    break
 
-        progress.destroy()
-        self._render_data()
-        messagebox.showinfo("완료", f"{total}개 썸네일 분석 완료")
+                idx = analyze_indices[i]  # 실제 인덱스
+                product_name = item.get("product_name", "")[:20]
+                all_thumbs = item.get("all_thumbnails", [])
+                current_thumb = item.get("thumbnail_url", "")
+
+                # all_thumbnails가 없으면 현재 썸네일만 사용
+                if not all_thumbs and current_thumb:
+                    all_thumbs = [current_thumb]
+
+                self.root.after(0, lambda cur=i, n=product_name, c=len(all_thumbs): [
+                    progress_var.set(f"분석 중... {cur+1}/{total}"),
+                    detail_var.set(f"{n}... ({c}개 썸네일)"),
+                    pb.config(value=(cur+1)/total*100)
+                ])
+
+                if not all_thumbs:
+                    continue
+
+                # 모든 썸네일 분석
+                best_idx, best_score, action = analyzer.get_best_thumbnail(all_thumbs)
+
+                if best_score:
+                    # 분석 결과 저장
+                    item["thumb_score"] = best_score.total_score
+                    item["thumb_nukki"] = best_score.is_nukki
+                    item["thumb_text"] = best_score.has_text
+                    item["thumb_action"] = action
+                    item["_best_thumb_idx"] = best_idx
+
+                    stats["best_scores"].append(best_score.total_score)
+                    stats["analyzed"] += 1
+
+                    # 최적 썸네일이 현재와 다르면 변경
+                    best_url = all_thumbs[best_idx]
+                    if best_url != current_thumb:
+                        item["thumbnail_url"] = best_url
+                        item["_thumb_changed"] = True
+                        stats["changed"] += 1
+
+                    # 이미지 로드 및 UI 업데이트
+                    def load_and_update(i=idx, url=best_url, opt_url=item.get("option_image_url", "")):
+                        try:
+                            # 썸네일 이미지
+                            response = requests.get(url, timeout=2)
+                            if response.status_code == 200:
+                                img = Image.open(BytesIO(response.content))
+                                img = img.resize((75, 75), Image.Resampling.LANCZOS)
+                                photo = ImageTk.PhotoImage(img)
+
+                                it = self.data[i]
+                                if "_thumb_label" in it:
+                                    it["_thumb_label"].config(image=photo, text="")
+                                    it["_thumb_label"].image = photo
+
+                            # 옵션 이미지
+                            if opt_url:
+                                response2 = requests.get(opt_url, timeout=2)
+                                if response2.status_code == 200:
+                                    img2 = Image.open(BytesIO(response2.content))
+                                    img2 = img2.resize((75, 75), Image.Resampling.LANCZOS)
+                                    photo2 = ImageTk.PhotoImage(img2)
+
+                                    it = self.data[i]
+                                    if "_opt_img_label" in it:
+                                        it["_opt_img_label"].config(image=photo2, text="")
+                                        it["_opt_img_label"].image = photo2
+                        except:
+                            pass
+
+                    self.root.after(0, load_and_update)
+
+            def finish():
+                progress.destroy()
+                self._render_data()
+
+                avg_score = sum(stats["best_scores"]) / len(stats["best_scores"]) if stats["best_scores"] else 0
+                msg = f"썸네일 분석 완료!\n\n"
+                msg += f"분석: {stats['analyzed']}개 상품\n"
+                msg += f"변경: {stats['changed']}개 (더 좋은 썸네일 발견)\n"
+                msg += f"평균 점수: {avg_score:.1f}점\n\n"
+                msg += "점수 기준:\n"
+                msg += "• 50점+ = 완벽 (흰배경 누끼, 텍스트 없음)\n"
+                msg += "• 30~50점 = 양호\n"
+                msg += "• 30점 미만 = 주의 필요"
+
+                messagebox.showinfo("분석 완료", msg)
+
+            self.root.after(0, finish)
+
+        import threading
+        threading.Thread(target=analyze_thread, daemon=True).start()
+
+    def _analyze_ip_words(self):
+        """
+        지재권 의심 단어 분석
+
+        1. 형태소 분석으로 의심 단어 추출 (일반명사 제외)
+        2. AI로 실제 지재권 여부 확인
+        3. 확인된 단어 DB에 추가
+        """
+        if not self.data:
+            messagebox.showwarning("경고", "먼저 데이터를 로드하세요")
+            return
+
+        # bulsaja_common에서 함수 가져오기
+        try:
+            from bulsaja_common import (
+                analyze_products_for_ip,
+                verify_ip_words_with_ai,
+                load_ip_words,
+                add_ip_words
+            )
+        except ImportError as e:
+            messagebox.showerror("오류", f"bulsaja_common 모듈 로드 실패: {e}")
+            return
+
+        # 결과 창
+        result_window = tk.Toplevel(self.root)
+        result_window.title("지재권 분석")
+        result_window.geometry("700x600")
+        result_window.transient(self.root)
+
+        # 상단 프레임
+        top_frame = ttk.Frame(result_window, padding=10)
+        top_frame.pack(fill=tk.X)
+
+        status_var = tk.StringVar(value="분석 준비 중...")
+        ttk.Label(top_frame, textvariable=status_var, font=("맑은 고딕", 11, "bold")).pack(anchor=tk.W)
+
+        # 진행바
+        pb = ttk.Progressbar(top_frame, length=650, mode='determinate')
+        pb.pack(pady=10, fill=tk.X)
+
+        # 결과 영역
+        result_frame = ttk.LabelFrame(result_window, text="의심 단어 목록", padding=10)
+        result_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # 트리뷰
+        columns = ("word", "count", "type", "status")
+        tree = ttk.Treeview(result_frame, columns=columns, show="headings", height=15)
+        tree.heading("word", text="단어")
+        tree.heading("count", text="출현횟수")
+        tree.heading("type", text="유형")
+        tree.heading("status", text="상태")
+
+        tree.column("word", width=150)
+        tree.column("count", width=80)
+        tree.column("type", width=150)
+        tree.column("status", width=100)
+
+        scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 버튼 프레임
+        btn_frame = ttk.Frame(result_window, padding=10)
+        btn_frame.pack(fill=tk.X)
+
+        def verify_with_ai():
+            """선택된 단어를 AI로 검증"""
+            selected = tree.selection()
+            if not selected:
+                # 전체 검증
+                words = [tree.item(item)['values'][0] for item in tree.get_children()]
+            else:
+                words = [tree.item(item)['values'][0] for item in selected]
+
+            if not words:
+                return
+
+            status_var.set(f"AI 검증 중... ({len(words)}개 단어)")
+            result_window.update()
+
+            def verify_thread():
+                result = verify_ip_words_with_ai(words)
+
+                def update_ui():
+                    for item in tree.get_children():
+                        word = tree.item(item)['values'][0]
+                        if word in result['ip_confirmed']:
+                            tree.set(item, "status", "⚠️ 지재권")
+                        elif word in result['ip_safe']:
+                            tree.set(item, "status", "✅ 안전")
+                        elif word in result['ip_uncertain']:
+                            tree.set(item, "status", "❓ 불확실")
+
+                    status_var.set(f"검증 완료: 지재권 {len(result['ip_confirmed'])}개, 안전 {len(result['ip_safe'])}개")
+
+                self.root.after(0, update_ui)
+
+            threading.Thread(target=verify_thread, daemon=True).start()
+
+        def add_to_db():
+            """지재권 확인된 단어를 DB에 추가"""
+            ip_words = []
+            for item in tree.get_children():
+                values = tree.item(item)['values']
+                if values[3] == "⚠️ 지재권":
+                    ip_words.append(values[0])
+
+            if not ip_words:
+                messagebox.showinfo("알림", "추가할 지재권 단어가 없습니다.\n먼저 AI 검증을 실행하세요.")
+                return
+
+            if add_ip_words(ip_words, 'brands'):
+                messagebox.showinfo("완료", f"{len(ip_words)}개 단어가 지재권 DB에 추가되었습니다.")
+            else:
+                messagebox.showerror("오류", "DB 저장 실패")
+
+        ttk.Button(btn_frame, text="🤖 AI 검증 (선택/전체)", command=verify_with_ai).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="💾 지재권 DB에 추가", command=add_to_db).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="닫기", command=result_window.destroy).pack(side=tk.RIGHT, padx=5)
+
+        # 분석 실행
+        def analyze_thread():
+            def log(msg):
+                self.root.after(0, lambda: status_var.set(msg))
+
+            # 상품 데이터 준비
+            products = []
+            for item in self.data:
+                products.append({
+                    'product_name': item.get('product_name', ''),
+                    'product_id': item.get('product_id', '')
+                })
+
+            # 분석 실행
+            result = analyze_products_for_ip(products, log_callback=log)
+
+            # 결과 표시
+            def update_tree():
+                for word, count in result['suspicious_words'].items():
+                    # 이미 DB에 있는지 확인
+                    ip_db = load_ip_words()
+                    all_ip = ip_db.get('brands', []) + ip_db.get('characters', []) + ip_db.get('trademarks', [])
+
+                    if word in all_ip:
+                        status = "⚠️ 지재권(DB)"
+                    elif word in ip_db.get('safe_words', []):
+                        status = "✅ 안전(DB)"
+                    else:
+                        status = "❓ 미확인"
+
+                    # 유형 결정
+                    word_type = "영어" if word.isascii() else "한글(외래어)"
+
+                    tree.insert("", tk.END, values=(word, count, word_type, status))
+
+                pb['value'] = 100
+                status_var.set(f"분석 완료: {len(result['suspicious_words'])}개 의심 단어 발견")
+
+            self.root.after(0, update_tree)
+
+        threading.Thread(target=analyze_thread, daemon=True).start()
 
     def _load_image(self, url, label, width, height):
         """이미지 로드"""
@@ -2091,7 +3611,7 @@ class SimulatorGUIv3:
             if url in self.image_cache:
                 photo = self.image_cache[url]
             else:
-                response = requests.get(url, timeout=5)
+                response = requests.get(url, timeout=2)
                 img = Image.open(BytesIO(response.content))
                 img = img.resize((width, height), Image.Resampling.LANCZOS)
                 photo = ImageTk.PhotoImage(img)

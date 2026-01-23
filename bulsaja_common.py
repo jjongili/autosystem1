@@ -14,6 +14,7 @@ by 프코노미
 """
 
 import os
+import re
 import json
 import requests
 import websocket
@@ -458,7 +459,7 @@ CHARACTER_KEYWORDS = {
     '블리자드', 'blizzard',
     '젤다', '젤다의전설',  # 닌텐도 (링크 제거 - 오탐)
     '마인크래프트', 'minecraft',
-    '리그오브레전드', 'lol', '롤',
+    '리그오브레전드', 'lol',  # '롤' 제거 - 트롤리, 롤러 등 오탐
     # 중국 게임 IP
     '원신', 'genshin', '붕괴', '명일방주', '아크나이츠',
     # 해리포터 (워너브라더스 지재권)
@@ -1810,11 +1811,14 @@ class BulsajaAPIClient:
         return products, total_count
 
     def get_products_by_group(self, group_name: str, start: int = 0, limit: int = 1000,
-                              status_filters: List[str] = None) -> Tuple[List[Dict], int]:
+                              status_filters: List[str] = None,
+                              exclude_tag: str = None) -> Tuple[List[Dict], int]:
         """그룹별 상품 조회
 
         status_filters: 상품 상태 필터 (예: ["0", "1", "2"])
             - API에서 그룹 필터만 적용하고, 상태 필터는 결과에서 직접 필터링
+        exclude_tag: 제외할 태그명 (예: "업로드실패")
+            - 해당 태그가 있는 상품 제외
         """
         # 기본 필터 모델 구성
         base_filter = {}
@@ -1851,6 +1855,14 @@ class BulsajaAPIClient:
                         "operator": "OR",
                         "conditions": conditions
                     }
+
+        # 태그 제외 필터 (업로드실패 태그 건너뛰기)
+        if exclude_tag:
+            base_filter["groupFile"] = {
+                "filterType": "text",
+                "type": "notContains",
+                "filter": exclude_tag
+            }
 
         products, total = self.get_products(start, start + limit, base_filter)
         return products, total
@@ -1975,14 +1987,19 @@ class BulsajaAPIClient:
             return False, str(e)
 
     def get_market_groups(self) -> List[str]:
-        """마켓 그룹 목록 조회"""
+        """마켓 그룹 목록 조회 (번호순 정렬)"""
         url = f"{self.BASE_URL}/market/groups/"
         try:
             response = self.session.post(url, json={})
             response.raise_for_status()
             data = response.json()
             if isinstance(data, list):
-                return [g.get('name', '') for g in data if g.get('name')]
+                names = [g.get('name', '') for g in data if g.get('name')]
+                # 그룹명 번호순 정렬 (앞의 숫자 기준)
+                def sort_by_number(name):
+                    match = re.match(r'^(\d+)', name)
+                    return int(match.group(1)) if match else 9999
+                return sorted(names, key=sort_by_number)
             return []
         except Exception as e:
             print(f"마켓 그룹 조회 실패: {e}")
@@ -2915,3 +2932,345 @@ if __name__ == "__main__":
         print(f"  ❌ Gemini API 연결 실패: {e}")
 
     print("\n테스트 완료!")
+
+
+# ==================== 형태소 분석 (지재권 의심 단어 추출) ====================
+
+# 형태소 분석기 초기화 (lazy loading)
+_morpheme_analyzer = None
+
+def _get_morpheme_analyzer():
+    """형태소 분석기 가져오기 (lazy loading)"""
+    global _morpheme_analyzer
+    if _morpheme_analyzer is None:
+        try:
+            from konlpy.tag import Okt
+            _morpheme_analyzer = ('okt', Okt())
+            print("[INFO] KoNLPy Okt 분석기 로드됨")
+        except ImportError:
+            try:
+                from konlpy.tag import Komoran
+                _morpheme_analyzer = ('komoran', Komoran())
+                print("[INFO] KoNLPy Komoran 분석기 로드됨")
+            except ImportError:
+                print("[WARNING] KoNLPy 설치 필요: pip install konlpy")
+                _morpheme_analyzer = (None, None)
+    return _morpheme_analyzer
+
+
+def extract_suspicious_words(text: str) -> List[Dict]:
+    """
+    상품명에서 지재권 의심 단어 추출
+
+    형태소 분석으로 일반명사 제외, 의심 단어만 추출
+    - 고유명사 (NNP)
+    - 미등록어/외래어
+    - 영어 단어
+
+    Args:
+        text: 상품명
+
+    Returns:
+        [{'word': '나이키', 'type': 'foreign', 'reason': '외래어/미등록어'}, ...]
+    """
+    suspicious = []
+
+    # 1. 영어 단어 추출 (정규식)
+    import re
+    english_words = re.findall(r'[A-Za-z]{2,}', text)
+    for word in english_words:
+        # 일반적인 영어 단어 제외 (size, color 등)
+        common_english = {'size', 'color', 'free', 'one', 'new', 'hot', 'best', 'top',
+                         'big', 'small', 'large', 'medium', 'mini', 'max', 'pro', 'plus',
+                         'set', 'box', 'pack', 'cm', 'mm', 'kg', 'ml', 'pcs', 'ea'}
+        if word.lower() not in common_english:
+            suspicious.append({
+                'word': word,
+                'type': 'english',
+                'reason': '영어 단어 (브랜드 가능성)'
+            })
+
+    # 2. 형태소 분석
+    analyzer_type, analyzer = _get_morpheme_analyzer()
+
+    if analyzer:
+        try:
+            if analyzer_type == 'okt':
+                # Okt는 품사 태깅
+                morphs = analyzer.pos(text, stem=False)
+                for word, pos in morphs:
+                    # 외래어/고유명사 판별
+                    # Okt에서 Noun이지만 한글이 아닌 경우
+                    if pos == 'Noun' and len(word) >= 2:
+                        # 한글인데 사전에 없는 느낌의 단어 (외래어)
+                        if _is_likely_foreign_word(word):
+                            if not any(s['word'] == word for s in suspicious):
+                                suspicious.append({
+                                    'word': word,
+                                    'type': 'foreign',
+                                    'reason': '외래어/미등록어 (지재권 가능성)'
+                                })
+
+            elif analyzer_type == 'komoran':
+                morphs = analyzer.pos(text)
+                for word, pos in morphs:
+                    # NNP: 고유명사, NNB: 의존명사
+                    if pos == 'NNP' and len(word) >= 2:
+                        if not any(s['word'] == word for s in suspicious):
+                            suspicious.append({
+                                'word': word,
+                                'type': 'proper_noun',
+                                'reason': '고유명사 (지재권 가능성)'
+                            })
+        except Exception as e:
+            print(f"[WARNING] 형태소 분석 오류: {e}")
+
+    # 3. 숫자+영어 조합 (모델명 가능성)
+    model_patterns = re.findall(r'[A-Za-z]+\d+|\d+[A-Za-z]+', text)
+    for pattern in model_patterns:
+        if len(pattern) >= 3 and not any(s['word'] == pattern for s in suspicious):
+            suspicious.append({
+                'word': pattern,
+                'type': 'model_number',
+                'reason': '모델명 패턴 (브랜드 제품 가능성)'
+            })
+
+    return suspicious
+
+
+def _is_likely_foreign_word(word: str) -> bool:
+    """외래어일 가능성이 높은 단어인지 판별"""
+    # 일반적인 한국어 명사는 제외
+    common_korean = {
+        '운동화', '신발', '가방', '옷', '바지', '티셔츠', '원피스', '치마', '자켓',
+        '코트', '점퍼', '조끼', '양말', '모자', '장갑', '스카프', '벨트', '지갑',
+        '시계', '안경', '반지', '목걸이', '귀걸이', '팔찌', '액세서리',
+        '휴대폰', '케이스', '충전기', '이어폰', '스피커', '키보드', '마우스',
+        '컵', '접시', '그릇', '냄비', '프라이팬', '도마', '칼', '수저', '젓가락',
+        '의자', '책상', '소파', '침대', '서랍', '선반', '거울', '조명',
+        '남성', '여성', '아동', '유아', '남자', '여자', '아이', '어린이',
+        '세트', '세트', '개입', '묶음', '박스', '패키지',
+        '화이트', '블랙', '레드', '블루', '그린', '핑크', '베이지', '그레이',
+        '대형', '중형', '소형', '미니', '빅', '라지', '스몰',
+    }
+
+    if word in common_korean:
+        return False
+
+    # 외래어 패턴 (한글로 쓴 영어 브랜드 느낌)
+    # - 받침 없이 끝나는 경우가 많음 (나이키, 아디다스, 구찌)
+    # - ㅏ, ㅣ, ㅔ, ㅗ, ㅜ 로 끝나는 경우
+    if len(word) >= 2:
+        last_char = word[-1]
+        # 받침 확인 (한글 유니코드 연산)
+        if '가' <= last_char <= '힣':
+            # 받침 있는지 확인
+            char_code = ord(last_char) - ord('가')
+            jongseong = char_code % 28
+            # 받침 없으면 (jongseong == 0) 외래어 가능성
+            if jongseong == 0:
+                return True
+
+    return False
+
+
+def analyze_products_for_ip(products: List[Dict], log_callback=None) -> Dict:
+    """
+    상품 목록에서 지재권 의심 단어 분석
+
+    Args:
+        products: [{'product_name': '나이키 운동화', ...}, ...]
+        log_callback: 로그 출력 함수
+
+    Returns:
+        {
+            'suspicious_words': {'나이키': 5, '아디다스': 3, ...},  # 단어별 출현 횟수
+            'products_with_ip': [{'product_name': ..., 'suspicious': [...]}],
+            'total_analyzed': 100,
+            'products_with_issues': 15
+        }
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+        else:
+            print(msg)
+
+    result = {
+        'suspicious_words': {},
+        'products_with_ip': [],
+        'total_analyzed': 0,
+        'products_with_issues': 0
+    }
+
+    log(f"📋 지재권 분석 시작: {len(products)}개 상품")
+
+    for i, product in enumerate(products):
+        product_name = product.get('product_name', '') or product.get('name', '') or product.get('uploadCommonProductName', '')
+
+        if not product_name:
+            continue
+
+        result['total_analyzed'] += 1
+
+        # 의심 단어 추출
+        suspicious = extract_suspicious_words(product_name)
+
+        if suspicious:
+            result['products_with_issues'] += 1
+            result['products_with_ip'].append({
+                'product_name': product_name,
+                'product_id': product.get('product_id', '') or product.get('id', '') or product.get('ID', ''),
+                'suspicious': suspicious
+            })
+
+            # 단어별 카운트
+            for s in suspicious:
+                word = s['word']
+                result['suspicious_words'][word] = result['suspicious_words'].get(word, 0) + 1
+
+        # 진행 로그 (100개마다)
+        if (i + 1) % 100 == 0:
+            log(f"  진행: {i + 1}/{len(products)}")
+
+    # 정렬 (출현 횟수 기준)
+    result['suspicious_words'] = dict(
+        sorted(result['suspicious_words'].items(), key=lambda x: x[1], reverse=True)
+    )
+
+    log(f"✅ 분석 완료: {result['products_with_issues']}개 상품에서 의심 단어 발견")
+    log(f"   의심 단어 종류: {len(result['suspicious_words'])}개")
+
+    return result
+
+
+def verify_ip_words_with_ai(words: List[str], log_callback=None) -> Dict:
+    """
+    의심 단어를 AI로 검증하여 실제 지재권 단어인지 확인
+
+    Args:
+        words: ['나이키', '에어맥스', '운동화', ...]
+
+    Returns:
+        {
+            'ip_confirmed': ['나이키', '에어맥스'],  # 지재권 확정
+            'ip_safe': ['운동화'],  # 일반 단어
+            'ip_uncertain': []  # 불확실
+        }
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+        else:
+            print(msg)
+
+    if not words:
+        return {'ip_confirmed': [], 'ip_safe': [], 'ip_uncertain': []}
+
+    log(f"🤖 AI 지재권 검증: {len(words)}개 단어")
+
+    # 프롬프트 생성
+    prompt = f"""다음 단어들을 분석해서 지재권(브랜드/캐릭터/상표) 여부를 판별해주세요.
+
+단어 목록:
+{', '.join(words[:50])}  # 최대 50개씩
+
+각 단어에 대해 다음 형식으로 답변해주세요:
+- 단어: [IP/SAFE/UNCERTAIN] - 이유
+
+예시:
+- 나이키: IP - 스포츠 브랜드
+- 운동화: SAFE - 일반명사
+- 에어맥스: IP - 나이키 제품 라인
+
+JSON 형식으로도 답변해주세요:
+{{"ip": ["나이키", "에어맥스"], "safe": ["운동화"], "uncertain": []}}
+"""
+
+    try:
+        # Gemini API 호출
+        response = call_ai_api(prompt, timeout=30)
+
+        if response:
+            # JSON 파싱 시도
+            import re
+            json_match = re.search(r'\{[^{}]*"ip"[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                try:
+                    result_json = json.loads(json_match.group())
+                    return {
+                        'ip_confirmed': result_json.get('ip', []),
+                        'ip_safe': result_json.get('safe', []),
+                        'ip_uncertain': result_json.get('uncertain', [])
+                    }
+                except:
+                    pass
+
+            # 텍스트 파싱 폴백
+            ip_confirmed = []
+            ip_safe = []
+            for word in words:
+                if f"{word}: IP" in response or f"{word}:IP" in response:
+                    ip_confirmed.append(word)
+                elif f"{word}: SAFE" in response or f"{word}:SAFE" in response:
+                    ip_safe.append(word)
+
+            return {
+                'ip_confirmed': ip_confirmed,
+                'ip_safe': ip_safe,
+                'ip_uncertain': [w for w in words if w not in ip_confirmed and w not in ip_safe]
+            }
+
+    except Exception as e:
+        log(f"❌ AI 검증 실패: {e}")
+
+    return {'ip_confirmed': [], 'ip_safe': [], 'ip_uncertain': words}
+
+
+# 지재권 단어 DB 파일
+IP_WORDS_FILE = "ip_words.json"
+
+def load_ip_words() -> Dict:
+    """지재권 단어 DB 로드"""
+    if os.path.exists(IP_WORDS_FILE):
+        try:
+            with open(IP_WORDS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return {
+        'brands': [],      # 브랜드 (나이키, 아디다스)
+        'characters': [],  # 캐릭터 (디즈니, 포켓몬)
+        'trademarks': [],  # 상표
+        'safe_words': []   # 확인된 안전 단어
+    }
+
+
+def save_ip_words(data: Dict) -> bool:
+    """지재권 단어 DB 저장"""
+    try:
+        with open(IP_WORDS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"지재권 DB 저장 실패: {e}")
+        return False
+
+
+def add_ip_words(words: List[str], category: str = 'brands') -> bool:
+    """지재권 단어 추가"""
+    data = load_ip_words()
+    if category not in data:
+        data[category] = []
+
+    added = 0
+    for word in words:
+        if word and word not in data[category]:
+            data[category].append(word)
+            added += 1
+
+    if added > 0:
+        save_ip_words(data)
+        print(f"✅ {added}개 단어 추가됨 ({category})")
+
+    return added > 0

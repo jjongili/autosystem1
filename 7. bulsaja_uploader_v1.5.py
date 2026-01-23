@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, simpledialog
 
 # 공통 모듈 (미끼 옵션 필터링, 대표옵션 선택, API 클라이언트)
 from bulsaja_common import filter_bait_options, DEFAULT_BAIT_KEYWORDS, select_main_option, BulsajaAPIClient as CommonAPIClient, load_bait_keywords
@@ -974,7 +974,7 @@ class BulsajaUploader:
         self.exclude_keywords = EXCLUDE_KEYWORDS[:]
         
         # 통계
-        self.stats = {"total": 0, "success": 0, "failed": 0, "skipped": 0, "failed_ids": []}
+        self.stats = {"total": 0, "success": 0, "failed": 0, "duplicate_failed": 0, "skipped": 0, "failed_ids": []}
 
         # [신규] 태그 적용 추적 (중복 방지)
         self._tagged_ids = set()
@@ -1228,7 +1228,8 @@ class BulsajaUploader:
                        market_name: str = "스마트스토어",
                        current_idx: int = 0, total_count: int = 0) -> Dict:
         product_id = product.get('ID', '')
-        product_name = product.get('uploadCommonProductName', '')[:25]
+        full_product_name = product.get('uploadCommonProductName', '')
+        product_name = full_product_name[:25]
 
         result = {
             'id': product_id,
@@ -1238,6 +1239,26 @@ class BulsajaUploader:
         }
 
         try:
+            # [v1.5] 금지 키워드 체크 (상품명 기준)
+            banned_kw_text = self.gui.banned_kw_text.get("1.0", tk.END).strip() if hasattr(self.gui, 'banned_kw_text') else ""
+            if banned_kw_text:
+                banned_keywords = [kw.strip().lower() for kw in banned_kw_text.split(',') if kw.strip()]
+                product_name_lower = full_product_name.lower()
+                found_banned = None
+                for bkw in banned_keywords:
+                    if bkw in product_name_lower:
+                        found_banned = bkw
+                        break
+                if found_banned:
+                    progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
+                    market_short = MARKET_SHORT.get(market_name, market_name)
+                    self.log("")
+                    self.log(f"⏭️ {progress_str}[{market_short}] {product_id} - 금지키워드 [{found_banned}]")
+                    self.log(f"   {product_name}")
+                    result['status'] = 'skipped'
+                    result['message'] = f'금지키워드: {found_banned}'
+                    return result
+
             detail = self.api_client.get_product_detail(product_id)
 
             # [v1.4] 해당 마켓 미업로드 체크
@@ -1804,6 +1825,35 @@ class BulsajaUploader:
                     display_cat = (cat_name[:40] + '..') if len(cat_name) > 40 else cat_name
                     # 로그는 나중에 통합 출력
 
+            # [v1.5] 제외 카테고리 체크 (카테고리명에 제외 키워드가 포함되어 있으면 건너뛰기)
+            exclude_cat_text = self.gui.exclude_cat_text.get("1.0", tk.END).strip() if hasattr(self.gui, 'exclude_cat_text') else ""
+            if exclude_cat_text:
+                exclude_categories = [cat.strip().lower() for cat in exclude_cat_text.split(',') if cat.strip()]
+                # 검색된 카테고리명 가져오기
+                searched_cat_name = ""
+                if 'uploadCategory' in detail:
+                    if market_name == "스마트스토어" and 'ss_category' in detail['uploadCategory']:
+                        searched_cat_name = detail['uploadCategory']['ss_category'].get('name', '')
+                    elif market_name in ["G마켓/옥션"] and 'esm_category' in detail['uploadCategory']:
+                        searched_cat_name = detail['uploadCategory']['esm_category'].get('name', '')
+                    elif market_name == "11번가" and 'est_category' in detail['uploadCategory']:
+                        searched_cat_name = detail['uploadCategory']['est_category'].get('name', '')
+
+                if searched_cat_name:
+                    searched_cat_lower = searched_cat_name.lower()
+                    found_exclude_cat = None
+                    for exc_cat in exclude_categories:
+                        if exc_cat in searched_cat_lower:
+                            found_exclude_cat = exc_cat
+                            break
+                    if found_exclude_cat:
+                        progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
+                        market_short = MARKET_SHORT.get(market_name, market_name)
+                        self.log(f"   ⏭️ 제외카테고리 [{found_exclude_cat}] → {searched_cat_name[:30]}")
+                        result['status'] = 'skipped'
+                        result['message'] = f'제외카테고리: {found_exclude_cat}'
+                        return result
+
             # [신규] ESM/11번가 추천 옵션 매핑 오류 및 중복 방지 (옵션명 표준화) - GUI 옵션
             esm_option_normalize = self.gui.esm_option_normalize_var.get() if hasattr(self.gui, 'esm_option_normalize_var') else True
             if esm_option_normalize and market_name in ["G마켓/옥션", "11번가"] and 'uploadSkuProps' in detail:
@@ -1843,13 +1893,20 @@ class BulsajaUploader:
                      # 기존 재시도 로직은 복잡해지므로, 일단 실패 로그만 남김
                      pass
 
-                result['status'] = 'failed'
+                # 중복 실패 감지 (불사자 중복방지 기능으로 인한 실패)
+                is_duplicate = any(kw in upload_msg.lower() for kw in ['중복', 'duplicate', 'already'])
+                if is_duplicate:
+                    result['status'] = 'duplicate_failed'
+                else:
+                    result['status'] = 'failed'
                 result['message'] = upload_msg
 
                 # [수정] 실패 로그 노출 수위 조절 (사용자 요청: 너무 짧지 않게)
                 display_msg = (upload_msg[:200] + '...') if len(upload_msg) > 200 else upload_msg
-                self.log(f"   ❌ 업로드 실패: {display_msg}")
-                self.write_detail_log(product_id, f"[업로드실패]\n{upload_msg}\n")
+                fail_icon = "🔁" if is_duplicate else "❌"
+                fail_type = "중복실패" if is_duplicate else "업로드 실패"
+                self.log(f"   {fail_icon} {fail_type}: {display_msg}")
+                self.write_detail_log(product_id, f"[{fail_type}]\n{upload_msg}\n")
                 self._tag_failed_async(product_id)  # 실패 태그 적용
 
                 return result
@@ -1881,16 +1938,21 @@ class BulsajaUploader:
                      skip_price_update: bool = False, market_name: str = "스마트스토어"):
         """단일 그룹 처리 (그룹명으로 마켓그룹ID 조회하여 업로드)"""
         try:
+            # 업로드실패 태그 상품 제외 옵션
+            skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
+            exclude_tag = "업로드실패" if skip_failed_tag else None
+
             products, total = self.api_client.get_products_by_group(
-                group_name, 0, upload_count, status_filters
+                group_name, 0, upload_count, status_filters, exclude_tag=exclude_tag
             )
 
             if not products:
                 self.log(f"   ⚠️ {group_name}: 상품 없음")
-                return 0, 0, 0
+                return 0, 0, 0, 0
 
             success = 0
             failed = 0
+            duplicate_failed = 0
             skipped = 0
             total_products = len(products)
 
@@ -1908,16 +1970,20 @@ class BulsajaUploader:
                     msg = result['message'][:40]
                     self.log(f"   ⏭️ {product_name.ljust(20)} | 건너뜀 ({msg})")
                     skipped += 1
+                elif result['status'] == 'duplicate_failed':
+                    msg = result['message'][:200]
+                    self.log(f"   🔁 {product_name.ljust(20)} | 중복실패 ({msg})")
+                    duplicate_failed += 1
                 else:
                     msg = result['message'][:200]  # 에러 메시지는 200자까지
                     self.log(f"   ❌ {product_name.ljust(20)} | 실패 ({msg})")
                     failed += 1
 
-            return success, failed, skipped
+            return success, failed, duplicate_failed, skipped
 
         except Exception as e:
             self.log(f"   ❌ {group_name} 처리 오류: {e}")
-            return 0, 0, 0
+            return 0, 0, 0, 0
 
     def process_groups(self, group_names: List[str], upload_count: int,
                       option_count: int, option_sort: str, status_filters: List[str],
@@ -1925,7 +1991,7 @@ class BulsajaUploader:
                       skip_sku_update: bool = False, skip_price_update: bool = False,
                       market_name: str = "스마트스토어"):
         """여러 그룹 처리 (그룹명 = 마켓그룹, 그룹ID로 업로드)"""
-        self.stats = {"total": 0, "success": 0, "failed": 0, "skipped": 0, "failed_ids": []}
+        self.stats = {"total": 0, "success": 0, "failed": 0, "duplicate_failed": 0, "skipped": 0, "failed_ids": []}
         self._tagged_ids = set()  # 태그 추적 초기화
         self.is_running = True
 
@@ -2029,6 +2095,9 @@ class BulsajaUploader:
                     elif result['status'] == 'skipped':
                         self.log(f"      ⏭️ 스킵: {result['message'][:100]}")
                         self.stats['skipped'] += 1
+                    elif result['status'] == 'duplicate_failed':
+                        self.log(f"      🔁 중복실패: {result['message'][:100]}...")
+                        self.stats['duplicate_failed'] += 1
                     else:
                         self.log(f"      ❌ 실패: {result['message'][:100]}...")
                         self.stats['failed'] += 1
@@ -2069,13 +2138,17 @@ class BulsajaUploader:
                 self.log(f"   💡 여러 그룹 병렬 처리는 업로더를 여러 개 실행하세요")
                 group_names = [group_names[0]]
 
+            # 업로드실패 태그 상품 제외 옵션
+            skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
+            exclude_tag = "업로드실패" if skip_failed_tag else None
+
             # [v1.4] 그룹별로 상품 목록을 먼저 가져온 후, 동일한 상품들을 모든 마켓에 업로드
             for g_idx, group_name in enumerate(group_names):
                 if not self.is_running: break
 
                 # 상품 목록 한번만 가져오기
                 products, total = self.api_client.get_products_by_group(
-                    group_name, 0, upload_count, status_filters
+                    group_name, 0, upload_count, status_filters, exclude_tag=exclude_tag
                 )
 
                 if not products:
@@ -2125,6 +2198,10 @@ class BulsajaUploader:
                                     self.stats['success'] += 1
                                 elif result['status'] == 'skipped':
                                     self.stats['skipped'] += 1
+                                elif result['status'] == 'duplicate_failed':
+                                    self.stats['duplicate_failed'] += 1
+                                    fail_info = f"{result.get('id', '?')} ({result.get('name', '')[:15]}) [중복]"
+                                    self.stats['failed_ids'].append(fail_info)
                                 else:
                                     self.stats['failed'] += 1
                                     fail_info = f"{result.get('id', '?')} ({result.get('name', '')[:15]})"
@@ -2157,6 +2234,10 @@ class BulsajaUploader:
                                 self.stats['success'] += 1
                             elif result['status'] == 'skipped':
                                 self.stats['skipped'] += 1
+                            elif result['status'] == 'duplicate_failed':
+                                self.stats['duplicate_failed'] += 1
+                                fail_info = f"{result.get('id', '?')} ({result.get('name', '')[:15]}) [중복]"
+                                self.stats['failed_ids'].append(fail_info)
                             else:
                                 self.stats['failed'] += 1
                                 # 실패 ID 저장 (상품명 포함)
@@ -2175,6 +2256,7 @@ class BulsajaUploader:
             self.log(f"📊 업로드 완료")
             self.log(f"   ✅ 성공: {self.stats['success']}개")
             self.log(f"   ❌ 실패: {self.stats['failed']}개")
+            self.log(f"   🔁 중복실패: {self.stats['duplicate_failed']}개")
             self.log(f"   ⏭️ 건너뜀: {self.stats['skipped']}개")
 
             # 실패 ID 리스트 출력
@@ -2206,16 +2288,21 @@ class BulsajaUploader:
     def run_upload(self, group_name, upload_count, option_count, option_sort, status_filters, concurrent_sessions, title_mode, skip_sku_update, skip_price_update, market_name):
         """단일 그룹 처리 (그룹명으로 마켓그룹ID 조회하여 업로드)"""
         try:
+            # 업로드실패 태그 상품 제외 옵션
+            skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
+            exclude_tag = "업로드실패" if skip_failed_tag else None
+
             products, total = self.api_client.get_products_by_group(
-                group_name, 0, upload_count, status_filters
+                group_name, 0, upload_count, status_filters, exclude_tag=exclude_tag
             )
 
             if not products:
                 self.log(f"   ⚠️ {group_name}: 상품 없음")
-                return 0, 0, 0
+                return 0, 0, 0, 0
 
             success = 0
             failed = 0
+            duplicate_failed = 0
             skipped = 0
             total_products = len(products)
             for idx, product in enumerate(products, 1):
@@ -2231,15 +2318,18 @@ class BulsajaUploader:
                 elif result['status'] == 'skipped':
                     self.log(f"   ⏭️ {product_name}: {result['message'][:50]}")
                     skipped += 1
+                elif result['status'] == 'duplicate_failed':
+                    self.log(f"   🔁 {product_name}: {result['message'][:70]}")
+                    duplicate_failed += 1
                 else:
                     self.log(f"   ❌ {product_name}: {result['message'][:70]}")
                     failed += 1
 
-            return success, failed, skipped
+            return success, failed, duplicate_failed, skipped
 
         except Exception as e:
             self.log(f"   ❌ 그룹 처리 중 오류: {e}")
-            return 0, 0, 0
+            return 0, 0, 0, 0
 
 
 # ==================== GUI 클래스 ====================
@@ -2248,7 +2338,7 @@ class App(tk.Tk):
         super().__init__()
 
         self.title("불사자 상품 업로더 v1.3")
-        self.geometry("900x900")
+        self.geometry("900x1000")
         self.resizable(True, True)
 
         self.config_data = load_config()
@@ -2415,8 +2505,43 @@ class App(tk.Tk):
         ttk.Checkbutton(market_opt_row, text="해당마켓 미업로드만", variable=self.skip_already_uploaded_var).pack(side=tk.LEFT, padx=5)
 
         # 불사자 중복 업로드 방지 (preventDuplicateUpload)
-        self.prevent_duplicate_upload_var = tk.BooleanVar(value=Fasle)
+        # False 권장: 업로드 실패해도 불사자가 "시도함"으로 기록하여 재시도 차단됨
+        self.prevent_duplicate_upload_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(market_opt_row, text="불사자중복방지", variable=self.prevent_duplicate_upload_var).pack(side=tk.LEFT, padx=5)
+
+        # 업로드실패 태그 상품 건너뛰기 (groupFile 필터)
+        self.skip_failed_tag_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(market_opt_row, text="실패태그건너뜀", variable=self.skip_failed_tag_var).pack(side=tk.LEFT, padx=5)
+
+        # === 제외 카테고리 설정 ===
+        exclude_cat_frame = ttk.LabelFrame(main_frame, text="🚫 제외 카테고리 (카테고리명에 포함시 업로드 패스)", padding="5")
+        exclude_cat_frame.pack(fill=tk.X, pady=(0, 5))
+
+        exclude_cat_row = ttk.Frame(exclude_cat_frame)
+        exclude_cat_row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(exclude_cat_row, text="제외 키워드 (쉼표 구분):").pack(side=tk.LEFT)
+        ttk.Button(exclude_cat_row, text="비우기", command=lambda: self.exclude_cat_text.delete("1.0", tk.END), width=6).pack(side=tk.RIGHT)
+
+        self.exclude_cat_text = scrolledtext.ScrolledText(exclude_cat_frame, height=2, width=80,
+                                                           font=('Consolas', 9))
+        self.exclude_cat_text.pack(fill=tk.X, expand=True)
+        # 기본값: 비어있음 (예시: 건강식품,의약품,화장품)
+
+        # === 금지 키워드 설정 (상품명 기준) ===
+        banned_kw_frame = ttk.LabelFrame(main_frame, text="🚫 금지 키워드 (상품명에 포함시 업로드 패스)", padding="5")
+        banned_kw_frame.pack(fill=tk.X, pady=(0, 5))
+
+        banned_kw_row = ttk.Frame(banned_kw_frame)
+        banned_kw_row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(banned_kw_row, text="금지 키워드 (쉼표 구분):").pack(side=tk.LEFT)
+        ttk.Button(banned_kw_row, text="비우기", command=lambda: self.banned_kw_text.delete("1.0", tk.END), width=6).pack(side=tk.RIGHT)
+
+        self.banned_kw_text = scrolledtext.ScrolledText(banned_kw_frame, height=2, width=80,
+                                                         font=('Consolas', 9))
+        self.banned_kw_text.pack(fill=tk.X, expand=True)
+        # 기본값: 비어있음 (예시: 성인용품,담배,주류)
 
         # === 4. 마켓그룹 설정 ===
         group_frame = ttk.LabelFrame(main_frame, text="📁 마켓그룹 설정", padding="5")
@@ -2482,6 +2607,11 @@ class App(tk.Tk):
 
         self.btn_stop = ttk.Button(btn_frame, text="🛑 중지", command=self.stop, state="disabled")
         self.btn_stop.pack(side=tk.LEFT)
+
+        # 서버 연결 버튼
+        self.server_connected = False
+        self.btn_server = ttk.Button(btn_frame, text="🔗 서버 연결", command=self.toggle_server_connection)
+        self.btn_server.pack(side=tk.LEFT, padx=(10, 0))
 
         ttk.Button(btn_frame, text="💾 설정 저장", command=self.save_settings).pack(side=tk.RIGHT)
 
@@ -2556,6 +2686,14 @@ class App(tk.Tk):
         if "markets" in c:
             for market_name, var in self.market_vars.items():
                 var.set(market_name in c["markets"])
+        if "skip_failed_tag" in c:
+            self.skip_failed_tag_var.set(c["skip_failed_tag"])
+        if "exclude_categories" in c:
+            self.exclude_cat_text.delete("1.0", tk.END)
+            self.exclude_cat_text.insert("1.0", c["exclude_categories"])
+        if "banned_keywords" in c:
+            self.banned_kw_text.delete("1.0", tk.END)
+            self.banned_kw_text.insert("1.0", c["banned_keywords"])
 
     def save_settings(self):
         self.config_data["port"] = self.port_var.get()
@@ -2576,6 +2714,9 @@ class App(tk.Tk):
         self.config_data["exclude_keywords"] = self.keyword_text.get("1.0", tk.END).strip()
         self.config_data["thumbnail_match"] = self.thumbnail_match_var.get()
         self.config_data["markets"] = [name for name, var in self.market_vars.items() if var.get()]
+        self.config_data["skip_failed_tag"] = self.skip_failed_tag_var.get()
+        self.config_data["exclude_categories"] = self.exclude_cat_text.get("1.0", tk.END).strip()
+        self.config_data["banned_keywords"] = self.banned_kw_text.get("1.0", tk.END).strip()
         save_config(self.config_data)
         self.log("✅ 설정 저장됨")
 
@@ -2650,6 +2791,121 @@ class App(tk.Tk):
             self.progress_var.set(f"{current}/{total} 그룹 처리 중...")
             self.progress_bar['value'] = (current / total) * 100 if total > 0 else 0
         self.after(0, _update)
+
+    # ========== 서버 연결 기능 ==========
+    def toggle_server_connection(self):
+        """서버 연결/해제 토글"""
+        if self.server_connected:
+            self.disconnect_server()
+        else:
+            self.connect_server()
+
+    def connect_server(self):
+        """서버에 WebSocket 연결"""
+        try:
+            # 서버 URL 입력 받기
+            server_url = tk.simpledialog.askstring(
+                "서버 연결",
+                "서버 URL을 입력하세요:",
+                initialvalue="ws://localhost:8000/ws/upload"
+            )
+            if not server_url:
+                return
+
+            self.log(f"🔗 서버 연결 시도: {server_url}")
+
+            # WebSocket 연결 (백그라운드 스레드)
+            def connect_ws():
+                try:
+                    import websocket
+                    self.ws = websocket.WebSocket()
+                    self.ws.connect(server_url, timeout=10)
+                    self.server_connected = True
+                    self.after(0, lambda: self.btn_server.config(text="🔌 연결 해제"))
+                    self.log("✅ 서버 연결 성공")
+
+                    # 초기 상태 전송
+                    self.send_server_status("connected")
+
+                    # 메시지 수신 루프
+                    while self.server_connected:
+                        try:
+                            msg = self.ws.recv()
+                            if msg:
+                                self.handle_server_message(json.loads(msg))
+                        except websocket.WebSocketTimeoutException:
+                            continue
+                        except Exception as e:
+                            if self.server_connected:
+                                self.log(f"⚠️ 수신 오류: {e}")
+                            break
+
+                except Exception as e:
+                    self.log(f"❌ 서버 연결 실패: {e}")
+                    self.server_connected = False
+
+            threading.Thread(target=connect_ws, daemon=True).start()
+
+        except Exception as e:
+            self.log(f"❌ 연결 오류: {e}")
+
+    def disconnect_server(self):
+        """서버 연결 해제"""
+        try:
+            self.server_connected = False
+            if hasattr(self, 'ws') and self.ws:
+                self.ws.close()
+                self.ws = None
+            self.btn_server.config(text="🔗 서버 연결")
+            self.log("🔌 서버 연결 해제됨")
+        except Exception as e:
+            self.log(f"⚠️ 연결 해제 오류: {e}")
+
+    def send_server_status(self, status: str, data: dict = None):
+        """서버에 상태 전송"""
+        if not self.server_connected or not hasattr(self, 'ws') or not self.ws:
+            return
+        try:
+            msg = {
+                "type": "status",
+                "status": status,
+                "timestamp": datetime.now().isoformat()
+            }
+            if data:
+                msg.update(data)
+            self.ws.send(json.dumps(msg))
+        except Exception as e:
+            self.log(f"⚠️ 상태 전송 실패: {e}")
+
+    def send_server_progress(self, current: int, total: int, message: str = ""):
+        """서버에 진행상황 전송"""
+        self.send_server_status("progress", {
+            "current": current,
+            "total": total,
+            "percent": round(current / total * 100, 1) if total > 0 else 0,
+            "message": message
+        })
+
+    def handle_server_message(self, msg: dict):
+        """서버에서 받은 메시지 처리"""
+        msg_type = msg.get("type", "")
+        self.log(f"📨 서버 메시지: {msg_type}")
+
+        if msg_type == "start_upload":
+            # 서버에서 업로드 시작 명령
+            self.log("🚀 서버 명령: 업로드 시작")
+            self.after(0, self.start_upload)
+
+        elif msg_type == "stop_upload":
+            # 서버에서 중지 명령
+            self.log("🛑 서버 명령: 업로드 중지")
+            self.after(0, self.stop)
+
+        elif msg_type == "update_settings":
+            # 서버에서 설정 업데이트
+            settings = msg.get("settings", {})
+            self.log(f"⚙️ 서버 명령: 설정 업데이트")
+            # TODO: 설정 반영
 
     def parse_group_mapping(self) -> Dict[str, str]:
         """그룹 매핑 텍스트 파싱 (시뮬레이터와 동일한 로직)

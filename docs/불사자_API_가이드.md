@@ -22,30 +22,32 @@
 ## 1. API 개요
 
 ### Base URL
+
 ```
 https://api.bulsaja.com/api
 ```
 
 ### 주요 엔드포인트
 
-| 엔드포인트 | 메서드 | 설명 |
-|-----------|--------|------|
-| `/manage/list/serverside` | POST | 상품 목록 조회 |
-| `/manage/sourcing-product/{id}` | GET | 상품 상세 조회 |
-| `/sourcing/uploadfields/{id}` | PUT | 상품 정보 수정 |
-| `/market/{market_id}/upload/` | POST | 마켓 업로드 |
-| `/market/delete/sourcingproducts` | POST | 상품 삭제 |
-| `/market/groups/` | POST | 마켓 그룹 목록 |
-| `/market/groups/valid` | GET | 유효한 마켓 그룹 |
-| `/market/{market_id}/` | GET | 마켓 상세 정보 |
-| `/manage/category/bulsaja_category` | POST | 카테고리 검색 |
-| `/sourcing/bulk-copy-market-group` | POST | 마켓 그룹으로 상품 복사 |
+| 엔드포인트                          | 메서드 | 설명                    |
+| ----------------------------------- | ------ | ----------------------- |
+| `/manage/list/serverside`           | POST   | 상품 목록 조회          |
+| `/manage/sourcing-product/{id}`     | GET    | 상품 상세 조회          |
+| `/sourcing/uploadfields/{id}`       | PUT    | 상품 정보 수정          |
+| `/market/{market_id}/upload/`       | POST   | 마켓 업로드             |
+| `/market/delete/sourcingproducts`   | POST   | 상품 삭제               |
+| `/market/groups/`                   | POST   | 마켓 그룹 목록          |
+| `/market/groups/valid`              | GET    | 유효한 마켓 그룹        |
+| `/market/{market_id}/`              | GET    | 마켓 상세 정보          |
+| `/manage/category/bulsaja_category` | POST   | 카테고리 검색           |
+| `/sourcing/bulk-copy-market-group`  | POST   | 마켓 그룹으로 상품 복사 |
 
 ---
 
 ## 2. 인증
 
 ### 헤더 구조
+
 ```http
 Accept: application/json, text/plain, */*
 Content-Type: application/json
@@ -56,6 +58,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 ### 토큰 설명
+
 - **accesstoken**: 단기 액세스 토큰 (소문자)
 - **refreshtoken**: 장기 리프레시 토큰 (소문자)
 
@@ -70,6 +73,7 @@ Referer: https://www.bulsaja.com/
 **엔드포인트**: `POST /manage/list/serverside`
 
 **Request Body**:
+
 ```json
 {
   "startRow": 0,
@@ -99,53 +103,59 @@ Referer: https://www.bulsaja.com/
 **Response 전체 필드**:
 
 #### 기본 정보
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `ID` | string | 불사자 상품 ID |
-| `date` | string | 수집일시 |
-| `product_url` | string | 원본 상품 URL |
-| `type` | string | 상품 타입 (oversea=해외) |
-| `method` | string | 수집 방법 |
-| `stock` | number | 재고 수량 |
-| `brand` | string | 브랜드명 (중국어) |
-| `originalProductName` | string | 원본 상품명 (중국어) |
-| `productName` | string | 번역된 상품명 |
-| `marketType` | string | 마켓 타입 |
-| `category_level` | number | 카테고리 레벨 |
+
+| 필드                  | 타입   | 설명                     |
+| --------------------- | ------ | ------------------------ |
+| `ID`                  | string | 불사자 상품 ID           |
+| `date`                | string | 수집일시                 |
+| `product_url`         | string | 원본 상품 URL            |
+| `type`                | string | 상품 타입 (oversea=해외) |
+| `method`              | string | 수집 방법                |
+| `stock`               | number | 재고 수량                |
+| `brand`               | string | 브랜드명 (중국어)        |
+| `originalProductName` | string | 원본 상품명 (중국어)     |
+| `productName`         | string | 번역된 상품명            |
+| `marketType`          | string | 마켓 타입                |
+| `category_level`      | number | 카테고리 레벨            |
 
 #### 업로드 정보
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `uploadedSuccessUrl` | object | 마켓별 업로드 상품번호 |
-| `uploadedMarkets` | string | 업로드된 마켓 목록 |
-| `uploadedProductDate` | string | 업로드 일시 |
-| `uploadBulsajaCode` | string | 불사자 고유 코드 |
-| `uploadRecentExchangeRate` | number | 적용 환율 |
+
+| 필드                       | 타입   | 설명                   |
+| -------------------------- | ------ | ---------------------- |
+| `uploadedSuccessUrl`       | object | 마켓별 업로드 상품번호 |
+| `uploadedMarkets`          | string | 업로드된 마켓 목록     |
+| `uploadedProductDate`      | string | 업로드 일시            |
+| `uploadBulsajaCode`        | string | 불사자 고유 코드       |
+| `uploadRecentExchangeRate` | number | 적용 환율              |
 
 #### 상품명 필드
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `uploadCommonProductName` | string | O | 공통 상품명 |
-| `uploadCoupangProductName` | string | O | 쿠팡용 상품명 |
-| `uploadSmartStoreProductName` | string | O | 스마트스토어용 상품명 |
-| `uploadSearchCategory` | string | X | 카테고리 검색용 |
-| `uploadProductSearchText` | string | X | 검색 텍스트 |
+
+| 필드                          | 타입   | 수정 | 설명                  |
+| ----------------------------- | ------ | ---- | --------------------- |
+| `uploadCommonProductName`     | string | O    | 공통 상품명           |
+| `uploadCoupangProductName`    | string | O    | 쿠팡용 상품명         |
+| `uploadSmartStoreProductName` | string | O    | 스마트스토어용 상품명 |
+| `uploadSearchCategory`        | string | X    | 카테고리 검색용       |
+| `uploadProductSearchText`     | string | X    | 검색 텍스트           |
 
 #### 이미지/비디오 필드
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `uploadThumbnails` | array | O | 썸네일 URL 배열 (최대 5개) |
-| `videoUrls` | array | X | 원본 비디오 URL |
-| `uploadVideoUrls` | array | O | 업로드용 비디오 URL |
+
+| 필드               | 타입  | 수정 | 설명                       |
+| ------------------ | ----- | ---- | -------------------------- |
+| `uploadThumbnails` | array | O    | 썸네일 URL 배열 (최대 5개) |
+| `videoUrls`        | array | X    | 원본 비디오 URL            |
+| `uploadVideoUrls`  | array | O    | 업로드용 비디오 URL        |
 
 #### 상세페이지 필드
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `detailContents` | object | X | 원본 상세페이지 |
-| `uploadDetailContents` | object | O | 번역된 상세페이지 |
-| `uploadDetail_page` | object | O | 상세페이지 설정 |
+
+| 필드                   | 타입   | 수정 | 설명              |
+| ---------------------- | ------ | ---- | ----------------- |
+| `detailContents`       | object | X    | 원본 상세페이지   |
+| `uploadDetailContents` | object | O    | 번역된 상세페이지 |
+| `uploadDetail_page`    | object | O    | 상세페이지 설정   |
 
 **uploadDetail_page 구조**:
+
 ```json
 {
   "is_include_option_image": true,
@@ -160,21 +170,24 @@ Referer: https://www.bulsaja.com/
 ```
 
 #### 태그 필드
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `tags` | array | X | 원본 태그 |
-| `uploadCommonTags` | array | O | 공통 태그 (최대 20개) |
-| `uploadSmartStoreTags` | array | O | 스마트스토어 태그 (최대 10개) |
-| `groupFile` | string | O | 작업 그룹/태그 |
+
+| 필드                   | 타입   | 수정 | 설명                          |
+| ---------------------- | ------ | ---- | ----------------------------- |
+| `tags`                 | array  | X    | 원본 태그                     |
+| `uploadCommonTags`     | array  | O    | 공통 태그 (최대 20개)         |
+| `uploadSmartStoreTags` | array  | O    | 스마트스토어 태그 (최대 10개) |
+| `groupFile`            | string | O    | 작업 그룹/태그                |
 
 #### 연락처/배송 필드
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `uploadContact` | object | O | 연락처 정보 |
-| `original_deliveryFee` | number | X | 원본 배송비 (위안) |
-| `overseaDeliveryFee` | number | X | 해외배송비 (원) |
+
+| 필드                   | 타입   | 수정 | 설명               |
+| ---------------------- | ------ | ---- | ------------------ |
+| `uploadContact`        | object | O    | 연락처 정보        |
+| `original_deliveryFee` | number | X    | 원본 배송비 (위안) |
+| `overseaDeliveryFee`   | number | X    | 해외배송비 (원)    |
 
 **uploadContact 구조**:
+
 ```json
 {
   "refund_info": "환불 정보",
@@ -197,9 +210,9 @@ Referer: https://www.bulsaja.com/
 
 ### 4.1 유효한 마켓 그룹 목록
 
-**엔드포인트**: `GET /market/groups/vaild`
+**엔드포인트**: `GET /market/groups/valid`
 
-> **Note**: URL에 오타가 있습니다 (valid → vaild). 실제 API는 이 오타 URL을 사용합니다.
+> **Note**: 이전 버전에서 URL 오타(valid → vaild)가 수정되었습니다. 현재는 정상적인 URL을 사용합니다.
 
 **Response**: 마켓 그룹 배열
 
@@ -227,23 +240,23 @@ Referer: https://www.bulsaja.com/
 
 #### 마켓 그룹 주요 필드
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | number | 마켓 그룹 ID |
-| `name` | string | 마켓 그룹명 (예: 22_리코즈) |
-| `user_id` | number | 사용자 ID |
-| `created_at` | string | 생성일시 |
-| `updated_at` | string | 수정일시 |
-| `base_price` | object | 가격 설정 |
-| `delivery` | object | 배송 설정 |
-| `fake_pct` | object | 마켓별 할인율 설정 |
-| `detail_page` | object | 상세페이지 설정 |
-| `setting` | object | 기타 설정 |
-| `contact` | object | 연락처 정보 |
-| `exchange` | object | 환율 설정 |
-| `is_global` | number | 해외배송 여부 |
-| `sort_order` | number | 정렬 순서 |
-| `detailRowData` | array | 연결된 마켓 목록 |
+| 필드            | 타입   | 설명                         |
+| --------------- | ------ | ---------------------------- |
+| `id`            | number | 마켓 그룹 ID                 |
+| `name`          | string | 마켓 그룹명 (예: 22\_리코즈) |
+| `user_id`       | number | 사용자 ID                    |
+| `created_at`    | string | 생성일시                     |
+| `updated_at`    | string | 수정일시                     |
+| `base_price`    | object | 가격 설정                    |
+| `delivery`      | object | 배송 설정                    |
+| `fake_pct`      | object | 마켓별 할인율 설정           |
+| `detail_page`   | object | 상세페이지 설정              |
+| `setting`       | object | 기타 설정                    |
+| `contact`       | object | 연락처 정보                  |
+| `exchange`      | object | 환율 설정                    |
+| `is_global`     | number | 해외배송 여부                |
+| `sort_order`    | number | 정렬 순서                    |
+| `detailRowData` | array  | 연결된 마켓 목록             |
 
 #### base_price 구조 (가격 설정)
 
@@ -258,14 +271,14 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `card_fee` | number | 카드 수수료 (%) |
-| `plus_margin` | number | 추가 마진 (원) |
-| `raise_digit` | number | 올림 단위 (원) |
-| `discount_rate` | number | 할인율 |
-| `discount_unit` | string | 할인 단위 (% 또는 원) |
-| `percent_margin` | number | 마진율 (%) |
+| 필드             | 타입   | 설명                  |
+| ---------------- | ------ | --------------------- |
+| `card_fee`       | number | 카드 수수료 (%)       |
+| `plus_margin`    | number | 추가 마진 (원)        |
+| `raise_digit`    | number | 올림 단위 (원)        |
+| `discount_rate`  | number | 할인율                |
+| `discount_unit`  | string | 할인 단위 (% 또는 원) |
+| `percent_margin` | number | 마진율 (%)            |
 
 #### delivery 구조 (배송 설정)
 
@@ -280,14 +293,14 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `type` | string | 배송비 타입 (FREE/PAID) |
-| `return_fee` | number | 반품 배송비 |
-| `delivery_fee` | number | 기본 배송비 |
-| `exchange_fee` | number | 교환 배송비 |
-| `mountain_fee` | number | 도서산간 추가비 |
-| `delivery_attribute_type` | string | 발송 타입 (TODAY 등) |
+| 필드                      | 타입   | 설명                    |
+| ------------------------- | ------ | ----------------------- |
+| `type`                    | string | 배송비 타입 (FREE/PAID) |
+| `return_fee`              | number | 반품 배송비             |
+| `delivery_fee`            | number | 기본 배송비             |
+| `exchange_fee`            | number | 교환 배송비             |
+| `mountain_fee`            | number | 도서산간 추가비         |
+| `delivery_attribute_type` | string | 발송 타입 (TODAY 등)    |
 
 #### fake_pct 구조 (마켓별 할인율)
 
@@ -331,16 +344,16 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `brand` | string | 브랜드명 |
-| `maker` | string | 제조사명 |
-| `is_tax_free` | boolean | 면세 여부 |
-| `minor_limit` | string | 미성년자 구매 제한 (AUTO/NONE) |
-| `shipment_date` | number | 발송 예정일 (일) |
-| `max_purchase_qty` | number | 최대 구매 수량 (0=무제한) |
-| `coupang_thumbnail_mode` | string | 쿠팡 썸네일 모드 |
-| `apply_lowest_price_option_for_smartstore` | boolean | 스마트스토어 최저가 옵션 적용 |
+| 필드                                       | 타입    | 설명                           |
+| ------------------------------------------ | ------- | ------------------------------ |
+| `brand`                                    | string  | 브랜드명                       |
+| `maker`                                    | string  | 제조사명                       |
+| `is_tax_free`                              | boolean | 면세 여부                      |
+| `minor_limit`                              | string  | 미성년자 구매 제한 (AUTO/NONE) |
+| `shipment_date`                            | number  | 발송 예정일 (일)               |
+| `max_purchase_qty`                         | number  | 최대 구매 수량 (0=무제한)      |
+| `coupang_thumbnail_mode`                   | string  | 쿠팡 썸네일 모드               |
+| `apply_lowest_price_option_for_smartstore` | boolean | 스마트스토어 최저가 옵션 적용  |
 
 #### exchange 구조 (환율 설정)
 
@@ -352,10 +365,10 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `rate` | number | 현재 환율 |
-| `currency` | string | 통화 (CNY) |
+| 필드            | 타입    | 설명           |
+| --------------- | ------- | -------------- |
+| `rate`          | number  | 현재 환율      |
+| `currency`      | string  | 통화 (CNY)     |
 | `auto_exchange` | boolean | 자동 환율 적용 |
 
 #### detailRowData 구조 (연결된 마켓 정보)
@@ -392,6 +405,7 @@ Referer: https://www.bulsaja.com/
 **엔드포인트**: `GET /market/{market_id}/`
 
 **Response**:
+
 ```json
 {
   "id": 10400,
@@ -422,6 +436,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 ### 마켓 타입
+
 - `SMARTSTORE`: 스마트스토어
 - `COUPANG`: 쿠팡
 - `GMARKET`: 지마켓 (ESM으로 통합)
@@ -436,6 +451,7 @@ Referer: https://www.bulsaja.com/
 #### SMARTSTORE (스마트스토어)
 
 **account**:
+
 ```json
 {
   "api_key": "API 키",
@@ -447,6 +463,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 **opt**:
+
 ```json
 {
   "phone_number": "010-xxxx-xxxx",
@@ -464,6 +481,7 @@ Referer: https://www.bulsaja.com/
 #### ESM (지마켓/옥션)
 
 **account**:
+
 ```json
 {
   "auction_id": "옥션 아이디",
@@ -472,6 +490,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 **opt**:
+
 ```json
 {
   "return_address": "반품지 주소",
@@ -488,6 +507,7 @@ Referer: https://www.bulsaja.com/
 #### ST11 (11번가)
 
 **account**:
+
 ```json
 {
   "api_key": "11번가 API 키"
@@ -495,6 +515,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 **opt**:
+
 ```json
 {
   "phone": "010-xxxx-xxxx",
@@ -512,6 +533,7 @@ Referer: https://www.bulsaja.com/
 #### COUPANG (쿠팡)
 
 **account**:
+
 ```json
 {
   "api_key": "쿠팡 API 키 (UUID)",
@@ -523,6 +545,7 @@ Referer: https://www.bulsaja.com/
 ```
 
 **opt**:
+
 ```json
 {
   "return_address": "반품지 주소",
@@ -547,6 +570,7 @@ Referer: https://www.bulsaja.com/
 **엔드포인트**: `POST /market/{market_id}/upload/`
 
 **Request Body**:
+
 ```json
 {
   "productId": "U01KD7X9YZ7MD5A5H9S3Z87YWA4",
@@ -557,13 +581,13 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `productId` | string | O | 불사자 상품 ID |
-| `notices` | null/string | X | 공지사항 |
-| `preventDuplicateUpload` | boolean | X | 중복 업로드 방지 |
-| `removeDuplicateWords` | boolean | X | 중복 단어 제거 |
-| `targetMarket` | string | O | 대상 마켓 |
+| 필드                     | 타입        | 필수 | 설명             |
+| ------------------------ | ----------- | ---- | ---------------- |
+| `productId`              | string      | O    | 불사자 상품 ID   |
+| `notices`                | null/string | X    | 공지사항         |
+| `preventDuplicateUpload` | boolean     | X    | 중복 업로드 방지 |
+| `removeDuplicateWords`   | boolean     | X    | 중복 단어 제거   |
+| `targetMarket`           | string      | O    | 대상 마켓        |
 
 ---
 
@@ -574,6 +598,7 @@ Referer: https://www.bulsaja.com/
 **엔드포인트**: `POST /market/delete/sourcingproducts`
 
 **Request Body**:
+
 ```json
 {
   "data": {
@@ -583,19 +608,19 @@ Referer: https://www.bulsaja.com/
 }
 ```
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `sourcingIds` | array | O | 삭제할 불사자 상품 ID 배열 |
-| `deleteType` | number | O | 삭제 유형 (아래 참조) |
+| 필드          | 타입   | 필수 | 설명                       |
+| ------------- | ------ | ---- | -------------------------- |
+| `sourcingIds` | array  | O    | 삭제할 불사자 상품 ID 배열 |
+| `deleteType`  | number | O    | 삭제 유형 (아래 참조)      |
 
 ### 6.2 deleteType 옵션
 
-| deleteType | 설명 |
-|------------|------|
-| `0` | 업로드한 마켓만 삭제 |
-| `1` | 불사자 수집상품 관리에서만 삭제 |
-| `2` | 마켓 및 불사자 수집상품 관리에서 모두 삭제 |
-| `3` | 마켓과 연결 끊기 (마켓에선 유지, 불사자에서만 연결 해제) |
+| deleteType | 설명                                                     |
+| ---------- | -------------------------------------------------------- |
+| `0`        | 업로드한 마켓만 삭제                                     |
+| `1`        | 불사자 수집상품 관리에서만 삭제                          |
+| `2`        | 마켓 및 불사자 수집상품 관리에서 모두 삭제               |
+| `3`        | 마켓과 연결 끊기 (마켓에선 유지, 불사자에서만 연결 해제) |
 
 ### 6.3 Response
 
@@ -633,17 +658,17 @@ Referer: https://www.bulsaja.com/
 
 ### 6.4 Response 필드 설명
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | string | 불사자 상품 ID |
-| `code` | number | 결과 코드 (1 = 성공) |
-| `status` | string | 처리 상태 메시지 |
-| `marketResult` | array | 마켓별 삭제 결과 |
-| `marketResult[].type` | string | 마켓 타입 (SMARTSTORE 등) |
-| `marketResult[].code` | number | 마켓별 결과 코드 (1 = 성공) |
-| `marketResult[].productId` | number | 삭제된 마켓 상품번호 |
-| `marketResult[].result` | object | 마켓 API 응답 |
-| `statusResult` | object | 삭제 후 전체 상품 현황 통계 |
+| 필드                       | 타입   | 설명                        |
+| -------------------------- | ------ | --------------------------- |
+| `id`                       | string | 불사자 상품 ID              |
+| `code`                     | number | 결과 코드 (1 = 성공)        |
+| `status`                   | string | 처리 상태 메시지            |
+| `marketResult`             | array  | 마켓별 삭제 결과            |
+| `marketResult[].type`      | string | 마켓 타입 (SMARTSTORE 등)   |
+| `marketResult[].code`      | number | 마켓별 결과 코드 (1 = 성공) |
+| `marketResult[].productId` | number | 삭제된 마켓 상품번호        |
+| `marketResult[].result`    | object | 마켓 API 응답               |
+| `statusResult`             | object | 삭제 후 전체 상품 현황 통계 |
 
 ### 6.5 주의사항
 
@@ -707,19 +732,19 @@ for item in result["results"]:
 }
 ```
 
-| 필드 | 타입 | 수정 | 설명 |
-|------|------|------|------|
-| `skuRef` | string | **X** | SKU 참조 ID (타오바오 SKU ID) |
-| `_origin_price` | number | **X** | **위안 원가 - 절대 수정 금지!** |
-| `origin_price` | number | O | 원화 할인전 가격 |
-| `sale_price` | number | O | 원화 할인후 가격 |
-| `main_product` | boolean | O | 대표상품 여부 |
-| `exclude` | boolean | **X** | **제외 여부 - 수정 시 옵션 구조 깨짐!** |
-| `id` | string | **X** | 옵션 ID (vid와 매핑) |
-| `text` | string | **X** | 한글 옵션명 (접두사 포함) |
-| `_text` | string | **X** | 중국어 원본 옵션명 |
-| `urlRef` | string | **X** | 옵션 이미지 URL |
-| `stock` | number | **X** | 재고 수량 |
+| 필드            | 타입    | 수정  | 설명                                    |
+| --------------- | ------- | ----- | --------------------------------------- |
+| `skuRef`        | string  | **X** | SKU 참조 ID (타오바오 SKU ID)           |
+| `_origin_price` | number  | **X** | **위안 원가 - 절대 수정 금지!**         |
+| `origin_price`  | number  | O     | 원화 할인전 가격                        |
+| `sale_price`    | number  | O     | 원화 할인후 가격                        |
+| `main_product`  | boolean | O     | 대표상품 여부                           |
+| `exclude`       | boolean | **X** | **제외 여부 - 수정 시 옵션 구조 깨짐!** |
+| `id`            | string  | **X** | 옵션 ID (vid와 매핑)                    |
+| `text`          | string  | **X** | 한글 옵션명 (접두사 포함)               |
+| `_text`         | string  | **X** | 중국어 원본 옵션명                      |
+| `urlRef`        | string  | **X** | 옵션 이미지 URL                         |
+| `stock`         | number  | **X** | 재고 수량                               |
 
 ---
 
@@ -798,11 +823,11 @@ for item in result["results"]:
 
 > **적용 대상**: 쿠팡 제외 모든 플랫폼 (스마트스토어, 지마켓, 옥션, 11번가)
 
-| 항목 | 내용 |
-|------|------|
-| **기준** | origin_price (할인전 가격) |
+| 항목          | 내용                       |
+| ------------- | -------------------------- |
+| **기준**      | origin_price (할인전 가격) |
 | **허용 범위** | 대표옵션 가격의 50% ~ 150% |
-| **위반 시** | 업로드 실패 또는 검수 탈락 |
+| **위반 시**   | 업로드 실패 또는 검수 탈락 |
 
 ---
 
@@ -877,12 +902,14 @@ for item in result["results"]:
 **엔드포인트**: `POST /sourcing/translate/photokit`
 
 **용도**:
+
 - 썸네일 이미지 텍스트 한글 번역
 - 옵션 이미지 텍스트 한글 번역
 
 > **Note**: 썸네일과 옵션 이미지 번역 모두 동일한 API 사용
 
 **Request Body** (예상):
+
 ```json
 {
   "productId": "U01KD7X9YZ7MD5A5H9S3Z87YWA4",
@@ -902,6 +929,7 @@ for item in result["results"]:
 **엔드포인트**: `POST /manage/category/bulsaja_category`
 
 **Request Body**:
+
 ```json
 {
   "keyword": "캠핑 장작 난로"
@@ -909,6 +937,7 @@ for item in result["results"]:
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -928,13 +957,13 @@ for item in result["results"]:
 
 #### 마켓별 카테고리 키
 
-| 키 | 마켓 | 설명 |
-|------|------|------|
-| `ss` | 스마트스토어 | 네이버 스마트스토어 |
-| `cp` | 쿠팡 | 쿠팡 |
-| `esm` | 지마켓/옥션 | ESM 통합 |
-| `est` | 11번가 | 11번가 국내 |
-| `est_global` | 11번가 글로벌 | 11번가 해외직구 |
+| 키           | 마켓          | 설명                |
+| ------------ | ------------- | ------------------- |
+| `ss`         | 스마트스토어  | 네이버 스마트스토어 |
+| `cp`         | 쿠팡          | 쿠팡                |
+| `esm`        | 지마켓/옥션   | ESM 통합            |
+| `est`        | 11번가        | 11번가 국내         |
+| `est_global` | 11번가 글로벌 | 11번가 해외직구     |
 
 #### 카테고리 응답 구조
 
@@ -950,13 +979,13 @@ for item in result["results"]:
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | string | 마켓 식별자 |
-| `code` | string | 카테고리 코드 |
-| `name` | string | 카테고리 전체 경로 |
-| `needCert` | boolean | 인증 필요 여부 |
-| `additional` | object | 추가 설정 |
+| 필드         | 타입    | 설명               |
+| ------------ | ------- | ------------------ |
+| `id`         | string  | 마켓 식별자        |
+| `code`       | string  | 카테고리 코드      |
+| `name`       | string  | 카테고리 전체 경로 |
+| `needCert`   | boolean | 인증 필요 여부     |
+| `additional` | object  | 추가 설정          |
 
 #### 쿠팡 카테고리 additional 필드
 
@@ -969,11 +998,11 @@ for item in result["results"]:
 }
 ```
 
-| 필드 | 설명 |
-|------|------|
-| `requiredOptions` | 필수 옵션 개수 |
-| `mandatoryOption` | 필수 옵션명 |
-| `mandatoryType` | 옵션 타입 (NUMBER 등) |
+| 필드              | 설명                  |
+| ----------------- | --------------------- |
+| `requiredOptions` | 필수 옵션 개수        |
+| `mandatoryOption` | 필수 옵션명           |
+| `mandatoryType`   | 옵션 타입 (NUMBER 등) |
 
 #### ESM 카테고리 additional 필드
 
@@ -981,7 +1010,7 @@ for item in result["results"]:
 {
   "auction": "44090000",
   "gmarket": "300024394",
-  "options": [{"name": "발송일", "code": 1021}],
+  "options": [{ "name": "발송일", "code": 1021 }],
   "addOption": true,
   "addPrice": true,
   "isBook": false,
@@ -989,12 +1018,12 @@ for item in result["results"]:
 }
 ```
 
-| 필드 | 설명 |
-|------|------|
-| `auction` | 옥션 카테고리 코드 |
-| `gmarket` | 지마켓 카테고리 코드 |
-| `options` | 필수 옵션 목록 |
-| `goodsType` | 상품 유형 |
+| 필드        | 설명                 |
+| ----------- | -------------------- |
+| `auction`   | 옥션 카테고리 코드   |
+| `gmarket`   | 지마켓 카테고리 코드 |
+| `options`   | 필수 옵션 목록       |
+| `goodsType` | 상품 유형            |
 
 ---
 
@@ -1017,12 +1046,12 @@ for item in result["results"]:
 }
 ```
 
-| 키 | 마켓 |
-|------|------|
-| `ss_category` | 스마트스토어 |
-| `cp_category` | 쿠팡 |
-| `esm_category` | 지마켓/옥션 |
-| `est_category` | 11번가 |
+| 키                    | 마켓          |
+| --------------------- | ------------- |
+| `ss_category`         | 스마트스토어  |
+| `cp_category`         | 쿠팡          |
+| `esm_category`        | 지마켓/옥션   |
+| `est_category`        | 11번가        |
 | `est_global_category` | 11번가 글로벌 |
 
 ---
@@ -1109,6 +1138,7 @@ result = upload_to_market(10400, "U01...", "SMARTSTORE")
 ## 에러 처리
 
 ### 토큰 만료
+
 ```json
 {
   "name": "Expire Token",
@@ -1124,7 +1154,7 @@ result = upload_to_market(10400, "U01...", "SMARTSTORE")
 
 ## 주의사항
 
-1. **_origin_price 절대 수정 금지**: 이 값은 가격 계산의 기준값으로 수정 시 모든 가격 체계가 깨집니다.
+1. **\_origin_price 절대 수정 금지**: 이 값은 가격 계산의 기준값으로 수정 시 모든 가격 체계가 깨집니다.
 
 2. **exclude 필드 수정 금지**: 마켓과 SKU 간의 옵션 매핑 구조가 깨져 업로드 실패 및 판매 중 상품에 문제가 발생합니다.
 
@@ -1136,4 +1166,37 @@ result = upload_to_market(10400, "U01...", "SMARTSTORE")
 
 ---
 
-*이 문서는 실제 API 응답을 기반으로 작성되었습니다.*
+## 10. AI 배송비 측정 API (Vertex)
+
+썸네일 이미지를 분석하여 예상 무게와 크기를 추정하고 적정 해외 배송비를 계산하는 AI 서비스입니다.
+
+**엔드포인트**: `POST /vertex/shipping-cost`
+**Base URL**: `https://api.bulsaja.com/api`
+
+**Request Body**:
+
+```json
+{
+  "imageUrl": "https://cdn.bulsaja.com/...\nhttps://img.alicdn.com/...",
+  "keywords": "상품명: 경첩지그가이드 싱크대 구멍 경첩 힌지 지그 홈파기 드릴링 펀치"
+}
+```
+
+- `imageUrl`: 썸네일 이미지 URL들을 줄바꿈(`\n`)으로 구분한 문자열
+- `keywords`: 상품명을 포함한 키워드 정보
+
+**Response 주요 필드**:
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `success` | boolean | 성공 여부 |
+| `data.product_info.name` | string | 분석된 상품명 |
+| `data.product_info.estimated_dims_cm` | string | 예상 규격 (가로x세로x높이 cm) |
+| `data.product_info.estimated_real_weight` | string | 예상 실중량 (kg) |
+| `data.cost_calculation.chargeable_weight` | string | 적용 중량 (kg) |
+| `data.cost_calculation.base_shipping_cost` | string | **기본 배송비 (원)** |
+| `data.logistics_check.is_freight_cargo` | string | 화물 택배 여부 ("true"/"false") |
+| `data.reasoning` | string | 분석 근거 (마크다운 형식) |
+
+---
+
+_이 문서는 실제 API 응답을 기반으로 작성되었습니다._
