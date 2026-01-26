@@ -721,7 +721,7 @@ for item in result["results"]:
   "skuRef": "3768966850356",
   "_origin_price": 62,
   "origin_price": 13082,
-  "sale_price": 58800,
+  "sale_price": 65200,
   "main_product": false,
   "exclude": false,
   "id": "1",
@@ -730,14 +730,16 @@ for item in result["results"]:
   "urlRef": "https://cdn.bulsaja.com/...",
   "stock": 200
 }
+// origin_price = 62 × 211 = 13,082 (원화 원가)
+// sale_price = 13,082 × 1.28 + 10,000 + 38,000 = 65,200 (기준 판매가)
 ```
 
 | 필드            | 타입    | 수정  | 설명                                    |
 | --------------- | ------- | ----- | --------------------------------------- |
 | `skuRef`        | string  | **X** | SKU 참조 ID (타오바오 SKU ID)           |
 | `_origin_price` | number  | **X** | **위안 원가 - 절대 수정 금지!**         |
-| `origin_price`  | number  | O     | 원화 할인전 가격                        |
-| `sale_price`    | number  | O     | 원화 할인후 가격                        |
+| `origin_price`  | number  | O     | 원화 원가 = _origin_price × 환율        |
+| `sale_price`    | number  | O     | 기준 판매가 (마진+배송비 포함)          |
 | `main_product`  | boolean | O     | 대표상품 여부                           |
 | `exclude`       | boolean | **X** | **제외 여부 - 수정 시 옵션 구조 깨짐!** |
 | `id`            | string  | **X** | 옵션 ID (vid와 매핑)                    |
@@ -803,20 +805,27 @@ for item in result["results"]:
 
 ## 8. 가격 계산
 
-### 8.1 가격 계산 공식
+### 8.1 가격 계산 공식 (불사자 공식)
 
 ```
-1단계: 원화 환산
-    위안원가(_origin_price) × 환율(211) = 원화원가
+1단계: 원화 원가 (origin_price)
+    origin_price = _origin_price × 환율
+    예: 208 × 211 = 43,888원
 
-2단계: 할인전 가격 (origin_price)
-    (원화원가 + 추가마진) / (1 - 마진율/100) / (1 - 카드수수료/100)
+2단계: 기준 판매가 (sale_price)
+    sale_price = 원화원가 × (1 + 카드수수료/100 + 마진율/100) + 정액마진 + 해외배송비
+    예: 43,888 × (1 + 0.033 + 0.26) + 10,000 + 5,000
+      = 43,888 × 1.293 + 15,000
+      = 71,747 → 71,800원 (올림)
 
-3단계: 할인후 가격 (sale_price)
-    origin_price × (1 - 할인율/100)
+3단계: 할인 표시 (불사자 자동 계산)
+    uploadBase_price.discount_rate 설정 시 마켓에서 자동 계산
+    할인전가격 = sale_price / (1 - 할인율/100)
+    예: 71,800 / 0.78 = 92,051원 (할인율 22%)
 
-4단계: 올림 처리
-    raise_digit 단위로 올림 (예: 100원 단위)
+※ 카드수수료(card_fee 3.3%)는 기준판매가에 포함됨
+※ 마켓수수료(uploadFake_pct)는 업로드 시 마켓에서 자동 적용됨 (기준판매가에 미포함)
+   - smartstore: 8%, coupang: 13%, gmarket: 13%, st11: 12%, auction: 13%
 ```
 
 ### 8.2 150% 가격 규칙
@@ -825,7 +834,7 @@ for item in result["results"]:
 
 | 항목          | 내용                       |
 | ------------- | -------------------------- |
-| **기준**      | origin_price (할인전 가격) |
+| **기준**      | sale_price (기준 판매가)   |
 | **허용 범위** | 대표옵션 가격의 50% ~ 150% |
 | **위반 시**   | 업로드 실패 또는 검수 탈락 |
 
@@ -847,8 +856,8 @@ for item in result["results"]:
 - uploadCategory (카테고리)
 - uploadContact (연락처 정보)
 - uploadVideoUrls (비디오 URL)
-- uploadSkus[].origin_price (원화 할인전)
-- uploadSkus[].sale_price (원화 할인후)
+- uploadSkus[].origin_price (원화 원가 = CNY×환율)
+- uploadSkus[].sale_price (기준 판매가 = 마진+배송비 포함)
 - uploadSkus[].main_product (대표상품)
 ```
 

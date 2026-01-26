@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-불사자 상품 업로더 v1.3
+불사자 상품 업로더 v1.6
 - 구글시트 설정 화면과 동일한 GUI
 - 마켓 그룹 선택 (다중 선택)
 - 동시 세션 설정
 - 옵션 설정 (개수, 정렬, 필터링)
 - 그룹별 마켓 ID 동적 매핑 (v1.2)
 - 카테고리 오류 시 ESM 카테고리로 재시도 (v1.3)
+- 가격 계산 공식 수정 (불사자 공식 적용, 카드수수료 포함) (v1.6)
 
 by 프코노미
 """
@@ -125,6 +126,7 @@ class PriceSettings:
     margin_fixed: int = 15000
     discount_rate_min: float = 20.0    # 할인율 최소
     discount_rate_max: float = 30.0    # 할인율 최대
+    delivery_fee: int = 0              # 해외배송비 (전역 설정)
     round_unit: int = 100
     min_price: int = 20000
     max_price: int = 100000000
@@ -1327,7 +1329,7 @@ class BulsajaUploader:
                 self.log(f"   🧹 중복 옵션 제거(ID/값): {len(upload_skus)}개 → {len(unique_skus)}개")
                 upload_skus = unique_skus
 
-            # 해외배송비 가져오기
+            # 해외배송비 가져오기 (상품별 설정값 사용)
             delivery_fee = detail.get('uploadOverseaDeliveryFee', 0) or 0
 
             # 로그 시작 (상품별 구분을 위해 빈 줄 + ID/상품명 분리)
@@ -1402,26 +1404,32 @@ class BulsajaUploader:
                     excluded_by_price.append((sku_id, text[:20], origin_cny, "가격0"))
                     continue
 
-                # [중요] 0원 방지: SKU별 가격 명시적 할당
-                # BulsajaAPIClient.calculate_price와 동일 유사 로직 수행
-                # 원화 원가 = 환율 × 위안원가 (배송비 미포함)
-                origin_krw = origin_cny * self.price_settings.exchange_rate
-                
-                # 마켓별 할인율 적용 (d_rate는 위에서 discount_rate로 일원화됨)
-                d_rate = discount_rate
-                
-                # 정상가 = 원화원가 + 원화원가 × (카드수수료 + 마진율) + 정액마진 + 배송비
-                base_price = origin_krw + origin_krw * (self.price_settings.card_fee_rate + margin_rate) / 100 + self.price_settings.margin_fixed + delivery_fee
-                origin_price_final = math.ceil(base_price / self.price_settings.round_unit) * self.price_settings.round_unit
-                
-                # 판매가 = 정상가 × (1 - 할인율)
-                sale_price_final = origin_price_final * (1 - d_rate / 100)
-                sale_price_final = math.ceil(sale_price_final / self.price_settings.round_unit) * self.price_settings.round_unit
+                # [중요] SKU별 가격 직접 계산 및 설정
+                # 불사자 공식 (ADDITIVE):
+                #   기준판매가(sale_price) = 원화원가 × (1 + 마진율/100) + 정액마진 + 해외배송비
+                #   ※ 마켓수수료(uploadFake_pct)는 업로드 시 마켓에서 자동 적용됨
+                #
+                # SKU 필드 의미:
+                #   origin_price = 원화 원가 (CNY × 환율, 마진 미포함)
+                #   sale_price = 기준 판매가 (마진 포함된 실제 판매가)
+                #
+                # 할인 표시는 uploadBase_price.discount_rate로 마켓에서 처리
 
-                # SKU 객체에 가격 정보 쓰기
-                # origin_price = 정상가(할인전), sale_price = 판매가(할인후)
-                sku['origin_price'] = int(origin_price_final)  # 정상가 (배송비+마진 포함)
-                sku['sale_price'] = int(sale_price_final)      # 최종 판매가
+                # 1. 원화원가 = CNY × 환율
+                origin_krw = origin_cny * self.price_settings.exchange_rate
+
+                # 2. 기준 판매가 계산 (불사자 공식)
+                # 기준판매가 = 원화원가 × (1 + 카드수수료 + 마진율) + 정액마진 + 해외배송비
+                card_fee_decimal = self.price_settings.card_fee_rate / 100  # 3.3% → 0.033
+                margin_rate_decimal = margin_rate / 100  # 26% → 0.26
+                base_price = origin_krw * (1 + card_fee_decimal + margin_rate_decimal) + self.price_settings.margin_fixed + delivery_fee
+                sale_price_final = math.ceil(base_price / self.price_settings.round_unit) * self.price_settings.round_unit
+
+                # 3. SKU에 가격 설정
+                #    origin_price = 원화 원가 (환율만 적용)
+                #    sale_price = 기준 판매가 (마진 포함)
+                sku['origin_price'] = int(origin_krw)
+                sku['sale_price'] = int(sale_price_final)
 
                 if sale_price_final < self.price_settings.min_price:
                     excluded_by_price.append((sku_id, text[:20], origin_cny, f"최소가미만({sale_price_final:,.0f}원)"))
@@ -1520,19 +1528,17 @@ class BulsajaUploader:
             # 6. 선택된 SKU ID 목록
             selected_ids = {sku.get('id') for sku in selected_skus}
 
-            # 7. uploadBase_price 설정 (우리 마진 설정으로 덮어쓰기)
-            # 불사자가 이 설정값으로 가격 계산해서 마켓에 올림
-            # 주의: discount_rate, percent_margin은 1% 단위 정수여야 함
-            
+            # 7. uploadBase_price 및 해외배송비 설정
             detail['uploadBase_price'] = {
                 "card_fee": self.price_settings.card_fee_rate,
-                "discount_rate": discount_rate, 
+                "discount_rate": discount_rate,
                 "discount_unit": "%",
-                "percent_margin": margin_rate, 
-                "plus_margin": self.price_settings.margin_fixed + delivery_fee, 
+                "percent_margin": margin_rate,
+                "plus_margin": self.price_settings.margin_fixed,
                 "raise_digit": self.price_settings.round_unit
             }
-            self.log(f"   💹 마진설정: 마진율 {margin_rate}%, 정액 {self.price_settings.margin_fixed:,}원, 할인율 {discount_rate}%")
+            # uploadOverseaDeliveryFee는 상품에 이미 설정된 값 사용 (수정 안 함)
+            self.log(f"   💹 가격설정: 마진율 {margin_rate}%, 정액 {self.price_settings.margin_fixed:,}원, 배송비 {delivery_fee:,}원, 할인율 {discount_rate}%")
 
             # 8. main_product 설정 (전체 옵션 중 위안 원가 최저가)
             # 불사자 exclude는 무시하고, 우리 필터링(키워드/가격/클러스터)만 적용해서 대표상품 선택
@@ -2402,7 +2408,11 @@ class App(tk.Tk):
 
         ttk.Label(row2, text="가격단위올림(원):").pack(side=tk.LEFT)
         self.round_unit_var = tk.StringVar(value="100")
-        ttk.Entry(row2, textvariable=self.round_unit_var, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row2, textvariable=self.round_unit_var, width=5).pack(side=tk.LEFT, padx=(2, 10))
+
+        ttk.Label(row2, text="해외배송비(원):").pack(side=tk.LEFT)
+        self.delivery_fee_var = tk.StringVar(value="0")
+        ttk.Entry(row2, textvariable=self.delivery_fee_var, width=7).pack(side=tk.LEFT, padx=2)
 
         # === 3. 상품업로드 설정 ===
         upload_frame = ttk.LabelFrame(main_frame, text="📤 상품업로드 설정", padding="5")
@@ -2668,6 +2678,7 @@ class App(tk.Tk):
         if "margin_fixed" in c: self.margin_fixed_var.set(c["margin_fixed"])
         if "discount_rate" in c: self.discount_rate_var.set(c["discount_rate"])
         if "round_unit" in c: self.round_unit_var.set(c["round_unit"])
+        if "delivery_fee" in c: self.delivery_fee_var.set(c["delivery_fee"])
         if "upload_count" in c: self.upload_count_var.set(c["upload_count"])
         if "concurrent" in c: self.concurrent_var.set(c["concurrent"])
         if "option_count" in c: self.option_count_var.set(c["option_count"])
@@ -2703,6 +2714,7 @@ class App(tk.Tk):
         self.config_data["margin_fixed"] = self.margin_fixed_var.get()
         self.config_data["discount_rate"] = self.discount_rate_var.get()
         self.config_data["round_unit"] = self.round_unit_var.get()
+        self.config_data["delivery_fee"] = self.delivery_fee_var.get()
         self.config_data["upload_count"] = self.upload_count_var.get()
         self.config_data["concurrent"] = self.concurrent_var.get()
         self.config_data["option_count"] = self.option_count_var.get()
@@ -3099,6 +3111,7 @@ class App(tk.Tk):
             margin_fixed=int(self.margin_fixed_var.get()),
             discount_rate_min=discount_min,
             discount_rate_max=discount_max,
+            delivery_fee=int(self.delivery_fee_var.get()),
             round_unit=int(self.round_unit_var.get()),
             min_price=int(self.min_price_var.get()),
             max_price=int(self.max_price_var.get()),
