@@ -14,14 +14,14 @@ from typing import Optional, List, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QProgressBar,
     QMessageBox, QDialog, QFormLayout, QCheckBox, QGroupBox, QSpinBox,
     QTableWidget, QTableWidgetItem, QHeaderView
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -606,7 +606,7 @@ class LoginDialog(QDialog):
         
         self.pw_edit = QLineEdit()
         self.pw_edit.setPlaceholderText("ESM Plus 비밀번호")
-        self.pw_edit.setEchoMode(QLineEdit.Password)
+        self.pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
         form_layout.addRow("비밀번호:", self.pw_edit)
         
         layout.addLayout(form_layout)
@@ -666,7 +666,7 @@ class LoginDialog(QDialog):
         name = self.account_combo.currentText()
         if name != "-- 새 계정 --":
             reply = QMessageBox.question(self, "계정 삭제", f"'{name}' 계정을 삭제하시겠습니까?")
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self.account_manager.remove_account(name)
                 self.account_combo.removeItem(self.account_combo.currentIndex())
     
@@ -776,7 +776,7 @@ class MainWindow(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["No", "상품번호", "G마켓", "옥션"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
         
         # 작업
@@ -825,7 +825,7 @@ class MainWindow(QMainWindow):
     
     def show_login(self):
         dialog = LoginDialog(self.account_manager, self)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.session = dialog.get_session()
             if self.session and self.session.logged_in:
                 self.status_label.setText("● 로그인됨 (브라우저 유지)")
@@ -896,12 +896,12 @@ class MainWindow(QMainWindow):
         if action == 'stop_and_delete':
             reply = QMessageBox.warning(self, "⚠️ 경고",
                 f"{len(self.products)}개 상품을 삭제합니다.\n복구 불가!\n\n계속?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         else:
             reply = QMessageBox.question(self, "확인",
                 f"{len(self.products)}개 상품을 {action_names[action]}?")
-        
-        if reply != QMessageBox.Yes:
+
+        if reply != QMessageBox.StandardButton.Yes:
             return
         
         self.set_ui_enabled(False)
@@ -947,8 +947,8 @@ class MainWindow(QMainWindow):
         if self.session:
             reply = QMessageBox.question(self, "종료",
                 "브라우저도 닫으시겠습니까?",
-                QMessageBox.Yes | QMessageBox.No)
-            if reply == QMessageBox.Yes:
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
                 self.session.close_browser()
         event.accept()
 
@@ -964,7 +964,7 @@ def main():
     window = MainWindow()
     window.show()
     
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

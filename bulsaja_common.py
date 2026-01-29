@@ -283,6 +283,11 @@ KEYWORD_SAFE_CONTEXT_MAP = {
     '코르셋': {'보정', '거들', '속옷', '압박', '허리', '복대', '웨이스트', '다이어트', '뱃살', '똥배',
                '중세', '드레스', '의상', '빅토리아', '르네상스', '무대', '무대의상', '공연', '파티', '웨딩'},
 
+    # "보정속옷", "기능성 속옷" → 일반 의류 → 정상 (섹시/란제리 제외)
+    '속옷': {'보정', '거들', '웨이스트', '복대', '압박', '쉐이퍼', '니퍼', '힙업', '뱃살', '똥배',
+             '기능성', '발열', '보온', '쿨링', '흡한', '땀', '스포츠', '운동', '등산', '골프',
+             '남성', '남자', '트렁크', '사각', '삼각', '드로즈'},
+
     # ========== PPT 기반 추가 안전 컨텍스트 (2026-01-15) ==========
 
     # "냉매 충전기" → OK (PPT 슬라이드 20)
@@ -738,43 +743,14 @@ DEFAULT_BAIT_KEYWORDS = [
     '커스텀주문', '맞춤주문',
     '사용자정의', '사용자 정의', '커스터마이징',
 
-    # 계약/예약금 관련 (확실한 미끼)
-    '계약금', '선금', '예약금', '보증금', '착수금',
-    '정금', '잔금', '추가금', '차액결제',
-
-    # 문의/상담 관련 - 더 구체적으로 (오탐 방지)
-    '고객센터문의', '연락주세요', '전화주세요', '카톡문의',
-    '채팅문의', '문의요망', '문의필수', '먼저문의', '상담후구매',
-    '문의후결제', '상담필수',
-
-    # 비고/안내 관련 - 구체적 미끼 패턴만
-    '필독사항', '확인필수', '주의사항필독', '공지사항',
-    '배송안내', '교환안내', '반품안내', '주의안내', '필독안내',
-    '참고사항', '안내사항', '유의사항',
-    # '참고', '안내', '비고' 단독은 제거 - 정상 옵션명에 자주 나옴
-
     # 부품/액세서리 미끼 - 더 구체적으로
     '부품만', '부속품만', '교체용부품', '리필용',
     '충전기만', '어댑터만', '선만', '젠더만',
     # '액세서리' 제거 - 실제 액세서리 상품과 혼동
 
-    # 샘플/테스트
-    '샘플용', '테스트용', '무료체험', '체험판', '시험용',
-    # 'sample', 'test' 제거 - 영문 제품명에 자주 나옴
-
-    # 옵션 선택 유도 (확실한 미끼)
-    '옵션선택필수', '필수선택', '선택필수', '색상선택필수', '사이즈선택필수',
-    '옵션문의', '선택안함', '해당없음', '선택하세요',
-
-    # 배송/추가비용 관련
-    '배송비별도', '추가배송비', '도서산간추가', '제주추가',
-    '설치비별도', '조립비별도', '출장비별도',
+    # 배송 관련 (실제 옵션에 사용될 수 있음)
+    '배송비별도', '추가배송비',
     '공장직송', '공장 직송', '스팟배송', '스팟 배송', '송장가능',
-
-    # 가격 미끼 (확실한 미끼)
-    '1원', '10원', '100원', '0원',
-    '쿠폰전용', '적립금전용',
-    # '무료', 'free' 제거 - 정상 프로모션과 혼동
 
     # 중국어 미끼 (타오바오) - 확실한 것만
     '定制', '定做', '订制', '订做',  # 맞춤제작
@@ -827,8 +803,19 @@ BAIT_ONLY_PATTERNS = [
 ]
 
 # 강력 미끼 키워드 (예외 체크 없이 바로 미끼 처리)
-# 안내문/홍보문구는 "추가", "포함" 등 예외 키워드가 있어도 미끼임
+# 가격이 정상이어도, 공통키워드여도 무조건 제외
 STRONG_BAIT_KEYWORDS = {
+    # 품절/재고 관련 (절대 미끼)
+    '품절', '재고없음', '재고 없음', '단종', '판매종료', '판매 종료',
+    '매진', '일시품절', '품절임박',
+    # 환불/반품 관련 (절대 미끼)
+    '환불', '반품', '교환불가', '교환 불가', '환불불가', '환불 불가',
+    # 사은품/증정 관련 (절대 미끼)
+    '사은품', '증정품', '덤', '서비스', '무료증정',
+    # 예약/선주문 (절대 미끼)
+    '예약', '선주문', '선 주문', '예약주문',
+    # 계약/예약금 관련 (절대 미끼)
+    '계약금', '선금', '예약금', '보증금', '착수금', '정금', '잔금', '추가금', '차액결제',
     # 안내문/홍보 (절대 미끼)
     '약속드립니다', '진심으로', '감사합니다', '환영합니다',
     '공지입니다', '안내드립니다', '알려드립니다',
@@ -840,6 +827,22 @@ STRONG_BAIT_KEYWORDS = {
     # 마케팅 문구 (절대 미끼)
     '한정제조', '한정 제조', '손해보는', '손해판매', '인민보험', '환불보장',
     '제조사손해', '제조사 손해', '한정판매', '영수증확인', '영수증 확인',
+    # 샘플/테스트 (절대 미끼)
+    '샘플용', '테스트용', '무료체험', '체험판', '시험용',
+    # 옵션 선택 유도 (절대 미끼)
+    '옵션선택필수', '필수선택', '선택필수', '색상선택필수', '사이즈선택필수',
+    '옵션문의', '선택안함', '해당없음', '선택하세요',
+    # 설치/조립비용 (절대 미끼)
+    '설치비별도', '조립비별도', '출장비별도',
+    # 가격 미끼 (절대 미끼)
+    '1원', '10원', '100원', '0원', '쿠폰전용', '적립금전용',
+    # 안내/비고 (절대 미끼)
+    '필독사항', '확인필수', '주의사항필독', '공지사항',
+    '배송안내', '교환안내', '반품안내', '주의안내', '필독안내',
+    '참고사항', '안내사항', '유의사항',
+    # 문의/상담 (절대 미끼)
+    '고객센터문의', '연락주세요', '전화주세요', '카톡문의', '채팅문의',
+    '문의요망', '문의필수', '먼저문의', '상담후구매', '문의후결제', '상담필수',
 }
 
 
@@ -1889,7 +1892,7 @@ class BulsajaAPIClient:
                 return result['payload']
             return result
         except Exception as e:
-            print(f"[WARNING] uploadfields 조회 실패: {e}")
+            # fallback: get_product_detail 사용
             return {}
 
     def update_product_fields(self, product_id: str, product_data: Dict) -> Tuple[bool, str]:
@@ -2940,21 +2943,17 @@ if __name__ == "__main__":
 _morpheme_analyzer = None
 
 def _get_morpheme_analyzer():
-    """형태소 분석기 가져오기 (lazy loading)"""
+    """형태소 분석기 가져오기 (lazy loading) - Kiwi 사용"""
     global _morpheme_analyzer
     if _morpheme_analyzer is None:
         try:
-            from konlpy.tag import Okt
-            _morpheme_analyzer = ('okt', Okt())
-            print("[INFO] KoNLPy Okt 분석기 로드됨")
+            from kiwipiepy import Kiwi
+            kiwi = Kiwi()
+            _morpheme_analyzer = ('kiwi', kiwi)
+            print("[INFO] Kiwi 형태소 분석기 로드됨")
         except ImportError:
-            try:
-                from konlpy.tag import Komoran
-                _morpheme_analyzer = ('komoran', Komoran())
-                print("[INFO] KoNLPy Komoran 분석기 로드됨")
-            except ImportError:
-                print("[WARNING] KoNLPy 설치 필요: pip install konlpy")
-                _morpheme_analyzer = (None, None)
+            print("[WARNING] Kiwi 설치 필요: pip install kiwipiepy")
+            _morpheme_analyzer = (None, None)
     return _morpheme_analyzer
 
 
@@ -2990,38 +2989,47 @@ def extract_suspicious_words(text: str) -> List[Dict]:
                 'reason': '영어 단어 (브랜드 가능성)'
             })
 
-    # 2. 형태소 분석
+    # 2. 형태소 분석 (Kiwi)
     analyzer_type, analyzer = _get_morpheme_analyzer()
 
-    if analyzer:
+    if analyzer and analyzer_type == 'kiwi':
         try:
-            if analyzer_type == 'okt':
-                # Okt는 품사 태깅
-                morphs = analyzer.pos(text, stem=False)
-                for word, pos in morphs:
-                    # 외래어/고유명사 판별
-                    # Okt에서 Noun이지만 한글이 아닌 경우
-                    if pos == 'Noun' and len(word) >= 2:
-                        # 한글인데 사전에 없는 느낌의 단어 (외래어)
-                        if _is_likely_foreign_word(word):
-                            if not any(s['word'] == word for s in suspicious):
-                                suspicious.append({
-                                    'word': word,
-                                    'type': 'foreign',
-                                    'reason': '외래어/미등록어 (지재권 가능성)'
-                                })
+            # Kiwi 형태소 분석
+            result = analyzer.tokenize(text)
+            for token in result:
+                word = token.form
+                pos = token.tag  # NNP: 고유명사, SL: 외국어, NNG: 일반명사
 
-            elif analyzer_type == 'komoran':
-                morphs = analyzer.pos(text)
-                for word, pos in morphs:
-                    # NNP: 고유명사, NNB: 의존명사
-                    if pos == 'NNP' and len(word) >= 2:
-                        if not any(s['word'] == word for s in suspicious):
-                            suspicious.append({
-                                'word': word,
-                                'type': 'proper_noun',
-                                'reason': '고유명사 (지재권 가능성)'
-                            })
+                if len(word) < 2:
+                    continue
+
+                # 고유명사 (NNP) - 브랜드/지재권 가능성 높음
+                if pos == 'NNP':
+                    if not any(s['word'] == word for s in suspicious):
+                        suspicious.append({
+                            'word': word,
+                            'type': 'proper_noun',
+                            'reason': '고유명사 (지재권 가능성)'
+                        })
+
+                # 외국어 (SL) - 브랜드 가능성
+                elif pos == 'SL':
+                    if not any(s['word'] == word for s in suspicious):
+                        suspicious.append({
+                            'word': word,
+                            'type': 'foreign',
+                            'reason': '외래어 (지재권 가능성)'
+                        })
+
+                # 일반명사지만 외래어 느낌 (NNG)
+                elif pos == 'NNG' and _is_likely_foreign_word(word):
+                    if not any(s['word'] == word for s in suspicious):
+                        suspicious.append({
+                            'word': word,
+                            'type': 'foreign',
+                            'reason': '외래어/미등록어 (지재권 가능성)'
+                        })
+
         except Exception as e:
             print(f"[WARNING] 형태소 분석 오류: {e}")
 
@@ -3274,3 +3282,856 @@ def add_ip_words(words: List[str], category: str = 'brands') -> bool:
         print(f"✅ {added}개 단어 추가됨 ({category})")
 
     return added > 0
+
+
+# ==================== 상품명 검수 (의심 단어 탐지) ====================
+
+# 상품명 검수 결과 캐시 파일
+PRODUCT_NAME_CHECK_CACHE_FILE = "product_name_check_cache.json"
+
+# 기본 의심 패턴 (패턴 → 카테고리)
+DEFAULT_SUSPICIOUS_PATTERNS = {
+    # 유명 브랜드 (확실한 지재권)
+    'brands': [
+        # 스포츠 브랜드
+        '나이키', 'nike', '아디다스', 'adidas', '퓨마', 'puma', '뉴발란스', 'new balance',
+        '아식스', 'asics', '리복', 'reebok', '미즈노', 'mizuno', '필라', 'fila', '카파', 'kappa',
+        '언더아머', 'under armour', '스케쳐스', 'skechers', '살로몬', 'salomon', '브룩스', 'brooks',
+        '디아도라', 'diadora', '엄브로', 'umbro', '컬럼비아', 'columbia', '데상트', 'descente',
+        '오니츠카타이거', 'onitsuka tiger', '르꼬끄', 'le coq sportif', '라코스테', 'lacoste',
+        '콘버스', 'converse', '반스', 'vans', '크록스', 'crocs',
+        # 골프 브랜드
+        '타이틀리스트', 'titleist', '캘러웨이', 'callaway', '테일러메이드', 'taylormade',
+        '클리블랜드', 'cleveland', '코브라', 'cobra', '스릭슨', 'srixon', '핑', 'ping',
+        '던롭', 'dunlop', '윌슨', 'wilson', '요넥스', 'yonex', '프린스', 'prince',
+        # 명품 브랜드
+        '구찌', 'gucci', '루이비통', 'louis vuitton', 'lv', '샤넬', 'chanel', '프라다', 'prada',
+        '버버리', 'burberry', '에르메스', 'hermes', '디올', 'dior', '펜디', 'fendi',
+        '발렌시아가', 'balenciaga', '보테가베네타', 'bottega veneta', '지방시', 'givenchy',
+        '발렌티노', 'valentino', '베르사체', 'versace', '아르마니', 'armani', '돌체앤가바나', 'dolce gabbana',
+        '이브생로랑', 'ysl', '셀린느', 'celine', '로에베', 'loewe', '톰브라운', 'thom browne',
+        '몽클레어', 'moncler', '스톤아일랜드', 'stone island', '막스마라', 'max mara',
+        '캘빈클라인', 'calvin klein', 'ck', '타미힐피거', 'tommy hilfiger', '휴고보스', 'hugo boss',
+        '켄조', 'kenzo', '꼼데가르송', 'comme des garcons', '메종마르지엘라', 'maison margiela',
+        '코치', 'coach', '마이클코어스', 'michael kors', '토리버치', 'tory burch', '케이트스페이드', 'kate spade',
+        '롱샴', 'longchamp', '키플링', 'kipling',
+        # SPA/일반 패션
+        '자라', 'zara', '갭', 'gap', '유니클로', 'uniqlo', '에이치앤엠', 'h&m', '망고', 'mango',
+        '코스', 'cos', '폴로', 'polo', '랄프로렌', 'ralph lauren', '게스', 'guess',
+        '디젤', 'diesel', '리바이스', 'levis', '프레드페리', 'fred perry',
+        # 아웃도어
+        '노스페이스', 'north face', '파타고니아', 'patagonia', '아크테릭스', 'arcteryx',
+        '캐나다구스', 'canada goose', '무스너클', 'moose knuckles', '몽벨', 'montbell',
+        '밀레', 'millet', '마무트', 'mammut', '블랙야크', 'black yak', '네파', 'nepa', '아이더', 'eider',
+        '케이투', 'k2', '헤드', 'head', '호카', 'hoka',
+        # 가전/전자
+        '이케아', 'ikea', '다이슨', 'dyson', '필립스', 'philips', '보쉬', 'bosch',
+        '삼성', 'samsung', '엘지', 'lg', '애플', 'apple', '소니', 'sony', '파나소닉', 'panasonic',
+        '캐논', 'canon', '니콘', 'nikon', '올림푸스', 'olympus', '후지필름', 'fujifilm', '라이카', 'leica',
+        '델', 'dell', '에이서', 'acer', '에이수스', 'asus', '엠에스아이', 'msi', '레노버', 'lenovo',
+        '인텔', 'intel', '엔비디아', 'nvidia', '에이엠디', 'amd',
+        '보스', 'bose', '뱅앤올룹슨', 'bang olufsen', '제이비엘', 'jbl', '젠하이저', 'sennheiser',
+        '고프로', 'gopro', '앵커', 'anker', '벨킨', 'belkin', '오터박스', 'otterbox',
+        '네스프레소', 'nespresso', '드롱기', 'delonghi', '브라운', 'braun', '키친에이드', 'kitchenaid',
+        '피슬러', 'fissler', '헹켈스', 'henckels', '츠빌링', 'zwilling', '스타우브', 'staub', '테팔', 'tefal',
+        '르크루제', 'le creuset', '코렐', 'corelle', '락앤락', 'lock&lock',
+        '바이타믹스', 'vitamix', '타퍼웨어', 'tupperware',
+        # 화장품
+        '로레알', 'loreal', '랑콤', 'lancome', '에스티로더', 'estee lauder', '맥', 'mac',
+        '시세이도', 'shiseido', '클리니크', 'clinique', '키엘', 'kiehls', '바비브라운', 'bobbi brown',
+        '나스', 'nars', '베네피트', 'benefit', '어반디케이', 'urban decay',
+        '라네즈', 'laneige', '설화수', 'sulwhasoo', '헤라', 'hera', '오휘', 'ohui', '후', 'whoo',
+        '이니스프리', 'innisfree', '에뛰드', 'etude', '더페이스샵', 'the face shop', '토니모리', 'tonymoly',
+        '마몽드', 'mamonde', '아이오페', 'iope', '에스케이투', 'sk-ii',
+        # 식음료
+        '스타벅스', 'starbucks', '맥도날드', 'mcdonalds', '버거킹', 'burger king',
+        '코카콜라', 'coca cola', '펩시', 'pepsi', '게토레이', 'gatorade', '레드불', 'red bull',
+        '네슬레', 'nestle', '오레오', 'oreo', '프링글스', 'pringles', '배스킨라빈스', 'baskin robbins',
+        # 자동차
+        '벤츠', 'mercedes', 'benz', '비엠더블유', 'bmw', '아우디', 'audi', '폭스바겐', 'volkswagen',
+        '포르쉐', 'porsche', '페라리', 'ferrari', '람보르기니', 'lamborghini', '마세라티', 'maserati',
+        '재규어', 'jaguar', '랜드로버', 'land rover', '벤틀리', 'bentley', '롤스로이스', 'rolls royce',
+        '렉서스', 'lexus', '토요타', 'toyota', '혼다', 'honda', '닛산', 'nissan',
+        '테슬라', 'tesla', '현대', 'hyundai', '기아', 'kia', '제네시스', 'genesis',
+        '쉐보레', 'chevrolet', '포드', 'ford', '캐딜락', 'cadillac', '볼보', 'volvo',
+        # 완구/게임
+        '레고', 'lego', '반다이', 'bandai', '타카라토미', 'takara tomy',
+        '닌텐도', 'nintendo', '플레이스테이션', 'playstation', '엑스박스', 'xbox',
+        '블리자드', 'blizzard', '이에이', 'ea sports',
+        # IT/서비스
+        '구글', 'google', '마이크로소프트', 'microsoft', '아마존', 'amazon', '메타', 'meta',
+        '넷플릭스', 'netflix', '유튜브', 'youtube', '네이버', 'naver', '카카오', 'kakao',
+        '어도비', 'adobe', '포토샵', 'photoshop',
+        # 시계/주얼리
+        '롤렉스', 'rolex', '오메가', 'omega', '까르띠에', 'cartier', '티파니', 'tiffany',
+        # 침구/가구
+        '시몬스', 'simmons', '씰리', 'sealy', '템퍼', 'tempur',
+    ],
+    # 캐릭터/IP (확실한 지재권)
+    'characters': [
+        # 디즈니/픽사
+        '디즈니', 'disney', '픽사', 'pixar', '미키마우스', 'mickey', '미니마우스', 'minnie',
+        '푸우', 'pooh', '엘사', 'elsa', '안나', 'anna', '모아나', 'moana', '라푼젤', 'rapunzel',
+        '신데렐라', 'cinderella', '알라딘', 'aladdin', '자스민', 'jasmine', '니모', 'nemo', '도리', 'dory',
+        '라이온킹', 'lion king', '심바', 'simba', '버즈라이트이어', 'buzz lightyear', '우디', 'woody',
+        '토이스토리', 'toy story', '겨울왕국', 'frozen', '올라프', 'olaf', '구피', 'goofy', '도날드덕', 'donald duck',
+        # 마블/DC
+        '마블', 'marvel', '어벤져스', 'avengers', '스파이더맨', 'spiderman', '아이언맨', 'ironman',
+        '캡틴아메리카', 'captain america', '토르', 'thor', '헐크', 'hulk', '타노스', 'thanos', '로키', 'loki',
+        '배트맨', 'batman', 'dc코믹스', '슈퍼맨', 'superman', '원더우먼', 'wonder woman',
+        # 일본 애니/만화
+        '포켓몬', 'pokemon', '피카츄', 'pikachu', '리자몽', 'charizard', '이브이', 'eevee', '뮤', 'mew', '뮤츠', 'mewtwo', '잠만보', 'snorlax',
+        '원피스', 'onepiece', '루피', 'luffy', '나루토', 'naruto', '드래곤볼', 'dragonball', '손오공', 'goku',
+        '귀멸의칼날', 'demon slayer', '렌고쿠', '네즈코', '주술회전', '진격의거인',
+        '짱구', '크레용신짱', '도라에몽', 'doraemon', '세일러문', 'sailor moon', '토토로', 'totoro', '지브리', 'ghibli',
+        '슬램덩크', '강백호', '서태웅', '원신', 'genshin',
+        # 산리오
+        '헬로키티', 'hello kitty', '키티', 'kitty', '산리오', 'sanrio', '마이멜로디', 'my melody',
+        '쿠로미', 'kuromi', '시나몬롤', 'cinnamoroll', '폼폼푸린', 'pompompurin', '포차코', 'pochacco',
+        '케로피', 'keroppi', '구데타마', 'gudetama', '리틀트윈스타', 'little twin stars',
+        # 한국 캐릭터
+        '카카오프렌즈', '라이언', '어피치', '무지', '콘', '튜브', '네오', '프로도', '제이지',
+        '라인프렌즈', '브라운', '코니', '샐리', '문', '제임스',
+        '뽀로로', '핑크퐁', '아기상어', 'baby shark', '로보카폴리',
+        # 닌텐도
+        '마리오', 'mario', '루이지', 'luigi', '젤다', 'zelda', '링크', 'link', '동키콩', 'donkey kong',
+        '커비', 'kirby', '동물의숲', 'animal crossing', '포켓몬고', 'pokemon go',
+        # 기타
+        '스타워즈', 'star wars', '요다', 'yoda', '다스베이더', 'darth vader', '만달로리안', 'mandalorian',
+        '해리포터', 'harry potter', '호그와트', 'hogwarts', '볼드모트',
+        '트랜스포머', 'transformers', '옵티머스프라임', 'optimus prime', '범블비', 'bumblebee',
+        '스폰지밥', 'spongebob', '미니언즈', 'minions', '슈렉', 'shrek',
+        '앙팡맨', '호빵맨', '소닉', 'sonic',
+        # 아이돌 그룹
+        '방탄소년단', 'bts', '블랙핑크', 'blackpink', '트와이스', 'twice', '엑소', 'exo', '세븐틴',
+        '에스파', 'aespa', '뉴진스', 'newjeans', '르세라핌', 'le sserafim', '아이브', 'ive',
+        '에이티즈', 'ateez', '스트레이키즈', 'stray kids', '엔시티', 'nct', '더보이즈', 'the boyz',
+        '마마무', 'mamamoo', '레드벨벳', 'red velvet', '잇지', 'itzy', '스테이씨', 'stayc', '엔하이픈', 'enhypen',
+        # 한국 연예인 (초상권)
+        '지드래곤', 'g-dragon', '아이유', 'iu', '싸이', 'psy',
+        # 배우
+        '김고은', '김선호', '김소현', '김수현', '김유정', '김지원', '김태희', '김혜수',
+        '강동원', '공유', '남주혁', '박보검', '박서준', '박신혜', '박민영',
+        '손예진', '송강', '송강호', '송중기', '송혜교', '이민호', '이병헌', '이정재',
+        '이종석', '이준기', '전지현', '정해인', '조인성', '차은우', '현빈', '공효진',
+        '유아인', '마동석', '이동욱', '정소민', '변우석', '안효섭', '김세정',
+        # MC/예능인
+        '유재석', '강호동', '이경규', '신동엽', '박명수', '이영자', '김구라', '김숙',
+        '전현무', '양세찬', '양세형', '지석진', '송은이', '김희철', '이상민',
+        '박나래', '이국주', '박성광', '장윤정', '이승기',
+        # 유튜버/인플루언서
+        '대도서관', '도티', '기안84', '곽튜브', '이말년', '나영석',
+        # 가수 (솔로)
+        '아이유', '태양', '지드래곤', '테이', '성시경', '이효리', '솔라', '화사',
+        '임영웅', '장원영', '김채원', '카리나', '윈터', '제니', '지수', '로제', '리사',
+        '나연', '다현', '사나', '모모', '쯔위',
+        # 해외 연예인 (초상권)
+        '테일러스위프트', 'taylor swift', '아리아나그란데', 'ariana grande',
+        '비욘세', 'beyonce', '빌리아일리시', 'billie eilish', '저스틴비버', 'justin bieber',
+        '브루노마스', 'bruno mars', '에드시런', 'ed sheeran', '레이디가가', 'lady gaga',
+        '브래드피트', 'brad pitt', '톰크루즈', 'tom cruise', '레오나르도디카프리오', 'leonardo dicaprio',
+        '로버트다우니주니어', 'robert downey jr', '일론머스크', 'elon musk', '빌게이츠', 'bill gates',
+        # 한국 스포츠 스타 (초상권)
+        '손흥민', '김연아', '류현진', '박지성', '기성용', '이강인', '김민재',
+        '박세리', '박인비', '고진영', '이정후', '이대호', '추신수', '박찬호', '이승엽',
+        '김연경', '이동국', '이청용',
+        # 해외 스포츠 스타 (초상권)
+        '호날두', 'ronaldo', 'cr7', '메시', 'messi', '네이마르', 'neymar', '음바페', 'mbappe',
+        '르브론제임스', 'lebron james', '마이클조던', 'michael jordan', '스테판커리', 'stephen curry',
+        '로저페더러', 'roger federer', '라파엘나달', 'rafael nadal', '타이거우즈', 'tiger woods',
+    ],
+    # 금지 품목 (판매 불가)
+    'prohibited': [
+        # 성인용품/선정적
+        '딜도', 'dildo', '러브돌', '러브젤', '바이브레이터', 'vibrator', '콘돔', 'condom',
+        '페티쉬', 'fetish', '누드', 'nude', '포르노', 'porn', '섹스', 'sex', '오럴', 'oral',
+        '노출', '유흥', '매춘', '근친',
+        # 무기류
+        '도검', '일본도', '작살총', '전기충격기', '비비탄', '너프건', '에어소프트건',
+        # 약물/의약품
+        '마약', '대마', '대마초', 'lsd', '니코틴', '담배', 'iqos', '낙태약',
+        '다이어트약', '다이어트효과', '당뇨치료',
+        '실데나필', 'sildenafil', '타다라필', 'tadalafil', '시부트라민',
+        # 판매 금지 품목 (의료기기/유아용품)
+        '휠체어', '유모차', '의료용', '의료기기', '안경', '렌즈', '콘택트렌즈',
+        # 도박
+        '도박', '카지노', 'casino',
+        # 불법 촬영
+        '도촬', '몰카',
+    ],
+    # 의심 패턴 (AI 확인 필요)
+    'suspicious': [
+        # 모델명 패턴
+        'air max', 'air jordan', 'yeezy', 'ultraboost', 'stan smith',
+        # 특정 제품명
+        'airpods', 'iphone', 'ipad', 'macbook', 'galaxy', '갤럭시', '갤럭시워치', '갤럭시버즈', '갤럭시탭',
+        # 게임
+        '마인크래프트', 'minecraft', '포트나이트', 'fortnite', '로블록스', 'roblox',
+        '배틀그라운드', 'pubg', '오버워치', 'overwatch', '리그오브레전드', 'lol',
+        '발로란트', 'valorant', '디아블로', 'diablo', '리니지',
+        # 기타
+        'fda승인', '특허',
+    ]
+}
+
+
+def load_product_name_check_cache() -> Dict:
+    """상품명 검수 결과 캐시 로드"""
+    if os.path.exists(PRODUCT_NAME_CHECK_CACHE_FILE):
+        try:
+            with open(PRODUCT_NAME_CHECK_CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return {
+        'confirmed_ip': [],      # AI가 확정한 지재권 단어
+        'confirmed_safe': [],    # AI가 확정한 안전 단어
+        'user_ip': [],           # 사용자가 추가한 지재권 단어
+        'user_safe': [],         # 사용자가 추가한 안전 단어
+    }
+
+
+def save_product_name_check_cache(cache: Dict) -> bool:
+    """상품명 검수 결과 캐시 저장"""
+    try:
+        with open(PRODUCT_NAME_CHECK_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+        return True
+    except:
+        return False
+
+
+def check_product_name_suspicious(product_name: str, use_ai: bool = False, log_callback=None) -> Dict:
+    """
+    상품명에서 의심 단어 검수
+
+    1단계: 패턴 DB 매칭 (빠름)
+    2단계: AI 검증 (use_ai=True일 때만, 패턴에 없는 단어)
+
+    Args:
+        product_name: 상품명
+        use_ai: AI 검증 사용 여부
+        log_callback: 로그 함수
+
+    Returns:
+        {
+            'suspicious_words': [
+                {'word': '나이키', 'category': 'brands', 'source': 'pattern', 'confirmed': True},
+                {'word': 'Airmax', 'category': 'suspicious', 'source': 'ai', 'confirmed': True},
+            ],
+            'safe_words': ['운동화', '신발'],
+            'needs_ai_check': ['미확인단어'],  # AI 확인 필요한 단어
+            'highlighted_name': '<span>...</span>',  # HTML 강조 표시
+        }
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+
+    result = {
+        'suspicious_words': [],
+        'safe_words': [],
+        'needs_ai_check': [],
+        'highlighted_name': product_name,
+    }
+
+    if not product_name:
+        return result
+
+    cache = load_product_name_check_cache()
+    product_name_lower = product_name.lower()
+
+    found_suspicious = []
+    found_safe = []
+    needs_check = []
+
+    # 1. 패턴 DB 매칭 (브랜드, 캐릭터)
+    for category, patterns in DEFAULT_SUSPICIOUS_PATTERNS.items():
+        for pattern in patterns:
+            pattern_lower = pattern.lower()
+            if pattern_lower in product_name_lower:
+                # 실제 매칭된 단어 찾기 (대소문자 유지)
+                import re
+                match = re.search(re.escape(pattern), product_name, re.IGNORECASE)
+                if match:
+                    matched_word = match.group()
+                    if not any(w['word'].lower() == matched_word.lower() for w in found_suspicious):
+                        is_confirmed = category in ['brands', 'characters']
+                        found_suspicious.append({
+                            'word': matched_word,
+                            'category': category,
+                            'source': 'pattern',
+                            'confirmed': is_confirmed
+                        })
+
+    # 2. 캐시에서 확인 (사용자 추가 / AI 확정)
+    for word in cache.get('confirmed_ip', []) + cache.get('user_ip', []):
+        if word.lower() in product_name_lower:
+            import re
+            match = re.search(re.escape(word), product_name, re.IGNORECASE)
+            if match and not any(w['word'].lower() == match.group().lower() for w in found_suspicious):
+                found_suspicious.append({
+                    'word': match.group(),
+                    'category': 'cached_ip',
+                    'source': 'cache',
+                    'confirmed': True
+                })
+
+    for word in cache.get('confirmed_safe', []) + cache.get('user_safe', []):
+        if word.lower() in product_name_lower:
+            found_safe.append(word)
+
+    # 3. 형태소 분석으로 추가 의심 단어 추출
+    suspicious_from_morpheme = extract_suspicious_words(product_name)
+    for s in suspicious_from_morpheme:
+        word = s['word']
+        word_lower = word.lower()
+
+        # 이미 처리됨?
+        if any(w['word'].lower() == word_lower for w in found_suspicious):
+            continue
+        if word_lower in [w.lower() for w in found_safe]:
+            continue
+
+        # 캐시에서 확인된 안전 단어?
+        if word_lower in [w.lower() for w in cache.get('confirmed_safe', []) + cache.get('user_safe', [])]:
+            found_safe.append(word)
+            continue
+
+        # AI 확인 필요
+        needs_check.append(word)
+
+    # 4. AI 검증 (선택적)
+    if use_ai and needs_check:
+        log(f"🤖 AI 검증 중: {needs_check[:5]}...")
+        ai_result = verify_ip_words_with_ai(needs_check, log_callback)
+
+        # AI 결과 반영
+        for word in ai_result.get('ip_confirmed', []):
+            found_suspicious.append({
+                'word': word,
+                'category': 'ai_confirmed',
+                'source': 'ai',
+                'confirmed': True
+            })
+            # 캐시에 저장
+            if word not in cache.get('confirmed_ip', []):
+                cache.setdefault('confirmed_ip', []).append(word)
+
+        for word in ai_result.get('ip_safe', []):
+            found_safe.append(word)
+            # 캐시에 저장
+            if word not in cache.get('confirmed_safe', []):
+                cache.setdefault('confirmed_safe', []).append(word)
+
+        # 불확실한 단어는 needs_check에 남김
+        needs_check = ai_result.get('ip_uncertain', [])
+
+        # 캐시 저장
+        save_product_name_check_cache(cache)
+
+    result['suspicious_words'] = found_suspicious
+    result['safe_words'] = found_safe
+    result['needs_ai_check'] = needs_check
+
+    # 5. HTML 강조 표시 생성
+    result['highlighted_name'] = highlight_suspicious_in_name(product_name, found_suspicious, needs_check)
+
+    return result
+
+
+def highlight_suspicious_in_name(product_name: str, suspicious_words: List[Dict], uncertain_words: List[str] = None) -> str:
+    """
+    상품명에서 의심 단어를 HTML로 강조 표시
+
+    - 확정 지재권: 빨간 폰트 + 노란 배경
+    - 미확정 의심: 주황 폰트 + 연노란 배경
+
+    Returns:
+        HTML 문자열
+    """
+    import re
+
+    if not product_name:
+        return ""
+
+    if not suspicious_words and not uncertain_words:
+        return product_name
+
+    highlighted = product_name
+
+    # 확정 지재권 단어 강조 (빨간 폰트 + 노란 배경)
+    for item in (suspicious_words or []):
+        word = item.get('word', '')
+        if word:
+            # 대소문자 무시 교체
+            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            highlighted = pattern.sub(
+                f'<span style="color: red; background-color: yellow; font-weight: bold;">{word}</span>',
+                highlighted
+            )
+
+    # 미확정 의심 단어 강조 (주황 폰트 + 연노란 배경)
+    for word in (uncertain_words or []):
+        if word:
+            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            highlighted = pattern.sub(
+                f'<span style="color: #FF6600; background-color: #FFFACD;">{word}</span>',
+                highlighted
+            )
+
+    return highlighted
+
+
+def batch_check_product_names(products: List[Dict], use_ai: bool = False, log_callback=None) -> List[Dict]:
+    """
+    여러 상품의 상품명 일괄 검수
+
+    Args:
+        products: [{'uploadCommonProductName': '...', ...}, ...]
+        use_ai: AI 검증 사용 여부
+
+    Returns:
+        products 리스트에 'name_check_result' 필드 추가
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+
+    all_needs_check = set()
+    results = []
+
+    log(f"📋 상품명 검수 시작: {len(products)}개")
+
+    # 1단계: 패턴 매칭 (빠름)
+    for i, product in enumerate(products):
+        name = product.get('uploadCommonProductName', '') or product.get('product_name', '') or product.get('name', '')
+        check_result = check_product_name_suspicious(name, use_ai=False)
+        product['name_check_result'] = check_result
+        all_needs_check.update(check_result.get('needs_ai_check', []))
+
+        if (i + 1) % 100 == 0:
+            log(f"  패턴 검수: {i + 1}/{len(products)}")
+
+    # 2단계: AI 검증 (일괄, 선택적)
+    if use_ai and all_needs_check:
+        log(f"🤖 AI 일괄 검증: {len(all_needs_check)}개 단어")
+        ai_result = verify_ip_words_with_ai(list(all_needs_check)[:50], log_callback)
+
+        # 캐시 업데이트
+        cache = load_product_name_check_cache()
+        for word in ai_result.get('ip_confirmed', []):
+            if word not in cache.get('confirmed_ip', []):
+                cache.setdefault('confirmed_ip', []).append(word)
+        for word in ai_result.get('ip_safe', []):
+            if word not in cache.get('confirmed_safe', []):
+                cache.setdefault('confirmed_safe', []).append(word)
+        save_product_name_check_cache(cache)
+
+        # 결과 재반영
+        for product in products:
+            name = product.get('uploadCommonProductName', '') or product.get('product_name', '') or product.get('name', '')
+            # 재검수 (캐시 활용)
+            product['name_check_result'] = check_product_name_suspicious(name, use_ai=False)
+
+    # 통계
+    suspicious_count = sum(1 for p in products if p.get('name_check_result', {}).get('suspicious_words'))
+    log(f"✅ 검수 완료: {suspicious_count}/{len(products)}개 상품에서 의심 단어 발견")
+
+    return products
+
+
+# ==================== 옵션명 정리 (패턴 기반 + AI) ====================
+
+# 기본 패턴 (중국어 → 한국어)
+DEFAULT_OPTION_PATTERNS = {
+    # 색상 패턴
+    '黑色': '블랙', '黑': '블랙',
+    '白色': '화이트', '白': '화이트',
+    '红色': '레드', '红': '레드', '紅': '레드',
+    '蓝色': '블루', '蓝': '블루', '藍': '블루',
+    '绿色': '그린', '绿': '그린', '綠': '그린',
+    '粉色': '핑크', '粉红': '핑크', '粉': '핑크',
+    '黄色': '옐로우', '黄': '옐로우', '黃': '옐로우',
+    '紫色': '퍼플', '紫': '퍼플',
+    '灰色': '그레이', '灰': '그레이',
+    '棕色': '브라운', '棕': '브라운', '咖啡色': '브라운', '咖啡': '브라운',
+    '橙色': '오렌지', '橙': '오렌지',
+    '米色': '베이지', '米白': '베이지', '杏色': '베이지',
+    '卡其色': '카키', '卡其': '카키',
+    '军绿': '카키', '軍綠': '카키',
+    '藏青': '네이비', '深蓝': '네이비', '海军蓝': '네이비',
+    '酒红': '와인', '枣红': '와인', '玫红': '핫핑크',
+    '金色': '골드', '金': '골드',
+    '银色': '실버', '银': '실버', '銀': '실버',
+    '透明': '투명', '裸色': '누드',
+    '彩色': '멀티컬러', '混色': '믹스컬러', '花色': '플라워',
+    '浅': '라이트', '深': '다크', '亮': '브라이트',
+
+    # 사이즈 패턴
+    '大号': 'L', '中号': 'M', '小号': 'S',
+    '大码': 'L', '中码': 'M', '小码': 'S',
+    '均码': '프리사이즈', '均号': '프리사이즈',
+    '加大': 'XL', '特大': 'XXL', '加小': 'XS',
+    '厘米': 'cm', '毫米': 'mm', '米': 'm',
+    '寸': '인치', '英寸': '인치',
+
+    # 수량/단위 패턴
+    '个': '개', '只': '개', '件': '개', '条': '개', '张': '장', '片': '개',
+    '双': '켤레', '对': '쌍', '套': '세트', '组': '세트', '盒': '박스',
+    '包': '팩', '袋': '봉지', '瓶': '병', '罐': '캔',
+    '支': '개', '把': '개', '根': '개', '块': '개', '卷': '롤',
+
+    # 스타일/타입 패턴
+    '款': '타입', 'A款': 'A타입', 'B款': 'B타입', 'C款': 'C타입', 'D款': 'D타입',
+    '款式': '스타일', '风格': '스타일', '类型': '타입',
+    '升级版': '업그레이드', '加强版': '강화형', '基础版': '기본형',
+    '经典': '클래식', '简约': '심플', '复古': '빈티지', '时尚': '패션',
+    '豪华': '럭셔리', '高档': '프리미엄', '普通': '일반',
+
+    # 재질 패턴
+    '棉': '면', '纯棉': '순면', '全棉': '순면',
+    '麻': '린넨', '棉麻': '면마', '亚麻': '린넨',
+    '丝': '실크', '真丝': '실크', '蕾丝': '레이스',
+    '皮': '가죽', '真皮': '천연가죽', '皮革': '가죽', 'PU皮': 'PU가죽',
+    '绒': '벨벳', '天鹅绒': '벨벳', '毛绒': '퍼',
+    '羊毛': '울', '羊绒': '캐시미어', '毛': '울',
+    '涤纶': '폴리', '聚酯': '폴리에스터', '尼龙': '나일론',
+    '金属': '메탈', '不锈钢': '스테인리스', '合金': '합금',
+    '塑料': '플라스틱', '硅胶': '실리콘', '橡胶': '고무',
+    '木': '우드', '木质': '우드', '竹': '대나무',
+    '玻璃': '유리', '陶瓷': '세라믹', '瓷': '도자기',
+
+    # 기타 패턴
+    '新款': '신상', '热卖': '인기', '爆款': '베스트',
+    '限量': '한정', '特价': '특가', '促销': '세일',
+    '正品': '정품', '原装': '정품',
+    '无': '없음', '有': '있음', '含': '포함', '不含': '미포함',
+    '送': '증정', '赠品': '사은품',
+    '默认': '기본', '随机': '랜덤', '可选': '선택',
+    '左': '왼쪽', '右': '오른쪽', '上': '상단', '下': '하단',
+    '前': '앞', '后': '뒤', '中': '중앙',
+    '长': '롱', '短': '숏', '中长': '미디',
+    '厚': '두꺼운', '薄': '얇은', '中厚': '중간',
+    '宽': '와이드', '窄': '슬림', '松': '루즈', '紧': '타이트',
+    '单': '싱글', '双': '더블', '三': '트리플',
+
+    # 특수 기호 변환
+    '＋': '+', '×': 'x', '－': '-', '＊': '*',
+    '（': '(', '）': ')', '【': '[', '】': ']',
+}
+
+# 학습된 패턴 저장 파일
+OPTION_PATTERNS_FILE = "option_patterns.json"
+
+
+def load_option_patterns() -> Dict[str, str]:
+    """옵션명 변환 패턴 로드 (기본 + 학습된 패턴)"""
+    patterns = DEFAULT_OPTION_PATTERNS.copy()
+
+    if os.path.exists(OPTION_PATTERNS_FILE):
+        try:
+            with open(OPTION_PATTERNS_FILE, 'r', encoding='utf-8') as f:
+                learned = json.load(f)
+                patterns.update(learned)
+        except Exception as e:
+            print(f"[WARNING] 옵션 패턴 로드 실패: {e}")
+
+    return patterns
+
+
+def save_option_pattern(original: str, translated: str) -> bool:
+    """새 옵션 변환 패턴 저장 (학습)"""
+    if not original or not translated:
+        return False
+
+    # 기존 학습 패턴 로드
+    learned = {}
+    if os.path.exists(OPTION_PATTERNS_FILE):
+        try:
+            with open(OPTION_PATTERNS_FILE, 'r', encoding='utf-8') as f:
+                learned = json.load(f)
+        except:
+            pass
+
+    # 이미 기본 패턴에 있으면 스킵
+    if original in DEFAULT_OPTION_PATTERNS:
+        return False
+
+    # 새 패턴 추가
+    learned[original] = translated
+
+    try:
+        with open(OPTION_PATTERNS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(learned, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[ERROR] 옵션 패턴 저장 실패: {e}")
+        return False
+
+
+def clean_option_name(option_name: str, patterns: Dict[str, str] = None) -> Tuple[str, bool]:
+    """
+    옵션명 정리 (패턴 기반)
+
+    Args:
+        option_name: 원본 옵션명 (예: "黑色 A款 大号")
+        patterns: 변환 패턴 (None이면 자동 로드)
+
+    Returns:
+        (cleaned_name, fully_cleaned)
+        - cleaned_name: 정리된 옵션명
+        - fully_cleaned: 모든 중국어가 변환되었는지 여부
+    """
+    if not option_name:
+        return '', True
+
+    if patterns is None:
+        patterns = load_option_patterns()
+
+    result = option_name
+
+    # 긴 패턴부터 먼저 적용 (부분 매칭 방지)
+    sorted_patterns = sorted(patterns.items(), key=lambda x: len(x[0]), reverse=True)
+
+    for original, translated in sorted_patterns:
+        result = result.replace(original, translated)
+
+    # 남은 중국어 확인 (CJK 유니코드 범위)
+    has_chinese = any('\u4e00' <= char <= '\u9fff' for char in result)
+
+    return result.strip(), not has_chinese
+
+
+def clean_option_names_batch(option_names: List[str]) -> List[Tuple[str, str, bool]]:
+    """
+    여러 옵션명 일괄 정리
+
+    Returns:
+        [(original, cleaned, fully_cleaned), ...]
+    """
+    patterns = load_option_patterns()
+    results = []
+
+    for name in option_names:
+        cleaned, fully = clean_option_name(name, patterns)
+        results.append((name, cleaned, fully))
+
+    return results
+
+
+def clean_option_name_with_ai(option_name: str, log_callback=None) -> Tuple[str, bool]:
+    """
+    옵션명 정리 (패턴 → AI 폴백)
+    패턴으로 안 되면 Gemini AI에게 물어보고, 결과를 패턴에 저장
+
+    Returns:
+        (cleaned_name, success)
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+
+    # 1. 패턴 기반 정리 시도
+    patterns = load_option_patterns()
+    cleaned, fully_cleaned = clean_option_name(option_name, patterns)
+
+    if fully_cleaned:
+        return cleaned, True
+
+    # 2. 남은 중국어 추출
+    remaining_chinese = []
+    for char in cleaned:
+        if '\u4e00' <= char <= '\u9fff':
+            remaining_chinese.append(char)
+
+    # 연속된 중국어를 단어로 그룹화
+    chinese_words = []
+    current_word = ''
+    for char in cleaned:
+        if '\u4e00' <= char <= '\u9fff':
+            current_word += char
+        else:
+            if current_word:
+                chinese_words.append(current_word)
+                current_word = ''
+    if current_word:
+        chinese_words.append(current_word)
+
+    if not chinese_words:
+        return cleaned, True
+
+    # 3. Gemini AI에게 번역 요청
+    log(f"🤖 AI 번역 요청: {chinese_words}")
+
+    prompt = f"""다음 중국어 단어들을 한국어로 번역해주세요.
+상품 옵션명에 사용되는 단어입니다 (색상, 사이즈, 스타일, 재질 등).
+간결하게 번역하고, JSON 형식으로 응답해주세요.
+
+단어: {', '.join(chinese_words)}
+
+응답 형식:
+{{"번역": {{"중국어1": "한국어1", "중국어2": "한국어2"}}}}"""
+
+    try:
+        success, response, error = call_ai(prompt, timeout=15)
+
+        if not success:
+            log(f"❌ AI 번역 실패: {error}")
+            return cleaned, False
+
+        # JSON 파싱
+        import re
+        json_match = re.search(r'\{[^{}]*"번역"[^{}]*\{[^{}]*\}[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            try:
+                result_json = json.loads(json_match.group())
+                translations = result_json.get('번역', {})
+
+                # 번역 적용 및 패턴 저장
+                for cn, kr in translations.items():
+                    if cn and kr:
+                        cleaned = cleaned.replace(cn, kr)
+                        # 새 패턴 저장 (학습)
+                        if save_option_pattern(cn, kr):
+                            log(f"  📚 패턴 학습: {cn} → {kr}")
+
+                return cleaned.strip(), True
+            except json.JSONDecodeError:
+                pass
+
+        # JSON 파싱 실패 시 텍스트에서 추출 시도
+        for cn in chinese_words:
+            # "중국어: 한국어" 패턴 찾기
+            pattern = rf'{cn}\s*[:：]\s*([가-힣a-zA-Z0-9]+)'
+            match = re.search(pattern, response)
+            if match:
+                kr = match.group(1)
+                cleaned = cleaned.replace(cn, kr)
+                save_option_pattern(cn, kr)
+                log(f"  📚 패턴 학습: {cn} → {kr}")
+
+        return cleaned.strip(), True
+
+    except Exception as e:
+        log(f"❌ AI 번역 오류: {e}")
+        return cleaned, False
+
+
+def clean_option_names_with_ai_batch(option_names: List[str], log_callback=None) -> List[Tuple[str, str, bool]]:
+    """
+    여러 옵션명 일괄 정리 (AI 폴백 포함)
+
+    Returns:
+        [(original, cleaned, success), ...]
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+
+    patterns = load_option_patterns()
+    results = []
+    needs_ai = []
+
+    # 1. 패턴 기반 먼저 처리
+    for name in option_names:
+        cleaned, fully = clean_option_name(name, patterns)
+        if fully:
+            results.append((name, cleaned, True))
+        else:
+            needs_ai.append((name, cleaned))
+
+    if not needs_ai:
+        return results
+
+    # 2. AI가 필요한 것들에서 중국어 단어 추출
+    all_chinese_words = set()
+    for original, partial in needs_ai:
+        for char in partial:
+            if '\u4e00' <= char <= '\u9fff':
+                # 연속된 중국어 단어 추출
+                pass
+
+        current_word = ''
+        for char in partial:
+            if '\u4e00' <= char <= '\u9fff':
+                current_word += char
+            else:
+                if current_word:
+                    all_chinese_words.add(current_word)
+                    current_word = ''
+        if current_word:
+            all_chinese_words.add(current_word)
+
+    if not all_chinese_words:
+        # 중국어가 없으면 그대로 반환
+        for original, partial in needs_ai:
+            results.append((original, partial, True))
+        return results
+
+    # 3. AI에게 일괄 번역 요청
+    log(f"🤖 AI 일괄 번역 요청: {len(all_chinese_words)}개 단어")
+
+    words_list = list(all_chinese_words)[:50]  # 최대 50개
+    prompt = f"""다음 중국어 단어들을 한국어로 번역해주세요.
+상품 옵션명에 사용되는 단어입니다 (색상, 사이즈, 스타일, 재질 등).
+간결하게 번역하고, JSON 형식으로 응답해주세요.
+
+단어: {', '.join(words_list)}
+
+응답 형식:
+{{"번역": {{"중국어1": "한국어1", "중국어2": "한국어2"}}}}"""
+
+    new_patterns = {}
+
+    try:
+        success, response, error = call_ai(prompt, timeout=30)
+
+        if success:
+            import re
+            json_match = re.search(r'\{[^{}]*"번역"[^{}]*\{[^{}]*\}[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                try:
+                    result_json = json.loads(json_match.group())
+                    new_patterns = result_json.get('번역', {})
+
+                    # 새 패턴 저장
+                    for cn, kr in new_patterns.items():
+                        if cn and kr and save_option_pattern(cn, kr):
+                            log(f"  📚 패턴 학습: {cn} → {kr}")
+                except:
+                    pass
+    except Exception as e:
+        log(f"❌ AI 번역 오류: {e}")
+
+    # 4. 새 패턴 적용하여 재처리
+    patterns.update(new_patterns)
+
+    for original, partial in needs_ai:
+        # 새 패턴으로 다시 정리
+        cleaned = partial
+        for cn, kr in new_patterns.items():
+            cleaned = cleaned.replace(cn, kr)
+
+        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in cleaned)
+        results.append((original, cleaned.strip(), not has_chinese))
+
+    return results
+
+
+def get_option_pattern_stats() -> Dict:
+    """옵션 패턴 통계"""
+    learned = {}
+    if os.path.exists(OPTION_PATTERNS_FILE):
+        try:
+            with open(OPTION_PATTERNS_FILE, 'r', encoding='utf-8') as f:
+                learned = json.load(f)
+        except:
+            pass
+
+    return {
+        'default_count': len(DEFAULT_OPTION_PATTERNS),
+        'learned_count': len(learned),
+        'total_count': len(DEFAULT_OPTION_PATTERNS) + len(learned),
+        'learned_patterns': learned
+    }

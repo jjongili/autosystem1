@@ -12,14 +12,14 @@ from typing import Optional, List, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QProgressBar, QMessageBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox,
     QSpinBox, QCheckBox
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -582,7 +582,7 @@ class MainWindow(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["이름", "아이디", "상태", "총 상품", "삭제됨", "비밀번호"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setColumnHidden(5, True)  # 비밀번호 숨김
         layout.addWidget(self.table)
         
@@ -673,9 +673,9 @@ class MainWindow(QMainWindow):
             f"{len(self.accounts)}개 계정의 모든 상품을 삭제합니다.\n"
             "복구 불가능합니다!\n\n"
             "정말 시작하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        
-        if reply != QMessageBox.Yes:
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+
+        if reply != QMessageBox.StandardButton.Yes:
             return
         
         self.start_btn.setEnabled(False)
@@ -727,7 +727,7 @@ def main():
     window = MainWindow()
     window.show()
     
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

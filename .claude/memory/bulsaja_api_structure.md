@@ -111,6 +111,28 @@
 
 **중요:** `uploadSkuProps.mainOption.values[].vid` = `uploadSkus[].id`
 
+## ⚠️ 양방향 동기화 필수!
+
+불사자는 **가격탭**과 **옵션탭**이 분리되어 있음:
+- 가격탭: `uploadSkus[].exclude`
+- 옵션탭: `uploadSkuProps.mainOption.values[].exclude`
+
+**exclude 값 의미:**
+- `exclude: false` = 체크됨 (선택됨, 사용함)
+- `exclude: true` = 체크해제 (제외됨, 사용안함)
+
+**동기화 방법:**
+```python
+# uploadSkus → uploadSkuProps 동기화
+for sku in upload_skus:
+    sku_id = str(sku.get('id', ''))
+    for val in upload_sku_props['mainOption']['values']:
+        if str(val.get('vid', '')) == sku_id:
+            val['exclude'] = sku['exclude']  # 동기화!
+```
+
+→ **옵션 제외 시 반드시 양쪽 모두 업데이트해야 정상 동작!**
+
 ## 실제 데이터 예시
 대표상품 (main_product: true):
 - id: "5"

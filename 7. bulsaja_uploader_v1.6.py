@@ -25,11 +25,21 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, simpledialog
+# 다른 모듈에서 import될 때 tkinter 충돌 방지
+_IMPORTED_AS_MODULE = os.environ.get('BULSAJA_V16_AS_MODULE') == '1'
+
+if not _IMPORTED_AS_MODULE:
+    import tkinter as tk
+    from tkinter import ttk, scrolledtext, messagebox, simpledialog
+else:
+    tk = None
+    ttk = None
+    scrolledtext = None
+    messagebox = None
+    simpledialog = None
 
 # 공통 모듈 (미끼 옵션 필터링, 대표옵션 선택, API 클라이언트)
-from bulsaja_common import filter_bait_options, DEFAULT_BAIT_KEYWORDS, select_main_option, BulsajaAPIClient as CommonAPIClient, load_bait_keywords
+from bulsaja_common import filter_bait_options, DEFAULT_BAIT_KEYWORDS, STRONG_BAIT_KEYWORDS, select_main_option, BulsajaAPIClient as CommonAPIClient, load_bait_keywords, KEYWORD_SAFE_CONTEXT_MAP, SAFE_CONTEXT_KEYWORDS
 
 # ==================== 설정 ====================
 CONFIG_FILE = "bulsaja_uploader_config.json"
@@ -93,6 +103,7 @@ THUMBNAIL_MATCH_ENABLED = True  # 썸네일 매칭 기반 대표상품 선택 �
 
 # 제외 키워드 (옵션 필터링용 - 미끼상품 필터)
 # bulsaja_common.py의 load_bait_keywords() 사용
+# STRONG_BAIT_KEYWORDS: 가격 정상이어도 무조건 필터 (공통키워드 통과 예외)
 EXCLUDE_KEYWORDS = load_bait_keywords()
 
 
@@ -936,6 +947,10 @@ class BulsajaAPIClient(CommonAPIClient):
             print(f"[ERROR] 태그 생성 실패: {e}")
             return False
 
+    # [v1.6] 태그 생성 캐시 (중복 생성 방지)
+    _created_tags_cache = set()
+    _tag_create_lock = threading.Lock()
+
     def apply_tag_to_products(self, product_ids: List[str], tag_name: str) -> Tuple[bool, int]:
         """
         상품들에 태그 적용
@@ -945,11 +960,14 @@ class BulsajaAPIClient(CommonAPIClient):
         if not product_ids:
             return False, 0
 
-        # 태그가 없으면 생성
-        existing_tags = self.get_existing_tags()
-        if tag_name not in existing_tags:
-            if not self.create_tag(tag_name):
-                return False, 0
+        # [v1.6] 태그가 없으면 생성 (락 + 캐시로 중복 생성 방지)
+        with self._tag_create_lock:
+            if tag_name not in self._created_tags_cache:
+                existing_tags = self.get_existing_tags()
+                if tag_name not in existing_tags:
+                    if not self.create_tag(tag_name):
+                        return False, 0
+                self._created_tags_cache.add(tag_name)
 
         url = f"{self.BASE_URL}/sourcing/bulk-update-groups"
         try:
@@ -1009,13 +1027,25 @@ class BulsajaUploader:
         except Exception as e:
             print(f"로그 파일 기록 실패: {e}")
 
-    def _tag_failed_async(self, product_id: str):
-        """실패 상품에 태그를 비동기로 적용 (별도 스레드)"""
+    def _tag_failed_async(self, product_id: str, existing_tags: list = None):
+        """
+        실패 상품에 태그를 비동기로 적용 (별도 스레드)
+
+        Args:
+            product_id: 상품 ID
+            existing_tags: 상품의 기존 태그 목록 (중복 방지용)
+        """
+        # [v1.6] 기존에 '업로드실패' 태그가 있으면 스킵 (중복 생성 방지)
+        if existing_tags:
+            if "업로드실패" in existing_tags:
+                print(f"[TAG] ⏭️ {product_id} 이미 '업로드실패' 태그 있음 - 스킵")
+                return
+
         def _apply():
             try:
                 with self._tag_lock:
                     if product_id in self._tagged_ids:
-                        return  # 이미 태그됨
+                        return  # 이미 태그됨 (현재 세션)
                     self._tagged_ids.add(product_id)
 
                 success, _ = self.api_client.apply_tag_to_products([product_id], "업로드실패")
@@ -1241,9 +1271,12 @@ class BulsajaUploader:
         }
 
         try:
-            # [v1.5] 금지 키워드 체크 (상품명 기준)
+            existing_tags = None  # 태그 중복 방지용 (detail 로드 후 설정)
+
+            # [v1.5] 금지 키워드 체크 (상품명 기준) - [v1.6] ON/OFF 체크박스 + 안전 컨텍스트 추가
+            banned_kw_enabled = self.gui.banned_kw_enabled_var.get() if hasattr(self.gui, 'banned_kw_enabled_var') else True
             banned_kw_text = self.gui.banned_kw_text.get("1.0", tk.END).strip() if hasattr(self.gui, 'banned_kw_text') else ""
-            if banned_kw_text:
+            if banned_kw_enabled and banned_kw_text:
                 banned_keywords = [kw.strip().lower() for kw in banned_kw_text.split(',') if kw.strip()]
                 product_name_lower = full_product_name.lower()
                 found_banned = None
@@ -1251,32 +1284,67 @@ class BulsajaUploader:
                     if bkw in product_name_lower:
                         found_banned = bkw
                         break
+
+                # [v1.6] 안전 컨텍스트 체크 - 금지 키워드가 있어도 안전 컨텍스트가 있으면 통과
                 if found_banned:
-                    progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
-                    market_short = MARKET_SHORT.get(market_name, market_name)
-                    self.log("")
-                    self.log(f"⏭️ {progress_str}[{market_short}] {product_id} - 금지키워드 [{found_banned}]")
-                    self.log(f"   {product_name}")
-                    result['status'] = 'skipped'
-                    result['message'] = f'금지키워드: {found_banned}'
-                    return result
+                    is_safe_context = False
+                    safe_context_found = []
+
+                    # 1. 키워드별 전용 안전 컨텍스트 확인
+                    keyword_contexts = KEYWORD_SAFE_CONTEXT_MAP.get(found_banned, None)
+                    if keyword_contexts is not None and len(keyword_contexts) > 0:
+                        for ctx in keyword_contexts:
+                            if ctx.lower() in product_name_lower:
+                                is_safe_context = True
+                                safe_context_found.append(ctx)
+
+                    # 2. 일반 안전 컨텍스트 확인 (키워드별 정의 없을 때)
+                    if not is_safe_context and keyword_contexts is None:
+                        for safe_kw in SAFE_CONTEXT_KEYWORDS:
+                            if safe_kw.lower() in product_name_lower:
+                                is_safe_context = True
+                                safe_context_found.append(safe_kw)
+                                break  # 하나만 찾으면 됨
+
+                    if is_safe_context:
+                        # 안전 컨텍스트 발견 → 통과 (로그만 남김)
+                        progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
+                        market_short = MARKET_SHORT.get(market_name, market_name)
+                        self.log(f"✅ {progress_str}[{market_short}] 금지키워드 [{found_banned}] 안전컨텍스트 [{','.join(safe_context_found[:2])}] → 통과")
+                    else:
+                        # 안전 컨텍스트 없음 → 스킵
+                        progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
+                        market_short = MARKET_SHORT.get(market_name, market_name)
+                        self.log("")
+                        self.log(f"⏭️ {progress_str}[{market_short}] {product_id} - 금지키워드 [{found_banned}]")
+                        self.log(f"   {product_name}")
+                        result['status'] = 'skipped'
+                        result['message'] = f'금지키워드: {found_banned}'
+                        return result
 
             detail = self.api_client.get_product_detail(product_id)
 
-            # [v1.4] 해당 마켓 미업로드 체크
-            skip_already_uploaded = self.gui.skip_already_uploaded_var.get() if hasattr(self.gui, 'skip_already_uploaded_var') else True
-            if skip_already_uploaded:
-                uploaded_markets = detail.get('uploadedMarkets', '') or ''
-                market_type = MARKET_TYPES.get(market_name, '')
-                if market_type and market_type in uploaded_markets:
-                    progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
-                    market_short = MARKET_SHORT.get(market_name, market_name)
-                    self.log("")
-                    self.log(f"⏭️ {progress_str}[{market_short}] {product_id} - 이미 업로드됨")
-                    self.log(f"   {product_name}")
-                    result['status'] = 'skipped'
-                    result['message'] = f'이미 {market_name}에 업로드됨'
-                    return result
+            # [v1.6] 기존 태그 추출 (중복 태그 적용 방지용)
+            existing_tags = detail.get('tags', []) or detail.get('groups', []) or []
+
+            # [v1.6] 수정 업로드 모드 확인
+            update_mode = self.gui.update_upload_mode_var.get() if hasattr(self.gui, 'update_upload_mode_var') else False
+
+            # [v1.4] 해당 마켓 미업로드 체크 (수정 업로드 모드에서는 스킵)
+            if not update_mode:
+                skip_already_uploaded = self.gui.skip_already_uploaded_var.get() if hasattr(self.gui, 'skip_already_uploaded_var') else True
+                if skip_already_uploaded:
+                    uploaded_markets = detail.get('uploadedMarkets', '') or ''
+                    market_type = MARKET_TYPES.get(market_name, '')
+                    if market_type and market_type in uploaded_markets:
+                        progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
+                        market_short = MARKET_SHORT.get(market_name, market_name)
+                        self.log("")
+                        self.log(f"⏭️ {progress_str}[{market_short}] {product_id} - 이미 업로드됨")
+                        self.log(f"   {product_name}")
+                        result['status'] = 'skipped'
+                        result['message'] = f'이미 {market_name}에 업로드됨'
+                        return result
 
             upload_skus = detail.get('uploadSkus', [])
             if not upload_skus:
@@ -1335,8 +1403,10 @@ class BulsajaUploader:
             # 로그 시작 (상품별 구분을 위해 빈 줄 + ID/상품명 분리)
             progress_str = f"[{current_idx}/{total_count}] " if total_count > 0 else ""
             market_short = MARKET_SHORT.get(market_name, market_name)
+            # [v1.6] 수정 업로드 모드 표시
+            mode_str = "[수정]" if update_mode else ""
             self.log("")  # 상품 간 구분선
-            self.log(f"📤 {progress_str}[{market_short}] {product_id}")
+            self.log(f"📤 {progress_str}[{market_short}]{mode_str} {product_id}")
             self.log(f"   {product_name}")
 
             margin_rate = int(random.uniform(self.price_settings.margin_rate_min, self.price_settings.margin_rate_max))
@@ -1352,21 +1422,27 @@ class BulsajaUploader:
             excluded_by_keyword = []  # (id, text, price, 매칭키워드)
             excluded_by_price = []    # (id, text, price, 이유)
 
-            # [v1.4] 미끼 키워드 빈도+가격 분석
+            # [v1.4] 미끼 키워드 빈도+가격 분석 - [v1.6] ON/OFF 체크박스 추가
             # 키워드가 2개 이상 옵션에 포함되고, 해당 옵션들 가격이 미끼 가격이 아니면 → 상품 특성으로 간주
+            exclude_kw_enabled = self.gui.exclude_kw_enabled_var.get() if hasattr(self.gui, 'exclude_kw_enabled_var') else True
             keyword_skus = {}  # 키워드별 매칭된 SKU 리스트
-            for kw in self.exclude_keywords:
-                matching = [sku for sku in upload_skus if kw in (sku.get('text', '') or sku.get('_text', ''))]
-                if matching:
-                    keyword_skus[kw] = matching
+            if exclude_kw_enabled:
+                for kw in self.exclude_keywords:
+                    matching = [sku for sku in upload_skus if kw in (sku.get('text', '') or sku.get('_text', ''))]
+                    if matching:
+                        keyword_skus[kw] = matching
 
             # 전체 옵션 평균 가격 (위안)
             all_prices = [self.get_sku_origin_price(sku) for sku in upload_skus if self.get_sku_origin_price(sku) > 0]
             avg_price = sum(all_prices) / len(all_prices) if all_prices else 0
 
-            # 2개 이상 옵션에 포함된 키워드는 가격 검증
+            # 2개 이상 옵션에 포함된 키워드는 가격 검증 (단, 강력 미끼 키워드 제외)
             excluded_common_keywords = set()
             for kw, matching_skus in keyword_skus.items():
+                # 강력 미끼 키워드는 가격과 무관하게 절대 통과 불가
+                if kw in STRONG_BAIT_KEYWORDS:
+                    continue
+
                 if len(matching_skus) >= 2:  # 최소 2개 이상 옵션에 포함
                     # 해당 키워드 포함 옵션들의 평균 가격
                     kw_prices = [self.get_sku_origin_price(sku) for sku in matching_skus if self.get_sku_origin_price(sku) > 0]
@@ -1376,10 +1452,13 @@ class BulsajaUploader:
                     if avg_price > 0 and kw_avg >= avg_price * 0.5:
                         excluded_common_keywords.add(kw)
 
-            # 실제 필터링에 사용할 키워드 (공통+정상가격 키워드 제외)
-            effective_exclude_keywords = [kw for kw in self.exclude_keywords if kw not in excluded_common_keywords]
+            # 실제 필터링에 사용할 키워드 (공통+정상가격 키워드 제외) - [v1.6] ON/OFF 체크박스 추가
+            if exclude_kw_enabled:
+                effective_exclude_keywords = [kw for kw in self.exclude_keywords if kw not in excluded_common_keywords]
+            else:
+                effective_exclude_keywords = []  # 비활성화 시 빈 리스트
 
-            if excluded_common_keywords:
+            if excluded_common_keywords and exclude_kw_enabled:
                 self.log(f"   ℹ️ 공통키워드 통과: {', '.join(excluded_common_keywords)} (2개+ 옵션, 정상가격)")
 
             for sku in upload_skus:
@@ -1578,9 +1657,19 @@ class BulsajaUploader:
                 self.log(f"   ⚠️ 경고: 유효한 옵션 없음 - 업로드 실패 가능")
 
             # [중요] 선택된 모든 옵션의 exclude를 false로 강제 변경 (업로드 범위 내 옵션은 모두 판매 상태)
+            # [v1.6+] 재고 0인 옵션은 999로 변경 (마켓 등록 요구사항: 재고 1개 이상 필수)
+            stock_fixed_count = 0
             for sku in selected_skus:
                 if sku.get('exclude') is True:
                     sku['exclude'] = False
+                # 재고가 0 또는 없으면 999로 설정
+                stock = sku.get('stock', 0)
+                if stock is None or stock == 0:
+                    sku['stock'] = 999
+                    stock_fixed_count += 1
+
+            if stock_fixed_count > 0:
+                self.log(f"   📦 재고 0 → 999 변경: {stock_fixed_count}개 옵션")
 
             # [긴급 추가] uploadSkuProps와 uploadSkus 동기화 (옵션탭 체크 문제 해결)
             # SKU 필터링 결과에 맞춰 실제 사용되는 옵션값만 props에 남김
@@ -1845,6 +1934,10 @@ class BulsajaUploader:
                     elif market_name == "11번가" and 'est_category' in detail['uploadCategory']:
                         searched_cat_name = detail['uploadCategory']['est_category'].get('name', '')
 
+                # 쿠팡 카테고리도 체크
+                if not searched_cat_name and market_name == "쿠팡" and 'cp_category' in detail.get('uploadCategory', {}):
+                    searched_cat_name = detail['uploadCategory']['cp_category'].get('name', '')
+
                 if searched_cat_name:
                     searched_cat_lower = searched_cat_name.lower()
                     found_exclude_cat = None
@@ -1860,9 +1953,10 @@ class BulsajaUploader:
                         result['message'] = f'제외카테고리: {found_exclude_cat}'
                         return result
 
-            # [신규] ESM/11번가 추천 옵션 매핑 오류 및 중복 방지 (옵션명 표준화) - GUI 옵션
+            # [신규] ESM 추천 옵션 매핑 오류 및 중복 방지 (옵션명 표준화) - GUI 옵션
+            # ESM = G마켓/옥션만 해당 (이베이셀러마스터), 11번가는 SK플래닛 자체 셀러오피스 사용
             esm_option_normalize = self.gui.esm_option_normalize_var.get() if hasattr(self.gui, 'esm_option_normalize_var') else True
-            if esm_option_normalize and market_name in ["G마켓/옥션", "11번가"] and 'uploadSkuProps' in detail:
+            if esm_option_normalize and market_name == "G마켓/옥션" and 'uploadSkuProps' in detail:
                 sku_props = detail['uploadSkuProps']
                 if 'mainOption' in sku_props and sku_props['mainOption']:
                     original_prop = sku_props['mainOption'].get('prop_name', '')
@@ -1886,18 +1980,40 @@ class BulsajaUploader:
                     result['status'] = 'failed'
                     result['message'] = f'상품 정보 업데이트 실패: {update_msg}'
                     self.log(f"   ❌ 업데이트 실패: {update_msg}")
-                    self._tag_failed_async(product_id)  # 실패 태그 적용
+                    self._tag_failed_async(product_id, existing_tags)  # 실패 태그 적용 (중복 방지)
                     return result
 
             # 13. 업로드 (그룹명으로 그룹ID 조회하여 업로드)
-            # 불사자 중복 업로드 방지 옵션
-            prevent_duplicate = self.gui.prevent_duplicate_upload_var.get() if hasattr(self.gui, 'prevent_duplicate_upload_var') else True
+            # 불사자 중복 업로드 방지 옵션 (수정 업로드 모드에서는 강제 False)
+            if update_mode:
+                prevent_duplicate = False  # 수정 업로드: 중복 방지 해제
+            else:
+                prevent_duplicate = self.gui.prevent_duplicate_upload_var.get() if hasattr(self.gui, 'prevent_duplicate_upload_var') else True
             upload_success, upload_msg = self.api_client.upload_product(product_id, group_name, market_name, prevent_duplicate)
             if not upload_success:
                 # 카테고리 오류 시 (여기서는 이미 통합 업데이트 했으므로 재시도 로직이 좀 다르지만, 혹시 몰라 유지)
                 if "카테고리" in upload_msg and market_name == "스마트스토어":
                      # 기존 재시도 로직은 복잡해지므로, 일단 실패 로그만 남김
                      pass
+
+                # [v1.6] 일일 등록제한 감지 (500개 제한) - 태그 안 달고 해당 마켓만 스킵
+                is_quota_limit = any(kw in upload_msg for kw in ['500개', '등록제한', '1일 500개'])
+                if is_quota_limit:
+                    result['status'] = 'quota_limit'
+                    result['market'] = market_name  # 마켓 정보 추가
+                    result['message'] = f'{market_name} 일일 등록제한 (500개)'
+                    self.log(f"   🚫 일일 등록제한 (500개) 도달 - {market_name} 건너뜀")
+                    # is_running = False 안 함 → 다른 마켓은 계속 진행
+                    return result
+
+                # 마켓 한도 초과 감지 (5,000개 제한)
+                is_market_limit = '5,000개' in upload_msg or '최대 5,000개' in upload_msg or '5000개' in upload_msg
+                if is_market_limit:
+                    result['status'] = 'market_limit'
+                    result['market'] = market_name  # 마켓 정보 추가
+                    result['message'] = f'{market_name} 한도 초과 (5,000개)'
+                    self.log(f"   🚫 마켓 한도 초과: {market_name} 5,000개 제한")
+                    return result
 
                 # 중복 실패 감지 (불사자 중복방지 기능으로 인한 실패)
                 is_duplicate = any(kw in upload_msg.lower() for kw in ['중복', 'duplicate', 'already'])
@@ -1913,7 +2029,7 @@ class BulsajaUploader:
                 fail_type = "중복실패" if is_duplicate else "업로드 실패"
                 self.log(f"   {fail_icon} {fail_type}: {display_msg}")
                 self.write_detail_log(product_id, f"[{fail_type}]\n{upload_msg}\n")
-                self._tag_failed_async(product_id)  # 실패 태그 적용
+                self._tag_failed_async(product_id, existing_tags)  # 실패 태그 적용 (중복 방지)
 
                 return result
 
@@ -1934,7 +2050,7 @@ class BulsajaUploader:
         except Exception as e:
             result['status'] = 'failed'
             result['message'] = str(e)
-            self._tag_failed_async(product_id)  # 실패 태그 적용
+            self._tag_failed_async(product_id, existing_tags)  # 실패 태그 적용 (중복 방지)
 
         return result
 
@@ -1947,6 +2063,12 @@ class BulsajaUploader:
             # 업로드실패 태그 상품 제외 옵션
             skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
             exclude_tag = "업로드실패" if skip_failed_tag else None
+
+            # [수정] 미업로드만 체크 시 → 상태 "3"(판매중) 상품도 포함
+            # 다른 마켓에 업로드된 상품(상태=3)도 가져와서 해당마켓 uploadedMarkets 체크로 필터링
+            skip_already_uploaded = self.gui.skip_already_uploaded_var.get() if hasattr(self.gui, 'skip_already_uploaded_var') else True
+            if skip_already_uploaded and status_filters and "3" not in status_filters:
+                status_filters = list(status_filters) + ["3", "판매중", "업로드 완료"]
 
             products, total = self.api_client.get_products_by_group(
                 group_name, 0, upload_count, status_filters, exclude_tag=exclude_tag
@@ -1980,6 +2102,10 @@ class BulsajaUploader:
                     msg = result['message'][:200]
                     self.log(f"   🔁 {product_name.ljust(20)} | 중복실패 ({msg})")
                     duplicate_failed += 1
+                elif result['status'] == 'quota_limit':
+                    # [v1.6] 일일 등록제한 → 해당 마켓만 종료, 다음 마켓 계속
+                    self.log(f"   🚫 {market_name} 일일 등록제한 (500개) - 해당 마켓 건너뜀")
+                    break  # 현재 마켓(그룹) 루프만 종료
                 else:
                     msg = result['message'][:200]  # 에러 메시지는 200자까지
                     self.log(f"   ❌ {product_name.ljust(20)} | 실패 ({msg})")
@@ -2148,6 +2274,12 @@ class BulsajaUploader:
             skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
             exclude_tag = "업로드실패" if skip_failed_tag else None
 
+            # [수정] 미업로드만 체크 시 → 상태 "3"(판매중) 상품도 포함
+            # 다른 마켓에 업로드된 상품(상태=3)도 가져와서 해당마켓 uploadedMarkets 체크로 필터링
+            skip_already_uploaded = self.gui.skip_already_uploaded_var.get() if hasattr(self.gui, 'skip_already_uploaded_var') else True
+            if skip_already_uploaded and status_filters and "3" not in status_filters:
+                status_filters = list(status_filters) + ["3", "판매중", "업로드 완료"]
+
             # [v1.4] 그룹별로 상품 목록을 먼저 가져온 후, 동일한 상품들을 모든 마켓에 업로드
             for g_idx, group_name in enumerate(group_names):
                 if not self.is_running: break
@@ -2187,6 +2319,10 @@ class BulsajaUploader:
                         )
                         return result
 
+                    # 마켓별 한도 초과 상태 추적 (병렬 처리용)
+                    market_limit_reached = set()
+                    market_limit_lock = threading.Lock()
+
                     with ThreadPoolExecutor(max_workers=concurrent_sessions) as executor:
                         futures = {executor.submit(process_task, task): task for task in tasks}
 
@@ -2200,6 +2336,15 @@ class BulsajaUploader:
                                 continue
 
                             with stats_lock:
+                                # [v1.6+] 마켓 한도 초과 처리
+                                if result['status'] in ['quota_limit', 'market_limit']:
+                                    result_market = result.get('market', '')
+                                    with market_limit_lock:
+                                        if result_market and result_market not in market_limit_reached:
+                                            market_limit_reached.add(result_market)
+                                            self.log(f"   → {result_market} 한도 도달 (병렬모드)")
+                                    continue
+
                                 if result['status'] == 'success':
                                     self.stats['success'] += 1
                                 elif result['status'] == 'skipped':
@@ -2221,6 +2366,9 @@ class BulsajaUploader:
                                 self.gui.update_progress(total_progress, total_tasks)
                 else:
                     # 순차 처리 (기존 로직)
+                    # 마켓별 한도 초과 상태 추적
+                    market_limit_reached = set()
+
                     for p_idx, product in enumerate(products, 1):
                         if not self.is_running: break
 
@@ -2230,11 +2378,25 @@ class BulsajaUploader:
                         for m_idx, current_market in enumerate(target_markets):
                             if not self.is_running: break
 
+                            # [v1.6+] 해당 마켓이 한도 도달했으면 건너뜀
+                            if current_market in market_limit_reached:
+                                continue
+
                             result = self.process_product(
                                 product, group_name, option_count, option_sort,
                                 title_mode, skip_sku_update, skip_price_update, current_market,
                                 current_idx=p_idx, total_count=len(products)
                             )
+
+                            # [v1.6+] 마켓 한도 초과 시 해당 마켓 비활성화
+                            if result['status'] in ['quota_limit', 'market_limit']:
+                                market_limit_reached.add(current_market)
+                                self.log(f"   → {current_market} 한도 도달, 이후 상품은 해당 마켓 건너뜀")
+                                # 모든 마켓이 한도 도달하면 그룹 종료
+                                if len(market_limit_reached) >= len(target_markets):
+                                    self.log(f"   🚫 모든 마켓 한도 도달, 그룹 {group_name} 종료")
+                                    break
+                                continue
 
                             if result['status'] == 'success':
                                 self.stats['success'] += 1
@@ -2250,6 +2412,10 @@ class BulsajaUploader:
                                 fail_info = f"{result.get('id', '?')} ({result.get('name', '')[:15]})"
                                 self.stats['failed_ids'].append(fail_info)
                             self.stats['total'] += 1
+
+                        # 모든 마켓 한도 도달 시 그룹 루프 종료
+                        if len(market_limit_reached) >= len(target_markets):
+                            break
 
                         if self.gui:
                             total_progress = g_idx * upload_count + p_idx
@@ -2298,6 +2464,11 @@ class BulsajaUploader:
             skip_failed_tag = self.gui.skip_failed_tag_var.get() if hasattr(self.gui, 'skip_failed_tag_var') else False
             exclude_tag = "업로드실패" if skip_failed_tag else None
 
+            # [수정] 미업로드만 체크 시 → 상태 "3"(판매중) 상품도 포함
+            skip_already_uploaded = self.gui.skip_already_uploaded_var.get() if hasattr(self.gui, 'skip_already_uploaded_var') else True
+            if skip_already_uploaded and status_filters and "3" not in status_filters:
+                status_filters = list(status_filters) + ["3", "판매중", "업로드 완료"]
+
             products, total = self.api_client.get_products_by_group(
                 group_name, 0, upload_count, status_filters, exclude_tag=exclude_tag
             )
@@ -2343,7 +2514,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("불사자 상품 업로더 v1.3")
+        self.title("불사자 상품 업로더 v1.6")
         self.geometry("900x1000")
         self.resizable(True, True)
 
@@ -2376,8 +2547,13 @@ class App(tk.Tk):
         self.port_var = tk.StringVar(value="9222")
         ttk.Entry(row0, textvariable=self.port_var, width=6).pack(side=tk.RIGHT, padx=2)
 
+        # === 설정 영역 컨테이너 (접기/펼치기 가능) ===
+        self.settings_container = ttk.Frame(main_frame)
+        self.settings_container.pack(fill=tk.X, pady=(0, 5))
+        self.settings_collapsed = False  # 접힘 상태
+
         # === 2. 마진 설정 ===
-        margin_frame = ttk.LabelFrame(main_frame, text="💰 마진설정", padding="5")
+        margin_frame = ttk.LabelFrame(self.settings_container, text="💰 마진설정", padding="5")
         margin_frame.pack(fill=tk.X, pady=(0, 5))
 
         row1 = ttk.Frame(margin_frame)
@@ -2410,12 +2586,8 @@ class App(tk.Tk):
         self.round_unit_var = tk.StringVar(value="100")
         ttk.Entry(row2, textvariable=self.round_unit_var, width=5).pack(side=tk.LEFT, padx=(2, 10))
 
-        ttk.Label(row2, text="해외배송비(원):").pack(side=tk.LEFT)
-        self.delivery_fee_var = tk.StringVar(value="0")
-        ttk.Entry(row2, textvariable=self.delivery_fee_var, width=7).pack(side=tk.LEFT, padx=2)
-
         # === 3. 상품업로드 설정 ===
-        upload_frame = ttk.LabelFrame(main_frame, text="📤 상품업로드 설정", padding="5")
+        upload_frame = ttk.LabelFrame(self.settings_container, text="📤 상품업로드 설정", padding="5")
         upload_frame.pack(fill=tk.X, pady=(0, 5))
 
         row3 = ttk.Frame(upload_frame)
@@ -2523,8 +2695,12 @@ class App(tk.Tk):
         self.skip_failed_tag_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(market_opt_row, text="실패태그건너뜀", variable=self.skip_failed_tag_var).pack(side=tk.LEFT, padx=5)
 
+        # 수정 업로드 모드 (이미 업로드된 상품을 새 설정으로 재업로드)
+        self.update_upload_mode_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(market_opt_row, text="수정업로드", variable=self.update_upload_mode_var).pack(side=tk.LEFT, padx=5)
+
         # === 제외 카테고리 설정 ===
-        exclude_cat_frame = ttk.LabelFrame(main_frame, text="🚫 제외 카테고리 (카테고리명에 포함시 업로드 패스)", padding="5")
+        exclude_cat_frame = ttk.LabelFrame(self.settings_container, text="🚫 제외 카테고리 (카테고리명에 포함시 업로드 패스)", padding="5")
         exclude_cat_frame.pack(fill=tk.X, pady=(0, 5))
 
         exclude_cat_row = ttk.Frame(exclude_cat_frame)
@@ -2539,13 +2715,16 @@ class App(tk.Tk):
         # 기본값: 비어있음 (예시: 건강식품,의약품,화장품)
 
         # === 금지 키워드 설정 (상품명 기준) ===
-        banned_kw_frame = ttk.LabelFrame(main_frame, text="🚫 금지 키워드 (상품명에 포함시 업로드 패스)", padding="5")
+        banned_kw_frame = ttk.LabelFrame(self.settings_container, text="🚫 금지 키워드 (상품명에 포함시 업로드 패스)", padding="5")
         banned_kw_frame.pack(fill=tk.X, pady=(0, 5))
 
         banned_kw_row = ttk.Frame(banned_kw_frame)
         banned_kw_row.pack(fill=tk.X, pady=2)
 
-        ttk.Label(banned_kw_row, text="금지 키워드 (쉼표 구분):").pack(side=tk.LEFT)
+        # [v1.6] 금지 키워드 ON/OFF 체크박스
+        self.banned_kw_enabled_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(banned_kw_row, text="사용", variable=self.banned_kw_enabled_var).pack(side=tk.LEFT)
+        ttk.Label(banned_kw_row, text="금지 키워드 (쉼표 구분):").pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(banned_kw_row, text="비우기", command=lambda: self.banned_kw_text.delete("1.0", tk.END), width=6).pack(side=tk.RIGHT)
 
         self.banned_kw_text = scrolledtext.ScrolledText(banned_kw_frame, height=2, width=80,
@@ -2554,7 +2733,7 @@ class App(tk.Tk):
         # 기본값: 비어있음 (예시: 성인용품,담배,주류)
 
         # === 4. 마켓그룹 설정 ===
-        group_frame = ttk.LabelFrame(main_frame, text="📁 마켓그룹 설정", padding="5")
+        group_frame = ttk.LabelFrame(self.settings_container, text="📁 마켓그룹 설정", padding="5")
         group_frame.pack(fill=tk.X, pady=(0, 5))
 
         row7 = ttk.Frame(group_frame)
@@ -2584,13 +2763,16 @@ class App(tk.Tk):
                   foreground="gray").pack(anchor=tk.W)
 
         # === 5. 미끼 키워드 설정 ===
-        keyword_frame = ttk.LabelFrame(main_frame, text="🚫 미끼 키워드 (옵션명에 포함시 제외)", padding="5")
+        keyword_frame = ttk.LabelFrame(self.settings_container, text="🚫 미끼 키워드 (옵션명에 포함시 제외)", padding="5")
         keyword_frame.pack(fill=tk.X, pady=(0, 5))
 
         keyword_row1 = ttk.Frame(keyword_frame)
         keyword_row1.pack(fill=tk.X, pady=2)
 
-        ttk.Label(keyword_row1, text="제외 키워드 (쉼표 구분):").pack(side=tk.LEFT)
+        # [v1.6] 제외 키워드 ON/OFF 체크박스
+        self.exclude_kw_enabled_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(keyword_row1, text="사용", variable=self.exclude_kw_enabled_var).pack(side=tk.LEFT)
+        ttk.Label(keyword_row1, text="제외 키워드 (쉼표 구분):").pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(keyword_row1, text="기본값", command=self.reset_keywords, width=6).pack(side=tk.RIGHT)
 
         self.keyword_text = scrolledtext.ScrolledText(keyword_frame, height=2, width=80,
@@ -2600,12 +2782,12 @@ class App(tk.Tk):
         self.keyword_text.insert("1.0", ','.join(EXCLUDE_KEYWORDS))
 
         # === 진행 상태 ===
-        progress_frame = ttk.Frame(main_frame)
-        progress_frame.pack(fill=tk.X, pady=(0, 5))
+        self.progress_frame = ttk.Frame(main_frame)  # [v1.6] self로 저장 (설정 접기/펼치기용)
+        self.progress_frame.pack(fill=tk.X, pady=(0, 5))
 
         self.progress_var = tk.StringVar(value="대기 중...")
-        ttk.Label(progress_frame, textvariable=self.progress_var).pack(side=tk.LEFT)
-        self.progress_bar = ttk.Progressbar(progress_frame, mode='determinate')
+        ttk.Label(self.progress_frame, textvariable=self.progress_var).pack(side=tk.LEFT)
+        self.progress_bar = ttk.Progressbar(self.progress_frame, mode='determinate')
         self.progress_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
 
         # === 버튼 ===
@@ -2617,6 +2799,10 @@ class App(tk.Tk):
 
         self.btn_stop = ttk.Button(btn_frame, text="🛑 중지", command=self.stop, state="disabled")
         self.btn_stop.pack(side=tk.LEFT)
+
+        # [v1.6] 설정 접기/펼치기 버튼
+        self.btn_toggle_settings = ttk.Button(btn_frame, text="▲ 설정 접기", command=self.toggle_settings, width=12)
+        self.btn_toggle_settings.pack(side=tk.LEFT, padx=(10, 0))
 
         # 서버 연결 버튼
         self.server_connected = False
@@ -2678,7 +2864,6 @@ class App(tk.Tk):
         if "margin_fixed" in c: self.margin_fixed_var.set(c["margin_fixed"])
         if "discount_rate" in c: self.discount_rate_var.set(c["discount_rate"])
         if "round_unit" in c: self.round_unit_var.set(c["round_unit"])
-        if "delivery_fee" in c: self.delivery_fee_var.set(c["delivery_fee"])
         if "upload_count" in c: self.upload_count_var.set(c["upload_count"])
         if "concurrent" in c: self.concurrent_var.set(c["concurrent"])
         if "option_count" in c: self.option_count_var.set(c["option_count"])
@@ -2705,6 +2890,14 @@ class App(tk.Tk):
         if "banned_keywords" in c:
             self.banned_kw_text.delete("1.0", tk.END)
             self.banned_kw_text.insert("1.0", c["banned_keywords"])
+        # [v1.6] 수정 업로드 모드
+        if "update_upload_mode" in c:
+            self.update_upload_mode_var.set(c["update_upload_mode"])
+        # [v1.6] 금지/제외 키워드 ON/OFF
+        if "banned_kw_enabled" in c:
+            self.banned_kw_enabled_var.set(c["banned_kw_enabled"])
+        if "exclude_kw_enabled" in c:
+            self.exclude_kw_enabled_var.set(c["exclude_kw_enabled"])
 
     def save_settings(self):
         self.config_data["port"] = self.port_var.get()
@@ -2714,7 +2907,6 @@ class App(tk.Tk):
         self.config_data["margin_fixed"] = self.margin_fixed_var.get()
         self.config_data["discount_rate"] = self.discount_rate_var.get()
         self.config_data["round_unit"] = self.round_unit_var.get()
-        self.config_data["delivery_fee"] = self.delivery_fee_var.get()
         self.config_data["upload_count"] = self.upload_count_var.get()
         self.config_data["concurrent"] = self.concurrent_var.get()
         self.config_data["option_count"] = self.option_count_var.get()
@@ -2729,6 +2921,11 @@ class App(tk.Tk):
         self.config_data["skip_failed_tag"] = self.skip_failed_tag_var.get()
         self.config_data["exclude_categories"] = self.exclude_cat_text.get("1.0", tk.END).strip()
         self.config_data["banned_keywords"] = self.banned_kw_text.get("1.0", tk.END).strip()
+        # [v1.6] 수정 업로드 모드
+        self.config_data["update_upload_mode"] = self.update_upload_mode_var.get()
+        # [v1.6] 금지/제외 키워드 ON/OFF
+        self.config_data["banned_kw_enabled"] = self.banned_kw_enabled_var.get()
+        self.config_data["exclude_kw_enabled"] = self.exclude_kw_enabled_var.get()
         save_config(self.config_data)
         self.log("✅ 설정 저장됨")
 
@@ -2983,15 +3180,47 @@ class App(tk.Tk):
         return result
 
     def get_group_names_from_range(self) -> List[str]:
-        """작업 범위에서 실제 그룹명 목록 가져오기"""
+        """작업 범위에서 실제 그룹명 목록 가져오기
+
+        지원 형식:
+        - 숫자: "1", "22" → 매핑된 그룹명
+        - 숫자 범위: "1-5" → 1~5번 그룹
+        - 전체 그룹명: "22_코드리크" → 정확히 매칭
+        - 마켓명만: "코드리크" → 포함된 그룹 검색
+        - 혼합: "1,코드리크,3" → 숫자+이름 혼용
+        """
         mapping = self.parse_group_mapping()
-        range_nums = self.parse_work_range(self.work_groups_var.get())
+        range_items = self.parse_work_range(self.work_groups_var.get())
+
+        # 전체 그룹명 목록 (마켓명 검색용)
+        all_groups = list(mapping.values())
+        # 중복 제거
+        unique_groups = list(dict.fromkeys(all_groups))
+
         group_names = []
-        for num in range_nums:
-            if num in mapping:
-                group_names.append(mapping[num])
+        for item in range_items:
+            # 1. 숫자 매핑 체크 (기존 방식)
+            if item in mapping:
+                group_names.append(mapping[item])
+            # 2. 정확한 그룹명 매칭 (예: "22_코드리크")
+            elif item in unique_groups:
+                group_names.append(item)
+            # 3. 부분 매칭 - 마켓명으로 검색 (예: "코드리크" → "22_코드리크")
             else:
-                self.log(f"⚠️ 그룹 번호 {num}에 해당하는 그룹명 없음")
+                matched = None
+                for g in unique_groups:
+                    # 숫자접두사 제거 후 비교 또는 포함 여부
+                    # "22_코드리크" → "코드리크" 부분 매칭
+                    if item in g or g.endswith(item) or g.endswith(f"_{item}"):
+                        matched = g
+                        break
+
+                if matched:
+                    group_names.append(matched)
+                    self.log(f"ℹ️ '{item}' → '{matched}' 매칭")
+                else:
+                    self.log(f"⚠️ '{item}'에 해당하는 그룹 없음")
+
         return group_names
 
     def reset_keywords(self):
@@ -3111,7 +3340,7 @@ class App(tk.Tk):
             margin_fixed=int(self.margin_fixed_var.get()),
             discount_rate_min=discount_min,
             discount_rate_max=discount_max,
-            delivery_fee=int(self.delivery_fee_var.get()),
+            delivery_fee=0,  # 상품별 uploadOverseaDeliveryFee 사용
             round_unit=int(self.round_unit_var.get()),
             min_price=int(self.min_price_var.get()),
             max_price=int(self.max_price_var.get()),
@@ -3164,6 +3393,9 @@ class App(tk.Tk):
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
 
+        # [v1.6] 업로드 시작 시 설정 영역 자동 접기
+        self.collapse_settings()
+
         self.worker_thread = threading.Thread(
             target=self.uploader.process_groups,
             args=(group_names, upload_count, option_count,
@@ -3175,6 +3407,24 @@ class App(tk.Tk):
     def stop(self):
         self.uploader.is_running = False
         self.log("🛑 중지 요청...")
+
+    def toggle_settings(self):
+        """[v1.6] 설정 영역 접기/펼치기"""
+        if self.settings_collapsed:
+            # 펼치기: progress_frame 앞에 배치
+            self.settings_container.pack(fill=tk.X, pady=(0, 5), before=self.progress_frame)
+            self.btn_toggle_settings.config(text="▲ 설정 접기")
+            self.settings_collapsed = False
+        else:
+            # 접기
+            self.settings_container.pack_forget()
+            self.btn_toggle_settings.config(text="▼ 설정 펼치기")
+            self.settings_collapsed = True
+
+    def collapse_settings(self):
+        """[v1.6] 설정 영역 접기 (업로드 시작 시 호출)"""
+        if not self.settings_collapsed:
+            self.toggle_settings()
 
     def on_finished(self):
         def _update():
